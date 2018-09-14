@@ -4,6 +4,7 @@
 // @namespace https://github.com/Christopher-McGinnis
 // @version  0.0.1
 // @grant    unsafeWindow
+// @require  https://greasyfork.org/scripts/372223-mangadex-common/code/Mangadex%20Common.js
 // @match    https://mangadex.org/*
 // ==/UserScript==
 
@@ -14,71 +15,7 @@ unsafeWindow used soly for debugging in firefox.
 function Print(x) {
   unsafeWindow.console.log(x);
 }
-function getElementsByXpath(path,node=document) {
-  return document.evaluate(path, node, null, XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE, null);
-}
-function getElementByXpath(path,node=document) {
-  return document.evaluate(path, node, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
-}
 
-function htmlToElement(html) {
-  var template = document.createElement('template');
-  html = html.trim(); // Never return a text node of whitespace as the result
-  template.innerHTML = html;
-  return template.content.firstChild;
-}
-
-function CheckLoop(xpath,fn,cnt=50,delay=100) {
-  Print("Checking for xpath...");
-  if (getElementByXpath(xpath)) {
-    fn();
-  }
-  else if (cnt != 0) {
-    setTimeout(function() { CheckLoop(cnt - 1); },delay);
-  }
-  else {
-    Print("Failed to find xpath '" + xpath + "'");
-  }
-}
-
-function fallbackCopyTextToClipboard(text) {
-  var textArea = document.createElement("textarea");
-  textArea.style.position="fixed";
-  textArea.style.top="50%";
-  textArea.style.left="50%";
-  textArea.style.marginTop="-10px";
-  textArea.style.marginLeft="-10px";
-  textArea.style.width="20px";
-  textArea.style.height="20px";
-  textArea.style.opacity="0";
-
-
-  textArea.value = text;
-  document.body.appendChild(textArea);
-  textArea.focus();
-  textArea.select();
-
-  try {
-    var successful = document.execCommand('copy');
-    var msg = successful ? 'successful' : 'unsuccessful';
-    console.log('Fallback: Copying text command was ' + msg);
-  } catch (err) {
-    console.error('Fallback: Oops, unable to copy', err);
-  }
-
-  document.body.removeChild(textArea);
-}
-function copyTextToClipboard(text) {
-  if (!navigator.clipboard) {
-    fallbackCopyTextToClipboard(text);
-    return;
-  }
-  navigator.clipboard.writeText(text).then(function() {
-    console.log('Async: Copying to clipboard was successful!');
-  }, function(err) {
-    console.error('Async: Could not copy text: ', err);
-  });
-}
 
 
 let tooltip_elm = htmlToElement("<div>Copied as BB Code<br><span></span></div>");
