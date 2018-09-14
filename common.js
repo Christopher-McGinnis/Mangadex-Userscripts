@@ -11,7 +11,6 @@ function Print(x) {
   unsafeWindow.console.log(x);
 }
 
-
 function getSnapshotByXpath(path,node=document) {
   return document.evaluate(path, node, null, XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE, null);
 }
