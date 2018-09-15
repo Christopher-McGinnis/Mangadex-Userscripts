@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     Mangadex Common
-// @version  1
+// @version  0.0.1
 // @description Common function library for Mangadex. Should be required by other userscripts.
 // @match    https://mangadex.org/*
 // @grant    unsafeWindow
