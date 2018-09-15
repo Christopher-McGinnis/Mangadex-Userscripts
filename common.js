@@ -5,7 +5,7 @@
 // @match    https://mangadex.org/*
 // @grant    unsafeWindow
 // ==/UserScript==
-
+"use strict";
 function Print(x) {
   // unsafeWindow needed to print to Web Console in firefox.
   unsafeWindow.console.log(x);

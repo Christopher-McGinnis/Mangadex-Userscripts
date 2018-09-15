@@ -7,11 +7,11 @@
 // @require  https://greasyfork.org/scripts/372223-mangadex-common/code/Mangadex%20Common.js
 // @match    https://mangadex.org/*
 // ==/UserScript==
+"use strict";
 
 /*
 unsafeWindow used soly for debugging in firefox.
 */
-
 function Print(x) {
   unsafeWindow.console.log(x);
 }
