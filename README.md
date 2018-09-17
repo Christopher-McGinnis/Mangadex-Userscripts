@@ -4,7 +4,7 @@ Userscripts for Mangadex
 ## State of development:
 Currently using Atom with the custom package: [Atom-Violentmonkey-Connect](https://github.com/Christopher-McGinnis/Atom-Violentmonkey-Connect)
 
-| | |
+| Environment | Current Solution |
 |-|-|
 | IDE | Atom with custom package [Atom-Violentmonkey-Connect](https://github.com/Christopher-McGinnis/Atom-Violentmonkey-Connect)
 | Script Monkey | ViolentMonkey ([Chrome](https://chrome.google.com/webstore/detail/violent-monkey/jinjaccalgkegednnccohejagnlnfdag)) ([Firefox](https://addons.mozilla.org/firefox/addon/violentmonkey/)) |
