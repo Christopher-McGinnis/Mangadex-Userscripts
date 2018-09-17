@@ -89,4 +89,4 @@ function main() {
   });
 }
 dbg("RUNNING");
-checkLoop("//a[contains(@class,'navbar-brand')]",main);
+checkLoop({xpath: "//a[contains(@class,'navbar-brand')]",callback: main });
