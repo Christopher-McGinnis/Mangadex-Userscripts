@@ -4,11 +4,11 @@ Userscripts for Mangadex
 ## State of development:
 Currently using Atom with the custom package: [Atom-Violentmonkey-Connect](https://github.com/Brandon-Beck/Atom-Violentmonkey-Connect)
 
-| |
-|-|
+| | |
+|-|-|
 | IDE | Atom with custom package [Atom-Violentmonkey-Connect](https://github.com/Brandon-Beck/Atom-Violentmonkey-Connect)
-| Script Monkey | ViolentMonkey ([Chrome](https://chrome.google.com/webstore/detail/violent-monkey/jinjaccalgkegednnccohejagnlnfdag)) ([Firefox](https://addons.mozilla.org/firefox/addon/violentmonkey/))
-| Browser | [Firefox](https://www.mozilla.org/en-US/firefox/new/)
+| Script Monkey | ViolentMonkey ([Chrome](https://chrome.google.com/webstore/detail/violent-monkey/jinjaccalgkegednnccohejagnlnfdag)) ([Firefox](https://addons.mozilla.org/firefox/addon/violentmonkey/)) |
+| Browser | [Firefox](https://www.mozilla.org/en-US/firefox/new/) |
 
 Development environment works alright. Test run smoothly and updates apply instantly. Thousand times better than trying to write it in your primitive ScriptMonkey editor.
 
