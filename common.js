@@ -2,23 +2,80 @@
 // @name     Mangadex Common
 // @version  0.0.1
 // @description Common function library for Mangadex. Should be required by other userscripts.
-// @match    https://mangadex.org/*
-// @grant    unsafeWindow
 // ==/UserScript==
 "use strict";
-function Print(x) {
-  // unsafeWindow needed to print to Web Console in firefox.
-  unsafeWindow.console.log(x);
+dbg("Loaded");
+function dbg(x) {
+  //unsafeWindow used soly for debugging in firefox via Web Console.
+  if (typeof unsafeWindow === 'object') {
+    unsafeWindow.console.log(x);
+  }
+  else {
+    console.log(x);
+  }
 }
+function htmlToElement(html) {
+  var template = document.createElement('template');
+  html = html.trim(); // Never return a text node of whitespace as the result
+  template.innerHTML = html;
+  return template.content.firstChild;
+}
+function fallbackCopyTextToClipboard(text) {
+  var textArea = document.createElement("textarea");
+  textArea.style.position="fixed";
+  textArea.style.top="50%";
+  textArea.style.left="50%";
+  textArea.style.marginTop="-10px";
+  textArea.style.marginLeft="-10px";
+  textArea.style.width="20px";
+  textArea.style.height="20px";
+  textArea.style.opacity="0";
+  textArea.value = text;
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+  try {
+    var successful = document.execCommand('copy');
+    var msg = successful ? 'successful' : 'unsuccessful';
+    console.log('Fallback: Copying text command was ' + msg);
+  } catch (err) {
+    console.error('Fallback: Oops, unable to copy', err);
+  }
+  document.body.removeChild(textArea);
+}
+function copyTextToClipboard(text) {
+  // First try to copy using the 2 GM methods..
+  if (typeof GM === "object" && typeof GM.setClipboard === 'function') {
+    GM.setClipboard(text);
+  }
+  else if (typeof GM_setClipboard === 'function') {
+    GM_setClipboard(text);
+  }
+  // Programmer failed to grant setClipboard permissions.
+  // Attempt to use browser supported methods.
+  else if (navigator && navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(function() {
+      dbg('Async: Copying to clipboard was successful!');
+    }, function(err) {
+      dbg('Async: Could not copy text: ', err);
+    });
+  }
+  else {
+    fallbackCopyTextToClipboard(text);
+  }
+}
+/**************************************************
+ * XPath
+ */
 
 function getSnapshotByXpath(path,node=document) {
-  return document.evaluate(path, node, null, XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE, null);
+  return document.evaluate( path.toString() , node, null, XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE, null);
 }
 function getItterByXpath(path,node=document) {
-  return document.evaluate(path, node, null, XPathResult.UNORDERED_NODE_ITERATOR_TYPE, null);
+  return document.evaluate( path.toString(), node, null, XPathResult.UNORDERED_NODE_ITERATOR_TYPE, null);
 }
 function getElementByXpath(path,node=document) {
-  return document.evaluate(path, node, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+  return document.evaluate( path.toString(), node, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
 }
 
 // NOTE: I do not promot the use of this xpath builder. It is used soly to make ways I commonly use xpaths easier.
@@ -50,40 +107,37 @@ function XPath(xpath_str="") {
     xp.xpath += text;
     return xp;
   };
-  xp.and = function(o) {
+  xp.and = function(o='') {
     xp.xpath += " and " + toStr(o);
     return xp;
   }
-  xp.or = function(o) {
+  xp.or = function(o='') {
     xp.xpath += " or " + toStr(o);
     return xp;
   }
-  xp.asText = function() {
+  xp.toString = function() {
     return xp.xpath;
   };
   xp.getElement = function(node=document) {
-    return getElementByXpath(xp.xpath,node);
+    return getElementByXpath(xp, node);
   };
   xp.getSnapshot = function(node=document) {
-    return getSnapshotByXpath(xp.xpath,node);
+    return getSnapshotByXpath(xp, node);
   };
   xp.getItter = function(node=document) {
-    return getItterByXpath(xp.xpath,node);
+    return getItterByXpath(xp, node);
   };
   return xp;
 }
 
 
-function htmlToElement(html) {
-  var template = document.createElement('template');
-  html = html.trim(); // Never return a text node of whitespace as the result
-  template.innerHTML = html;
-  return template.content.firstChild;
-}
+
 // Checks the page for {xpath} every {delay} milliseconds up to {cnt} times. Runs {fn} once found.
 // Used to wait for required elements to load before running functions.
+// xpath: A String or XPath instance
+// fn: Function to run once an xpath match is found
 function checkLoop(xpath,fn,cnt=50,delay=100) {
-  Print(`Checking for xpath <${xpath}>`);
+  dbg(`Checking for xpath <${xpath}>`);
   if (getElementByXpath(xpath)) {
     fn();
   }
@@ -91,6 +145,6 @@ function checkLoop(xpath,fn,cnt=50,delay=100) {
     setTimeout(function() { CheckLoop(cnt - 1); },delay);
   }
   else {
-    Print(`Failed to find xpath <${xpath}>`);
+    dbg(`Failed to find xpath <${xpath}>`);
   }
 }
