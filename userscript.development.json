@@ -1,12 +1,14 @@
 {
   "dist_dir": "devtest/",
   "distExtention": ".user.js",
-  "requires": {
-    "bbcodeify-links.js": [
-      {
-        "publishURI": "https://greasyfork.org/scripts/372223-mangadex-common/code/Mangadex%20Common.js",
-        "filePath": "common.js"
-      }
-    ]
-  }
+  "userscripts": {
+    "bbcodeify-links.user.js":[],
+    "follow-reader.user.js":[]
+  },
+  "libraries": [
+    {
+      "publishURI": "https://greasyfork.org/scripts/372223-mangadex-common/code/Mangadex%20Common.js",
+      "filePath": "common.js"
+    }
+  ]
 }
