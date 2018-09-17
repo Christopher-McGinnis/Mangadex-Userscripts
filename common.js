@@ -130,21 +130,29 @@ function XPath(xpath_str="") {
   return xp;
 }
 
+function throwMissingParam(name,param) {
+    throw new Error(`Function <${name}> is missing required parameter: <${param}>`);
+}
 
 
-// Checks the page for {xpath} every {delay} milliseconds up to {cnt} times. Runs {fn} once found.
+// Checks the page for {xpath} every {delay} milliseconds up to {tries} times. Runs {callback} once found.
 // Used to wait for required elements to load before running functions.
 // xpath: A String or XPath instance
-// fn: Function to run once an xpath match is found
-function checkLoop(xpath,fn,cnt=50,delay=100) {
+// callback: Function to run once an xpath match is found
+function checkLoop({
+  xpath = throwMissingParam('checkLoop','xpath="String"'),
+  callback=throwMissingParam('checkLoop','callback=fn()'),
+  onError = () => {},
+  tries=50,delay=100},cnt=tries) {
   dbg(`Checking for xpath <${xpath}>`);
   if (getElementByXpath(xpath)) {
-    fn();
+    callback();
   }
-  else if (cnt != 0) {
-    setTimeout(function() { CheckLoop(cnt - 1); },delay);
+  else if (cnt > 0) {
+    setTimeout(() => { checkLoop(arguments[0],cnt - 1); },delay);
   }
   else {
     dbg(`Failed to find xpath <${xpath}>`);
+    onError();
   }
 }
