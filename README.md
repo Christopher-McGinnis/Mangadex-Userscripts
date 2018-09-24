@@ -4,7 +4,7 @@ Userscripts for Mangadex.
 Still trying to get a good dev environment going. Till then it will be difficult to update this.
 
 
-####Release locations:
+#### Release locations:
 * Libraries on github.
 * UserScript on github and greasyfork
 
