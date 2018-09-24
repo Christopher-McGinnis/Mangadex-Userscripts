@@ -1,0 +1,19 @@
+{
+  "dist_dir": "devtest/",
+  "distExtention": ".user.js",
+  "userscripts": {
+    "bbcodeify-links.user.js":[],
+    "follow-reader.user.js":[],
+    "bbcode-autocomplete.user.js":[]
+  },
+  "libraries": [
+    {
+      "publishURI": "https://greasyfork.org/scripts/372223-mangadex-common/code/Mangadex%20Common.js",
+      "filePath": "common.js"
+    },
+    {
+      "publishURI": "https://raw.githubusercontent.com/component/textarea-caret-position/master/index.js",
+      "filePath": "external_libs/getCaretCoordinates/getCaretCoordinates.js"
+    }
+  ]
+}
