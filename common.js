@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     Mangadex Common
-// @version  0.0.1
+// @version  0.0.2
 // @description Common function library for Mangadex. Should be required by other userscripts.
 // ==/UserScript==
 "use strict";
@@ -262,3 +262,21 @@ const keycodes={
   openbracket: 219, backslash: 220,
   closebraket: 221, singlequote: 222
 };
+
+function createToolTip({title,text}) {
+  let tooltip_elm = htmlToElement(`<div>${title}<br><span>${text}</span></div>`);
+  let tooltip_text = tooltip_elm.children[1];
+  tooltip_elm.style.display="none";
+  tooltip_elm.style.backgroundColor="rgba(15,15,15,0.9)";
+  tooltip_elm.style.borderRadius="15px";
+  tooltip_elm.style.color="rgb(215,215,215)";
+  tooltip_elm.style.left="0%";
+  tooltip_elm.style.position="absolute";
+  tooltip_elm.style.zIndex=10;
+  tooltip_elm.style.textAlign="center";
+  document.body.appendChild(tooltip_elm);
+  return {
+    tooltip:tooltip_elm,
+    text_container:tooltip_text
+  };
+}

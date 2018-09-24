@@ -8,8 +8,8 @@
 // @grant    GM.setValue
 // @grant    GM_getValue
 // @grant    GM_setValue
-// @require  https://greasyfork.org/scripts/372223-mangadex-common/code/Mangadex%20Common.js
-// @require  https://raw.githubusercontent.com/component/textarea-caret-position/master/index.js
+// @require  https://raw.githubusercontent.com/Brandon-Beck/Mangadex-Userscripts/stable/common.js?revision=2018-09-24_01-43-20
+// @require  https://raw.githubusercontent.com/component/textarea-caret-position/af904838644c60a7c48b21ebcca8a533a5967074/index.js
 // @match    https://mangadex.org/*
 // ==/UserScript==
 let xp = new XPath();
@@ -73,48 +73,17 @@ function UserHistory({read_posts_history=[],user_id,username}={}) {
     let postContents=xp.new('./td/div').with('preceding-sibling::hr').getElement(post);
     let did_mention=Boolean(xp.new(`.//a[@href="https://mangadex.org/user/${uhist.user_id}"]`).getElement(postContents));
     let excerpt=clipText(xp.new('./td/div').with('preceding-sibling::hr').getElement(post).textContent,100);
-    this.history.push({thread_id:thread_id,user_name:user_name,did_mention:did_mention,post_id:post_id,user_id:user_id,user_img:user_img,excerpt:excerpt});
+    this.history.push({
+      thread_id:thread_id,
+      user_name:user_name,
+      did_mention:did_mention,
+      post_id:post_id,
+      user_id:user_id,
+      user_img:user_img,
+      excerpt:excerpt
+    });
     cleanupHistory();
   };
-  this.oldautoComplete = (partial_name,{thread_id=0,case_sensitive=false,fuzzy=true}={})=> {
-    let seen={};
-    function see(e,lvl) {
-      if (seen[e.user_id] == null) {
-        e.lvl=lvl;
-        seen[e.user_id]=e;
-        return true;
-      }
-      if (seen[e.user_id].lvl > lvl) {
-        e.lvl=lvl;
-        seen[e.user_id]=e;
-        return true;
-      }
-      return false;
-    }
-    let matches = this.history.filter( (e)=>{
-      // If this user is already marked as the highest priority match, dont process them anymore.
-      if (seen[e.user_id] && seen[e.user_id].lvl === 0) {
-        return false;
-      }
-      let regex_partial_name = new RegExp(`${fuzzy ? '' : '^'}${partial_name}`,`${case_sensitive ? '' : 'i'}`);
-      if (e.user_name.match(regex_partial_name)) {
-        // Users from this thread
-        if (e.thread_id === thread_id) {
-          if (e.did_mention) {
-            return see(e,0);
-          }
-          return see(e,1);
-        }
-        // Users from other recent threads
-        else if (e.did_mention) {
-          return see(e,3);
-        }
-        return see(e,4);
-      };
-      return false;
-    } );
-    return Object.entries(seen).sort( ([,a],[,b])=>{ return a.lvl > b.lvl; } ).reduce( (a,[,v]) => { a.push(v); return a; }, []);
-  }
   this.autoComplete = (partial_name,{thread_id=0,case_sensitive=false,fuzzy=true}={})=> {
     let matches = this.history.filter( (e) => {
       // If this user is already marked as the highest priority match, dont process them anymore.
@@ -186,7 +155,7 @@ function displayAutocomplete({textarea,recommendations,prefix_startpos,prefix_st
     //<span class="dropdown-item"><img src="${recommendation.user_img}"/>${recommendation.user_name}</span>
     //recommendation.user_img.classList.add("mh-100");
     let item_html = htmlToElement(`
-      <div class="dropdown-item d-flex justify-content-between align-items-center px-2" style="height:50px;">
+      <div class="dropdown-item d-flex justify-content-between align-items-center px-2" style="height:50px;" title="${recommendation.excerpt}">
       <div class="h-100">
       <span class="">${recommendation.did_mention ? '@' : ''}</span>
       <span class="${recommendation.thread_id === thread_id ? 'far fa-comments' : ''}"></span>
