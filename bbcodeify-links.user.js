@@ -6,15 +6,14 @@
 // @grant    unsafeWindow
 // @grant    GM.setClipboard
 // @grant    GM_setClipboard
-// @require  https://greasyfork.org/scripts/372223-mangadex-common/code/Mangadex%20Common.js
+// @require  https://raw.githubusercontent.com/Christopher-McGinnis/Mangadex-Userscripts/aee2c95604c9a8e430a47773f9eb1851823186e5/common.js
 // @match    https://mangadex.org/*
 // ==/UserScript==
 // TODO: Look for a decent IDE for userscripts.
 // Currently using ViolentMonkey with Atom and atom-live-server to sync changes with ViolentMonkey
 // Unfortunatly, syncing requires doesnt work well that way.
 // Compiling for testing.
-"use strict";
-
+'use strict';
 /*****************************
  * Create HTML nodes.
  */
