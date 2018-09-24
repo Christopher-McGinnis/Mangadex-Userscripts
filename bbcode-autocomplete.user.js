@@ -235,7 +235,8 @@ function onTextareaKeyDown(e) {
       }
       if (cur_selection >=0 ) {
         displayAutocomplete_html.children[cur_selection].classList.add("active");
-        displayAutocomplete_html.children[cur_selection].scrollIntoView();
+        let topPos = displayAutocomplete_html.children[cur_selection].offsetTop;
+        displayAutocomplete_html.scrollTop=topPos;
       }
       else if (cur_selection < -1 ) {
         should_preventDefault=false;
