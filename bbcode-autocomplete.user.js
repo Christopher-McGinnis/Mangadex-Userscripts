@@ -8,7 +8,7 @@
 // @grant    GM.setValue
 // @grant    GM_getValue
 // @grant    GM_setValue
-// @require  https://raw.githubusercontent.com/Brandon-Beck/Mangadex-Userscripts/stable/common.js?revision=2018-09-24_01-43-20
+// @require  https://raw.githubusercontent.com/Brandon-Beck/Mangadex-Userscripts/aee2c95604c9a8e430a47773f9eb1851823186e5/common.js
 // @require  https://raw.githubusercontent.com/component/textarea-caret-position/af904838644c60a7c48b21ebcca8a533a5967074/index.js
 // @match    https://mangadex.org/*
 // ==/UserScript==
