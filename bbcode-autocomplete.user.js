@@ -2,7 +2,7 @@
 // @name     Mangadex Post Autocomplete
 // @description Autocompletes @Usernames in posts.
 // @namespace https://github.com/Christopher-McGinnis
-// @version  0.0.2
+// @version  0.0.3
 // @grant    unsafeWindow
 // @grant    GM.getValue
 // @grant    GM.setValue
