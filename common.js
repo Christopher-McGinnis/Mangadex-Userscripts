@@ -4,7 +4,7 @@
 // @description Common function library for Mangadex. Should be required by other userscripts.
 // ==/UserScript==
 "use strict";
-dbg("Loaded");
+
 function dbg(x) {
   //unsafeWindow used soly for debugging in firefox via Web Console.
   if (typeof unsafeWindow === 'object') {
@@ -89,13 +89,15 @@ function XPath(xpath_str="") {
   xp.xpath=xpath_str;
   function toStr(o) {
     if (o instanceof XPath) {
-      return o.asText();
+      return o.toString();
     }
     else {
       return o;
     }
   }
-  xp.contains = function(attr,text) {
+  xp.new=function(xpath_str) { return new XPath(xpath_str); };
+  xp.clone=function() { return new XPath(xp.xpath); };
+  xp.contains = function(attr,text=throwMissingParam('XPath().contains(attr,text)','"@class","some-class"')) {
     xp.xpath += `contains(concat(' ', normalize-space(${attr}), ' '), ' ${text} ')`;
     return xp;
   };
@@ -155,4 +157,28 @@ function checkLoop({
     dbg(`Failed to find xpath <${xpath}>`);
     onError();
   }
+}
+// Gets all values for provided keys via GM_getValue, defaulting to the provided default values.
+// keys = {SomeGM_Key: SomeDefaultValue, AnotherGM_Key: AnotherDefaultValue}
+// fn: function toRunAfterAllGM_getValues_prommisesHaveFinished({
+//   SomeGM_Key: SomeValue,
+//   AnotherGM_Key: AnotherValue
+//})
+function getUserValues(keys,fn) {
+  let values={};
+  let itemsLeft=Object.keys(keys).length;
+  Object.entries(keys).forEach( ([key,defaultValue]) => {
+    if (typeof GM === "object" && typeof GM.getValue === 'function') {
+      GM.getValue(key,defaultValue).then((value) => {
+        values[key] = value;
+        itemsLeft--;
+        if (itemsLeft === 0 ) {
+          fn(values);
+        }
+      });
+    }
+    else if (typeof GM_getValue === 'function') {
+      values[key] = GM_getValue(key,defaultValue);
+    }
+  });
 }
