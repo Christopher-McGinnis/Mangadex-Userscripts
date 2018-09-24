@@ -296,27 +296,28 @@ function disableAutocompletion() {
   //textarea.removeEventListener("input",() => onTextareaInput );
 }
 function main({read_posts_history}) {
-  dbg("INSIDE MAIN");
   let user_id=getCurrentUserID();
   let uhist = new UserHistory({read_posts_history:read_posts_history,user_id:user_id});
   // Add current page's posts to history.
-  let thread=xp.new(posts).append('//td/span/a').with( xp.new('preceding-sibling::span').with(xp.new().contains('@class','fa-clock')) ).getElement().href;
-  let thread_id = parseInt(thread.match(/\/thread\/(\d+)\//)[1]);
-  for(let [i,post] = [posts.getItter()]; (()=>{post=i.iterateNext(); return post;})();) { uhist.push(post) };
-  setUserValues({read_posts_history:uhist.history});
-  xp.new('//textarea[@id="text"]').forEachElement( (textarea) => {
-    dbg("Got TXT");
-    dbg(textarea);
-    textarea.addEventListener("input",() => onTextareaInput({
-      textarea:textarea,
-      uhist:uhist,
-      thread_id:thread_id,
-    } ) );
-    textarea.addEventListener("keydown", onTextareaKeyDown);
-  });
-  unsafeWindow.uhist=uhist;
+  let thread=xp.new(posts).append('//td/span/a').with( xp.new('preceding-sibling::span').with(xp.new().contains('@class','fa-clock')) ).getElement()
+  if (thread) {
+    thread = thread.href;
+    let thread_id = parseInt(thread.match(/\/thread\/(\d+)\//)[1]);
+    for(let [i,post] = [posts.getItter()]; (()=>{post=i.iterateNext(); return post;})();) { uhist.push(post) };
+    setUserValues({read_posts_history:uhist.history});
+    xp.new('//textarea[@id="text"]').forEachElement( (textarea) => {
+      textarea.addEventListener("input",() => onTextareaInput({
+        textarea:textarea,
+        uhist:uhist,
+        thread_id:thread_id,
+      } ) );
+      textarea.addEventListener("keydown", onTextareaKeyDown);
+    });
+    // For debugging
+    unsafeWindow.uhist=uhist;
+  }
 }
-dbg("Starting!");
+
 getUserValues({
   read_posts_history: []
 },main);
