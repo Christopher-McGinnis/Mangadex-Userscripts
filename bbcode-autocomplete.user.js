@@ -2,7 +2,7 @@
 // @name     Mangadex Post Autocomplete
 // @description Autocompletes @Usernames in posts.
 // @namespace https://github.com/Brandon-Beck
-// @version  0.0.3
+// @version  0.0.4
 // @grant    unsafeWindow
 // @grant    GM.getValue
 // @grant    GM.setValue
@@ -23,6 +23,16 @@ function UserHistory({read_posts_history=[],user_id,username}={}) {
 	}
   function clipText(text,max_length){
        return (text.length > max_length) ? text.substr(0, max_length - 1) + '&hellip;' : text;
+  };
+
+  function getVisibleText( node ) {
+    if( node.nodeType === Node.TEXT_NODE ) return node.textContent;
+    let style = getComputedStyle( node );
+    if( style && style.display === 'none' ) return '';
+    let text = '';
+    for( let i=0; i<node.childNodes.length; i++ )
+        text += getVisibleText( node.childNodes[i] );
+    return text;
   };
   let cleanupHistory= () => {
     if (this.history.size > this.max_size){
@@ -56,7 +66,7 @@ function UserHistory({read_posts_history=[],user_id,username}={}) {
     this.history.some((e,k) => {
       if (e.post_id === post_id) {
         exists=true;
-        array_move(this.history,k,0)
+        array_move(this.history,k,0);
         return true;
       }
       return false;
@@ -64,6 +74,7 @@ function UserHistory({read_posts_history=[],user_id,username}={}) {
     if (exists) {
       return false;
     }
+    let time = xp.new('.//span').with( xp.new('./span').with(xp.new().contains('@class','fa-clock')) ).getElement(post).title;
     let thread=xp.new('./td/span/a').with( xp.new('preceding-sibling::span').with(xp.new().contains('@class','fa-clock')) ).getElement(post).href;
     let thread_id = parseInt(thread.match(/\/thread\/(\d+)\//)[1]);
     let user=xp.new('./td/a[starts-with(@href,"/user/")]').getElement(post);
@@ -72,15 +83,18 @@ function UserHistory({read_posts_history=[],user_id,username}={}) {
     let user_img=xp.new('./td/img').with(xp.new().contains('@class','avatar')).getElement(post).src;
     let postContents=xp.new('./td/div').with('preceding-sibling::hr').getElement(post);
     let did_mention=Boolean(xp.new(`.//a[@href="https://mangadex.org/user/${uhist.user_id}"]`).getElement(postContents));
-    let excerpt=clipText(xp.new('./td/div').with('preceding-sibling::hr').getElement(post).textContent,100);
-    this.history.push({
+    // cleanText. Hide spoilers and other invisible crap
+    let cleanText=getVisibleText(postContents);
+    let excerpt=clipText(cleanText,100);
+    this.history.unshift({
       thread_id:thread_id,
       user_name:user_name,
       did_mention:did_mention,
       post_id:post_id,
       user_id:user_id,
       user_img:user_img,
-      excerpt:excerpt
+      excerpt:excerpt,
+      time:time
     });
     cleanupHistory();
   };
@@ -116,7 +130,6 @@ function UserHistory({read_posts_history=[],user_id,username}={}) {
       };
     } );
     let seen = {};
-    dbg(matches);
     matches = matches.filter( (e) => {
       if (seen[e.user_id]) {
         return false;
@@ -124,7 +137,6 @@ function UserHistory({read_posts_history=[],user_id,username}={}) {
       seen[e.user_id]=true;
       return true;
     } );
-    dbg(matches);
     return matches;
   };
   return this;
@@ -177,7 +189,6 @@ function displayAutocomplete({textarea,recommendations,prefix_startpos,prefix_st
     displayAutocomplete_html.appendChild(item_html);
   }
   let caret = getCaretCoordinates(textarea,textarea.selectionEnd);
-  dbg(caret);
   displayAutocomplete_html.style.top = caret.top + caret.height + "px";
   displayAutocomplete_html.style.left = caret.left + "px";
   displayAutocomplete_html.style.position='absolute';
@@ -226,7 +237,7 @@ function onTextareaKeyDown(e) {
         return should_preventDefault;
       }
       if (displayAutocomplete_html.children[cur_selection]) {
-        displayAutocomplete_html.children[cur_selection].classList.remove('active')
+        displayAutocomplete_html.children[cur_selection].classList.remove('active');
       }
       should_preventDefault=true;
       cur_selection += increment;
@@ -304,7 +315,15 @@ function main({read_posts_history}) {
   if (thread) {
     thread = thread.href;
     let thread_id = parseInt(thread.match(/\/thread\/(\d+)\//)[1]);
-    for(let [i,post] = [posts.getItter()]; (()=>{post=i.iterateNext(); return post;})();) { uhist.push(post) };
+    if (location.pathname.startsWith('/thread/')) {
+      for(let [i,post] = [posts.getItter()]; (()=>{post=i.iterateNext(); return post;})();) { uhist.push(post) };
+    } else {
+      // Consider more efficient approch
+      let snap = posts.getSnapshot();
+      for ( let i=snap.snapshotLength - 1 ; i >= 0; i-- ) {
+        uhist.push(snap.snapshotItem(i));
+      };
+    }
     setUserValues({read_posts_history:uhist.history});
     xp.new('//textarea[@id="text"]').forEachElement( (textarea) => {
       textarea.addEventListener("input",() => onTextareaInput({
