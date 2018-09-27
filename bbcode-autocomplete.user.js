@@ -15,9 +15,9 @@
 // ==/UserScript==
 let xp = new XPath();
 let posts=xp.new('//tr').with(xp.new().contains('@class','post'));
-// Because Javascript's definition of .sort is not well defined.
+// Because Javascript's does not require .sort to be Stable.
+// Currently Chrome alone uses Unstable sort. They are now moving to Stable.
 // This returns the same results for all browsers,
-// Following Mozilla's definiton of .sort. No clue what chrome was trying to do.
 function stableSort(arr,cmp=(a, b) => {
   if (a < b) return -1;
   if (a > b) return 1;
@@ -128,12 +128,7 @@ function UserHistory({read_posts_history=[],user_id,username}={}) {
   this.username=""; // get from userid
   this.max_size=200;
   this.history=read_posts_history;
-  /*  postid: {
-      userid,
-      username,
-      userimg,
-      excerpt,
-    }*/
+
   this.push = (post)=> {
     let post_id=parseInt(post.id.replace(/^post_/,''));
 
@@ -311,11 +306,14 @@ function onTextareaInput({textarea,uhist,thread_id}) {
 function onTextareaKeyDown(e) {
   // Down
   let activexp = xp.new('./').with(xp.new().contains('@class','active'));
+  function getSelection() {
+    let r = parseInt(displayAutocomplete_html.dataset.selected);
+    return !isNaN(r) ? r : -1;
+  }
   function doIncrement(increment) {
     let should_preventDefault = false;
     if (displayAutocomplete_html.hasChildNodes()) {
-      let cur_selection = displayAutocomplete_html.dataset.selected || -1;
-      cur_selection=parseInt(cur_selection);
+      let cur_selection = getSelection();
       if (increment === 0) {
         // prevent default if something is selected
         should_preventDefault = cur_selection !== -1;
@@ -342,9 +340,14 @@ function onTextareaKeyDown(e) {
     }
     return should_preventDefault;
   }
-  let selection = parseInt(displayAutocomplete_html.dataset.selected);
-  if (e.keyCode == keycodes.downarrow || (selection === -1 && e.keyCode == keycodes.tab)) {
+  if (e.keyCode == keycodes.downarrow) {
     if (doIncrement(1)) {
+      e.preventDefault();
+    }
+  }
+  else if ((e.keyCode == keycodes.tab || e.keyCode == keycodes.enter) && getSelection() === -1) {
+    if (doIncrement(1)) {
+      displayAutocomplete_html.children[getSelection()].onclick();
       e.preventDefault();
     }
   }
@@ -360,12 +363,12 @@ function onTextareaKeyDown(e) {
   // right
   else if (e.keyCode == keycodes.rightarrow || e.keyCode == keycodes.enter || e.keyCode == keycodes.tab || e.keyCode == keycodes.space) {
     if (doIncrement(0)) {
-      displayAutocomplete_html.children[selection].onclick();
+      displayAutocomplete_html.children[getSelection()].onclick();
       e.preventDefault();
     }
-    //else {
-    //  clearAutocomplete();
-    //}
+    else {
+      clearAutocomplete();
+    }
   }
   else {
     clearAutocomplete();
