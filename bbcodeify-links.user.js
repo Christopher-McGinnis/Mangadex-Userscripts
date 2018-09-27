@@ -6,7 +6,7 @@
 // @grant    unsafeWindow
 // @grant    GM.setClipboard
 // @grant    GM_setClipboard
-// @require  https://raw.githubusercontent.com/Christopher-McGinnis/Mangadex-Userscripts/aee2c95604c9a8e430a47773f9eb1851823186e5/common.js
+// @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/c2f35786a2a72ffbc37a104f5f720e1fb4c41854/common.js
 // @match    https://mangadex.org/*
 // ==/UserScript==
 // TODO: Look for a decent IDE for userscripts.
