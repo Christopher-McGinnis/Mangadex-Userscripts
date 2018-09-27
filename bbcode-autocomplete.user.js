@@ -11,9 +11,13 @@
 // @require  https://cdn.rawgit.com/Brandon-Beck/Mangadex-Userscripts/c2f35786a2a72ffbc37a104f5f720e1fb4c41854/common.js
 // @require  https://cdn.rawgit.com/component/textarea-caret-position/af904838644c60a7c48b21ebcca8a533a5967074/index.js
 // @match    https://mangadex.org/*
+// @license  MIT
 // ==/UserScript==
 let xp = new XPath();
 let posts=xp.new('//tr').with(xp.new().contains('@class','post'));
+// Because Javascript's definition of .sort is not well defined.
+// This returns the same results for all browsers,
+// Following Mozilla's definiton of .sort. No clue what chrome was trying to do.
 function stableSort(arr,cmp=(a, b) => {
   if (a < b) return -1;
   if (a > b) return 1;
