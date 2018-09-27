@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     Mangadex Common
-// @version  0.0.2
+// @version  0.0.3
 // @description Common function library for Mangadex. Should be required by other userscripts.
 // ==/UserScript==
 "use strict";
@@ -71,6 +71,9 @@ function copyTextToClipboard(text) {
 function getSnapshotByXpath(path,node=document) {
   return document.evaluate( path.toString() , node, null, XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE, null);
 }
+function getOrderedSnapshotByXpath(path,node=document) {
+  return document.evaluate( path.toString() , node, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+}
 function getItterByXpath(path,node=document) {
   return document.evaluate( path.toString(), node, null, XPathResult.UNORDERED_NODE_ITERATOR_TYPE, null);
 }
@@ -128,6 +131,9 @@ function XPath(xpath_str="") {
   };
   xp.getSnapshot = function(node=document) {
     return getSnapshotByXpath(xp, node);
+  };
+  xp.getOrderedSnapshot = function(node=document) {
+    return getOrderedSnapshotByXpath(xp, node);
   };
   xp.getItter = function(node=document) {
     return getItterByXpath(xp, node);

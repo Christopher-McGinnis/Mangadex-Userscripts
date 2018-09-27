@@ -77,6 +77,7 @@ function apply_to_xpath_snapshots(xpath_snapshots,fn) {
 
 function main() {
   dbg("Running MAIN");
+  let page_titles = getSnapshotByXpath("//h6[contains(@class,'card-header') and ./span[contains(@class,'fa-book')] ]");
 	let manga_titles = getSnapshotByXpath("//a[contains(@class,'manga_title')]");
   let breadcrumb_links = getSnapshotByXpath("//li[contains(@class,'breadcrumb-item')]/a");
   apply_to_xpath_snapshots(manga_titles,append_bbcode_button);
@@ -85,6 +86,17 @@ function main() {
     dbg("appending");
     elm.parentNode.appendChild(bb_elm);
     bb_elm.onclick=function() { bbcode_onclick(bb_elm,elm.href,elm.textContent); };
+  });
+  apply_to_xpath_snapshots(page_titles,function(elm) {
+    let title='';
+    elm.childNodes.forEach( (e) => { if (e.nodeName === "#text") { title += e.textContent; } } )
+    title=title.trim();
+    if (title) {
+      let bb_elm = bb_templ.cloneNode(true);
+      dbg("appending");
+      bb_elm.onclick=function() { bbcode_onclick(bb_elm,location.href,title); };
+      elm.appendChild(bb_elm);
+    }
   });
 }
 dbg("RUNNING");

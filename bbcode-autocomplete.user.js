@@ -2,20 +2,100 @@
 // @name     Mangadex Post Autocomplete
 // @description Autocompletes @Usernames in posts.
 // @namespace https://github.com/Christopher-McGinnis
-// @version  0.0.4
+// @version  0.0.5
 // @grant    unsafeWindow
 // @grant    GM.getValue
 // @grant    GM.setValue
 // @grant    GM_getValue
 // @grant    GM_setValue
-// @require  https://raw.githubusercontent.com/Christopher-McGinnis/Mangadex-Userscripts/aee2c95604c9a8e430a47773f9eb1851823186e5/common.js
+// @require  https://raw.githubusercontent.com/Christopher-McGinnis/Mangadex-Userscripts/c2f35786a2a72ffbc37a104f5f720e1fb4c41854/common.js
 // @require  https://raw.githubusercontent.com/component/textarea-caret-position/af904838644c60a7c48b21ebcca8a533a5967074/index.js
 // @match    https://mangadex.org/*
 // ==/UserScript==
 let xp = new XPath();
 let posts=xp.new('//tr').with(xp.new().contains('@class','post'));
-
+function stableSort(arr,cmp=(a, b) => {
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+}) {
+  let stabilizedThis = arr.map((el, index) => [el, index]);
+  let stableCmp = (a, b) => {
+    let order = cmp(a[0], b[0]);
+    if (order != 0) return order;
+    return a[1] - b[1];
+  }
+  stabilizedThis.sort(stableCmp);
+  for (let i=0; i<arr.length; i++) {
+    arr[i] = stabilizedThis[i][0];
+  }
+  return arr;
+}
 // userid = Your user ID
+function User({name,id,img}) {
+  let user = this;
+  if (!( user instanceof User) ) {
+	    return new User();
+	}
+  user.name = name;
+  user.id   = id;
+  user.img  = img;
+  return user;
+}
+function UserList({list={}}) {
+  let userList = this;
+  if (!( userList instanceof UserList) ) {
+	    return new UserList();
+	}
+  userList.list = list;
+  userList.push = (user) => {
+    userList.list[user.id] = user;
+  };
+  return userList;
+}
+function Post({post_id,time,user_id,thread_id}) {
+  let post = this;
+  if (!( post instanceof Post) ) {
+	    return new Post();
+	}
+  post.user_id = user_id;
+  post.thread_id = thread_id;
+  post.id = post_id;
+  post.time = time;
+  return post;
+}
+function Thread({id,title,manga_id}) {
+  let thread = this;
+  if (!( thread instanceof Thread) ) {
+	    return new Thread();
+	}
+  thread.id = id;
+  thread.title = title;
+  thread.manga_id = manga_id;
+  return thread;
+}
+function Manga({id,title,description}) {
+  let manga = this;
+  if (!( thread instanceof Manga) ) {
+	    return new Manga();
+	}
+  manga.id = id;
+  manga.title = title;
+  manga.description = description;
+  return manga;
+}
+function MangaList({list={}}) {
+  let mangaList = this;
+  if (!( mangaList instanceof MangaList) ) {
+	    return new MangaList();
+	}
+  mangaList.list = list;
+  mangaList.push = (manga) => {
+    mangaList.list[manga.id] = manga;
+  };
+  return mangaList;
+}
+
 function UserHistory({read_posts_history=[],user_id,username}={}) {
   let uhist = this;
   if (!( uhist instanceof UserHistory) ) {
@@ -106,7 +186,8 @@ function UserHistory({read_posts_history=[],user_id,username}={}) {
         return true;
       }
       return false;
-    } ).sort( (a,b) => {
+    } );
+    matches = stableSort(matches, (a,b) => {
       // List those from this thread before other threads
       {
         let am = a.thread_id === thread_id;
@@ -319,7 +400,7 @@ function main({read_posts_history}) {
       for(let [i,post] = [posts.getItter()]; (()=>{post=i.iterateNext(); return post;})();) { uhist.push(post) };
     } else {
       // Consider more efficient approch
-      let snap = posts.getSnapshot();
+      let snap = posts.getOrderedSnapshot();
       for ( let i=snap.snapshotLength - 1 ; i >= 0; i-- ) {
         uhist.push(snap.snapshotItem(i));
       };
