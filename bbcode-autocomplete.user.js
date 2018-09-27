@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     Mangadex Post Autocomplete
-// @description Autocompletes @Usernames in posts.
+// @description Autocompletes @mention usernames. Maintains a small history of user posts you recently viewed and searches that for matches. Example image shown in additional info
 // @namespace https://github.com/Brandon-Beck
 // @version  0.0.5
 // @grant    unsafeWindow
@@ -8,8 +8,8 @@
 // @grant    GM.setValue
 // @grant    GM_getValue
 // @grant    GM_setValue
-// @require  https://raw.githubusercontent.com/Brandon-Beck/Mangadex-Userscripts/c2f35786a2a72ffbc37a104f5f720e1fb4c41854/common.js
-// @require  https://raw.githubusercontent.com/component/textarea-caret-position/af904838644c60a7c48b21ebcca8a533a5967074/index.js
+// @require  https://cdn.rawgit.com/Brandon-Beck/Mangadex-Userscripts/c2f35786a2a72ffbc37a104f5f720e1fb4c41854/common.js
+// @require  https://cdn.rawgit.com/component/textarea-caret-position/af904838644c60a7c48b21ebcca8a533a5967074/index.js
 // @match    https://mangadex.org/*
 // ==/UserScript==
 let xp = new XPath();

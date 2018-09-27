@@ -1,6 +1,8 @@
 {
-  "dist_dir": "devtest/",
-  "distExtention": ".user.js",
+  "dev_dir": "devtest/",
+  "src_dir": "",
+  "dist_dir": "dist/",
+  "distExtention": "",
   "userscripts": {
     "bbcodeify-links.user.js":[],
     "follow-reader.user.js":[],
@@ -8,11 +10,11 @@
   },
   "libraries": [
     {
-      "publishURI": "https://greasyfork.org/scripts/372223-mangadex-common/code/Mangadex%20Common.js",
+      "gitURI_prefix": "https://cdn.rawgit.com/Brandon-Beck/Mangadex-Userscripts",
       "filePath": "common.js"
     },
     {
-      "publishURI": "https://raw.githubusercontent.com/component/textarea-caret-position/master/index.js",
+      "publishURI": "https://cdn.rawgit.com/component/textarea-caret-position/af904838644c60a7c48b21ebcca8a533a5967074/index.js",
       "filePath": "external_libs/getCaretCoordinates/getCaretCoordinates.js"
     }
   ]
