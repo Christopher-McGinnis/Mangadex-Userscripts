@@ -9,6 +9,8 @@
 // @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/c2f35786a2a72ffbc37a104f5f720e1fb4c41854/common.js
 // @match    https://mangadex.org/*
 // @license  MIT
+// @author   Christopher McGinnis
+// @icon     https://mangadex.org/images/misc/default_brand.png?1
 // ==/UserScript==
 // TODO: Look for a decent IDE for userscripts.
 // Currently using ViolentMonkey with Atom and atom-live-server to sync changes with ViolentMonkey
