@@ -42,6 +42,25 @@ function createToolTip({title,text}) {
 // to do our own menus. I like the current methd mainly because it uses the sites
 // own setting menu elements, so there is no excuse for our users not to know how
 // to use them.
+// FIXME singlton is only single per userscript. Multiple userscripts against
+// multiple versions of this can cause problems. need to stabilize the API And
+// then attempt to latch onto the newest version.
+// if (typeof window.SettingUI !== 'function') {
+// TODO Save
+// Should be top down. everything saves to the same monolithic object unless
+// they specify a diffrent location. save should only save objects in same
+// save location, and should save all of them.
+// a save all for saving children who specify diffrent locations as wel to their
+// independent storage locations.
+// Save should be an overridable function, but there should never be a need to
+// override it.
+// TODO save_location. A simple name for where we save crap. used by the default
+// save function.
+// TODO autosave: bool. Specifies weather or not we should save after every change
+// TODO autosave_delay: A delay between saves, will NOT save until this much time
+// has passed. Sequential autosave triggers will reset the delay.
+// NOTE until these are implementecd, you must save manualy. recommened
+// passing that in onchange callback.
 class SettingsUI {
   // Singlton group
   constructor({
@@ -113,7 +132,6 @@ class SettingsUI {
       let mangadex_tab = sgroup.addGroup({title:"Mangadex", active:true, id: createID('mangadex-setting-header-tab-')});
       modal_content.removeChild(modal_body);
       for (let child of modal_body.children) {
-        dbg(child);
         mangadex_tab.appendChild(child);
       }
 
@@ -162,15 +180,32 @@ class SettingsUI {
         // The value in select, usualy a unique index related to the items position in select.
         // Does NOT normaly change
         let enabled=selected;
-        Reflect.defineProperty(item,'select_value',{
-          get() { return item.elm.value; },
+        Object.defineProperties(item,{
+          'select_value': {
+            get() { return item.elm.value; },
+          },
+          'enabled': {
+            get() { return enabled; },
+            set(new_value) {
+              enabled=new_value;
+              item.elm.selected=new_value;
+              return new_value; },
+          },
+          /*value: { // same as enabled
+            get() { return item.enabled; },
+            set(new_value) { return item.enabled=new_value; },
+          },*/
+          savable: {
+            get() {
+              return item.enabled;
+            },
+            set(obj) {
+              return item.enabled=obj;
+            },
+          },
         });
         // Boolean value programmer is interested in.
         // TODO veriffy this works
-        Reflect.defineProperty(item,'enabled',{
-          get() { return enabled; },
-          set(new_value) { item.elm.selected=new_value; return new_value; },
-        });
         item.elm.dataset.contents = ui.innerHTML;
         item.elm.select_callback   = (new_value,old_value) => {
           onselect(item,new_value,old_value);
@@ -238,13 +273,14 @@ class SettingsUI {
             //setting.select.removeChild(setting.options[option.select_value]);
           //}
           setting.options[option.key] = option;
-          Reflect.defineProperty(setting.values, option.key,{
+          Object.defineProperty(setting.values, option.key,{
             get() {
               return option.enabled;
             },
             set(val) {
               return option.enabled=val;
             },
+            enumerable: true,
           });
           setting.select.appendChild(option.elm);
           last_used_value=option.select_value;
@@ -256,10 +292,31 @@ class SettingsUI {
         for (let [idx,option] of options.entries()) {
           setting.addExistingOption(option);
         }
+
+        Object.defineProperties(setting,{
+          savable: {
+            get() {
+              let obj = {};
+              //for (let key of Reflect.ownKeys(setting.values)) {
+              for (let [key,val] of Object.entries(setting.values)) {
+                obj[key]=val;
+              }
+              return obj;
+            },
+            set(obj) {
+              for (let key of Reflect.ownKeys(obj)) {
+                setting.values[key]=obj[key];
+              }
+              //return setting.values;
+              return true;
+            },
+          },
+        });
         return setting;
       };
       settings.subgroup_objects={};
       settings.subgroup={};
+      settings.values=settings.subgroup;
       function addSetting(setting) {
         throwOnBadArg(settings.subgroup[setting.key] != null,"Select.addSetting(new Setting)","key",'"UniqueSettingKey"',setting.key);
         settings.subgroup_objects[setting.key]=setting;
@@ -268,13 +325,14 @@ class SettingsUI {
           //setting.select.removeChild(setting.options[option.select_value]);
         //}
         Reflect.defineProperty(settings.subgroup, setting.key,{
+          enumerable:true,
           get() {
             return setting.values;
           },
           // FIXME support non-multiselect
-          //set(val) {
-          //  return option.enabled=val;
-          //},
+          set(val) {
+            return setting.savable=val;
+          },
         });
       }
       settings.addMultiselect = (args) => {
@@ -287,27 +345,50 @@ class SettingsUI {
         addSetting(setting);
         return setting;
       };
+      Object.defineProperties(settings,{
+        savable: {
+          get() {
+            let obj = {};
+            //for (let key of Reflect.ownKeys(setting.values)) {
+            for (let [key,val] of Object.entries(settings.subgroup_objects)) {
+              obj[key]=val.savable;
+            }
+            return obj;
+          },
+          set(obj) {
+            for (let [key,val] of Object.entries(obj)) {
+              settings.values[key]=val;
+            }
+            //return setting.values;
+            return true;
+          },
+        },
+      });
       return settings;
     }
     // END SelectUIInstance
+    // Actual constructor below
     if (! SettingsUI.instance ) {
       SettingsUI.instance = this;
       SettingsUI.instance.groups=[];
       SettingsUI.tab_builder = new SettingsTabBuilder();
     }
+    // Create the group if it doesnt exist
     if (!SettingsUI.instance.groups[group_name]) {
       let group_id=createID(group_name + '-tab-');
       let container = SettingsUI.tab_builder.addGroup({title:group_name, id:group_id});
       SettingsUI.instance.groups[group_name]=new SettingsUIInstance({group_name:group_name,container:container});
     }
+    // Return the requested group instance.
     let settings = SettingsUI.instance.groups[group_name];
     return settings;
   }
-
 }
+
+
 function example() {
   let settings_ui = new SettingsUI({group_name:"AdvancedFilter"});
-  let block_mulsel = settings_ui.addMultiselect({key:"blocked", title:"Blacklist"});
+  let block_mulsel = settings_ui.addMultiselect({key:"blocked", title:"Blacklist", autosave:true});
   for (let [idx,o] of ["adventure", "isekai", "drama","fake genre"].entries()) {
     let item = block_mulsel.addOption({
       title: o,
@@ -333,11 +414,16 @@ function example() {
     });
   }
   // title is optional. Defaults to key value.
-  let selectAuto = m.addMultiselect({key:"Autocomplete"});
-  selectAuto.addOption({key:"Manga"});
+  let selectAuto = settings_ui.addMultiselect({key:"Autocomplete"});
+  selectAuto.addOption({key:"Manga", autosave:true});
   selectAuto.addOption({key:"Users"});
   let settings = settings_ui.values;
   // Get value from Blacklist every 5 seconds.
+  dbg("Settings");
+  dbg(settings_ui.savable);
+  dbg("Select");
+  dbg(selectAuto.savable);
+  settings_ui.savable={blocked:{adventure:true}};
   setInterval(() => {
     dbg(settings_ui.values.blocked.adventure);
     dbg(settings.blocked.adventure);
