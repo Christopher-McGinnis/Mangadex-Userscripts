@@ -9,7 +9,7 @@
 // @grant    GM_getValue
 // @grant    GM_setValue
 // @require  https://cdn.rawgit.com/Brandon-Beck/Mangadex-Userscripts/54480aaaab13c3e421d0cd1d7fd25589aad5dcb9/common.js
-// @require  https://cdn.rawgit.com/Brandon-Beck/Mangadex-Userscripts/b87984fdf634c273d9d5a48bd2d445653e18003e/settings-ui.js
+// @require  https://cdn.rawgit.com/Brandon-Beck/Mangadex-Userscripts/3bddd3bd409592419ccb33b5ccfd35d4dc549035/settings-ui.js
 // @require  https://cdn.rawgit.com/component/textarea-caret-position/af904838644c60a7c48b21ebcca8a533a5967074/index.js
 // @match    https://mangadex.org/*
 // @author   Brandon Beck
@@ -398,16 +398,19 @@ function disableAutocompletion() {
   let textarea = xp.new('id("text")').getElement();
   //textarea.removeEventListener("input",() => onTextareaInput );
 }
-function initSettingsDialog() {
+function initSettingsDialog(loaded_settings) {
   let settings_ui = new SettingsUI({group_name:"Auto-Complete"});
   let autocompleteTypes=settings_ui.addMultiselect({title:"Types",key:"autocomplete_types"});
   autocompleteTypes.addOption({key:"usernames", title:"@Username"});
   autocompleteTypes.addOption({key:"titles",title:":Title"});
+  // Load our saved settings object into the ui
+  settings_ui.savable=loaded_settings;
+  // return new settings object which is bound to the UI.
   let settings=settings_ui.values;
   return settings;
 }
-function main({read_posts_history}) {
-  let settings=initSettingsDialog();
+function main({read_posts_history,loaded_settings:settings}) {
+  let settings=initSettingsDialog(loaded_settings);
   let user_id=getCurrentUserID();
   let uhist = new UserHistory({read_posts_history:read_posts_history,user_id:user_id});
   // Add current page's posts to history.
@@ -439,5 +442,6 @@ function main({read_posts_history}) {
 }
 
 getUserValues({
-  read_posts_history: []
+  read_posts_history: [],
+  settings:{},
 },main);
