@@ -2,16 +2,21 @@
   "dev_dir": "devtest/",
   "src_dir": "",
   "dist_dir": "dist/",
-  "distExtention": "",
+  "distExtention": ".user.js",
   "userscripts": {
     "bbcodeify-links.user.js":[],
     "follow-reader.user.js":[],
-    "bbcode-autocomplete.user.js":[]
+    "bbcode-autocomplete.user.js":[],
+    "settings-ui.js":[]
   },
   "libraries": [
     {
       "gitURI_prefix": "https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts",
       "filePath": "common.js"
+    },
+    {
+      "gitURI_prefix": "https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts",
+      "filePath": "settings-ui.js"
     },
     {
       "publishURI": "https://cdn.rawgit.com/component/textarea-caret-position/af904838644c60a7c48b21ebcca8a533a5967074/index.js",

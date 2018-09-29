@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     Mangadex Common
-// @version  0.0.3
+// @version  0.0.4
 // @description Common function library for Mangadex. Should be required by other userscripts.
 // ==/UserScript==
 "use strict";
@@ -103,7 +103,7 @@ function XPath(xpath_str="") {
   }
   xp.new=function(xpath_str) { return new XPath(xpath_str); };
   xp.clone=function() { return new XPath(xp.xpath); };
-  xp.contains = function(attr,text=throwMissingParam('XPath().contains(attr,text)','"@class","some-class"')) {
+  xp.contains = function(attr,text=throwMissingArg('XPath().contains(attr,text)','text','("@class","String")')) {
     xp.xpath += `contains(concat(' ', normalize-space(${attr}), ' '), ' ${text} ')`;
     return xp;
   };
@@ -154,18 +154,30 @@ function XPath(xpath_str="") {
   return xp;
 }
 
-function throwMissingParam(name,param) {
-    throw new Error(`Function <${name}> is missing required parameter: <${param}>`);
+function throwMissingParam(name,param,example) {
+    throw new Error(`Function <${name}> is missing required parameter: <${param}>${example ? ` eg. <${param}: ${example}>` : "" }`);
 }
-
+function throwMissingArg(name,arg_name,example) {
+    throw new Error(`Function <${name}> is missing required argument: <${arg_name}>${example ? ` eg. <${example}>` : "" }`);
+}
+function throwOnBadParam(condition,name,param,example,bad_value) {
+  if (condition) {
+    throw new Error(`Function <${name}> has illegal value for required parameter: <${param}>${example ? ` exected: <${example}>` : "" }${bad_value ? ` got: <${bad_value}>`  : "" }`);
+  }
+}
+function throwOnBadArg(condition,name,arg_name,example,bad_value) {
+  if (condition) {
+    throw new Error(`Function <${name}> has illegal value for required argument: <${arg_name}>${example ? ` exected: <${example}>` : "" }${bad_value ? ` got: <${bad_value}>`  : "" }`);
+  }
+}
 
 // Checks the page for {xpath} every {delay} milliseconds up to {tries} times. Runs {callback} once found.
 // Used to wait for required elements to load before running functions.
 // xpath: A String or XPath instance
 // callback: Function to run once an xpath match is found
 function checkLoop({
-  xpath = throwMissingParam('checkLoop','xpath="String"'),
-  callback=throwMissingParam('checkLoop','callback=fn()'),
+  xpath = throwMissingParam('checkLoop','xpath','"String"'),
+  callback=throwMissingParam('checkLoop','callback','function(){}'),
   onError = () => {},
   tries=50,delay=100},cnt=tries) {
   dbg(`Checking for xpath <${xpath}>`);
