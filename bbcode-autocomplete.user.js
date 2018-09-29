@@ -9,6 +9,7 @@
 // @grant    GM_getValue
 // @grant    GM_setValue
 // @require  https://cdn.rawgit.com/Brandon-Beck/Mangadex-Userscripts/c2f35786a2a72ffbc37a104f5f720e1fb4c41854/common.js
+// @require  https://cdn.rawgit.com/Brandon-Beck/Mangadex-Userscripts/d1bed91842da2156978a37607ab039c97eec3825/settings-ui.js
 // @require  https://cdn.rawgit.com/component/textarea-caret-position/af904838644c60a7c48b21ebcca8a533a5967074/index.js
 // @match    https://mangadex.org/*
 // @author   Brandon Beck
@@ -397,7 +398,17 @@ function disableAutocompletion() {
   let textarea = xp.new('id("text")').getElement();
   //textarea.removeEventListener("input",() => onTextareaInput );
 }
+function initSettingsDialog() {
+  let settings_ui = new SettingsUI({group_name:"Auto-Complete"});
+  let autocompleteTypes=settings_ui.addMultiselect({title:"Types",key:"types"});
+  autocompleteTypes.addOption({key:"usernames", title:"@Username"});
+  autocompleteTypes.addOption({key:"titles",title:":Title"});
+  let settings=autocompleteTypes.values;
+
+  return settings;
+}
 function main({read_posts_history}) {
+  let settings=initSettingsDialog();
   let user_id=getCurrentUserID();
   let uhist = new UserHistory({read_posts_history:read_posts_history,user_id:user_id});
   // Add current page's posts to history.
