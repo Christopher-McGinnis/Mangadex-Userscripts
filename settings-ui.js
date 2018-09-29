@@ -7,7 +7,7 @@
 // @grant    GM.setValue
 // @grant    GM_getValue
 // @grant    GM_setValue
-// @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/c2f35786a2a72ffbc37a104f5f720e1fb4c41854/common.js
+// @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/54480aaaab13c3e421d0cd1d7fd25589aad5dcb9/common.js
 // @match    https://mangadex.org/*
 // @author   Christopher McGinnis
 // @icon     https://mangadex.org/images/misc/default_brand.png?1
@@ -52,59 +52,77 @@ class SettingsUI {
       return id_prefix + (currentID++);
     }
     let xp = new XPath();
-    let dialog=xp.new('//div[@id="homepage_settings_modal"]/div').with(xp.new().contains('@class','modal-dialog')).getElement();
-    let header=xp.new('.//div').with(xp.new().contains('@class','modal-header')).getElement(dialog);
-    let mangadex_header_tab_id=createID('mangadex-setting-header-tab-');
-    let header_tab_container=htmlToElement(`
-      <div class="tab-content h5 align-items-center">
-      </div>`);
-
-    // Move current Mangadex settings header into a tab
-    let mangadex_header_tab=htmlToElement(`<div class="tab-pane active" role="tabpanel" id="${mangadex_header_tab_id}"></div>`);
-    // The h5 elm
-    //mangadex_header_tab.appendChild(header.children[0]);
-    mangadex_header_tab.appendChild(header.children[0]);
-    header_tab_container.appendChild(mangadex_header_tab);
-    let header_content=htmlToElement(`<div></div>`);
+    function SettingsTabBuilder() {
+      let sgroup = this;
+      if (!( sgroup instanceof SettingsTabBuilder) ) {
+          return new SettingsTabBuilder(...arguments);
+      }
+      // Get Mangadex Quick Settings Dialog
+      let dialog=xp.new('//div[@id="homepage_settings_modal"]/div').with(xp.new().contains('@class','modal-dialog')).getElement();
+      let header=xp.new('.//div').with(xp.new().contains('@class','modal-header')).getElement(dialog);
+      let modal_body=xp.new('.//div').with(xp.new().contains('@class','modal-body')).getElement(dialog);
+      let modal_content=modal_body.parentNode;
 
 
-    let tab_nav_container=htmlToElement(`
-      <div class="h5 d-flex align-items-center">
-      <span class="fas fa-cog fa-fw " aria-hidden="true"></span>
-      <ul class="nav nav-pills" roll="tablist">
-        <li class="nav-item active">
-          <a data-toggle="tab" role="tab" class="nav-link active show" href="#${mangadex_header_tab_id}">Manga Dex</a>
-        </li>
-      </ul>
-      </div>
+      // Remove mangadex settings header title. We will use our own version of it.
+      header.removeChild(header.children[0]);
 
-    `);
-    let tab_nav=tab_nav_container.children[1];
-    header_content.appendChild(tab_nav_container);
-    //header_content.appendChild(header_tab_container);
+      // Create new header and containers
+      let header_content=htmlToElement(`<div></div>`);
+      let tab_nav_container=htmlToElement(`
+        <div class="h5 d-flex align-items-center">
+        <span class="fas fa-cog fa-fw " aria-hidden="true"></span>
+        <ul class="nav nav-pills" roll="tablist">
 
-    header.insertBefore(header_content,header.children[0]);
+        </ul>
+        </div>
+      `);
+      header_content.appendChild(tab_nav_container);
+      header.insertBefore(header_content,header.children[0]);
+      let tab_nav=tab_nav_container.children[1];
 
-    let groupID=createID(group_name + "-");
-    header_tab_container.appendChild(htmlToElement(`
-      <div class="tab-pane" role="tabpanel" id=${groupID}>
-      <h5 class="modal-title">${group_name}</h5>
-      </div>
-      `));
-    tab_nav.appendChild(htmlToElement(`
-      <li class="nav-item"><a data-toggle="tab" role="tab"  class="nav-link" href="#${groupID}">${group_name}</a></li>
-    `));
-    /*$(`#${mangadex_header_tab_id} a`).on('click', function (e) {
-      e.preventDefault()
-      $(this).tab('show')
-    });
-    $(`#${groupID} a`).on('click', function (e) {
-      e.preventDefault()
-      $(this).tab('show')
-    });*/
+      // Create new body and containers
+      let tab_content = htmlToElement(`
+        <div class="tab-content">
+        </div>
+      `);
+      modal_content.insertBefore(tab_content,modal_body);
 
-    let mangadex_body = xp.new('.//div').with(xp.new().contains('@class','modal-body')).getElement(dialog);
-    function SettingsUIInstance({group_name,container=mangadex_body}) {
+      sgroup.appendNavItem = ({title,active=false,id}) => {
+        let item=htmlToElement(`
+        <li class="nav-item ${active ? "active" : "" }">
+          <a data-toggle="tab" role="tab" class="nav-link ${active ? "active show" : "" }" href="#${id}">${title}</a>
+        </li>`);
+        tab_nav.appendChild(item);
+      };
+
+      sgroup.appendTabItem = ({title,active=false,id}) => {
+        let item = htmlToElement(`
+         <div class="modal-body tab-pane ${active ? "show active" : "" }" role="tabpanel" id=${id}>
+         </div>
+        `);
+        tab_content.appendChild(item);
+        return item;
+      };
+
+      sgroup.addGroup = (args) => {
+        sgroup.appendNavItem(args);
+        let container = sgroup.appendTabItem(args);
+        return container;
+      };
+      let mangadex_tab = sgroup.addGroup({title:"Mangadex", active:true, id: createID('mangadex-setting-header-tab-')});
+      modal_content.removeChild(modal_body);
+      for (let child of modal_body.children) {
+        dbg(child);
+        mangadex_tab.appendChild(child);
+      }
+
+      //sgroup.tabs=tab_content;
+      //sgroup.navs=nav_content;
+      return sgroup;
+    }
+
+    function SettingsUIInstance({group_name,container=throwMissingParam("new SettingsUIInstance","container","HTML_Node")}) {
       let settings = this;
       if (!( settings instanceof SettingsUIInstance) ) {
           return new SettingsUIInstance(...arguments);
@@ -275,9 +293,12 @@ class SettingsUI {
     if (! SettingsUI.instance ) {
       SettingsUI.instance = this;
       SettingsUI.instance.groups=[];
+      SettingsUI.tab_builder = new SettingsTabBuilder();
     }
     if (!SettingsUI.instance.groups[group_name]) {
-      SettingsUI.instance.groups[group_name]=new SettingsUIInstance({group_name:group_name});
+      let group_id=createID(group_name + '-tab-');
+      let container = SettingsUI.tab_builder.addGroup({title:group_name, id:group_id});
+      SettingsUI.instance.groups[group_name]=new SettingsUIInstance({group_name:group_name,container:container});
     }
     let settings = SettingsUI.instance.groups[group_name];
     return settings;
