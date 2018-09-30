@@ -181,13 +181,48 @@ class SettingsUI {
       function createSettingID() {
         return createID(setting_item_id_prefix);
       }
+      /**
+      @class SettingTree
+      @private
+      @type {Object}
+      @property {Object} obj -
+      @property {String} obj.key - Key to use for accessing this setting item in its parent's values list.
+      @property {Boolean} [obj.autosave=false] - Should changes to this setting's value or it's children's values cause this setting group to save? Setting is applied recursivly to children which don't define it.
+      @property {String} [obj.save_location] - A seperate location to save this setting tree and its children.
+      @property {Function} [obj.save_method] - Method used for saving this value. Called by autosave.
+      */
+      function SettingTree({
+        key=throwMissingParam("new SettingTree","key",`'a unique key to access this SettingTree from its container'`),
+        autosave=false,
+        save_location,
+        save_method,
+      }){
+        let stree = this;
+        if (!( stree instanceof SettingTree) ) {
+          // Your getting an instance wether you like it or not!
+          return new SettingTree(...arguments);
+        }
+        stree.key=key;
+        stree.autosave=autosave;
+        function defaultSaveMethod() {
+          if (save_method) {
+            save_method(save_location);
+          }
+          else if (save_location) {
 
+          }
+        }
+      }
       function OptionItem({
         key=throwMissingParam("new OptionItem","key",`'a unique key for this select group'`),
         icon,
         title=key,
         title_text,
         value=key,
+        autosave=false,
+        save = ({obj,key}) => {
+          return null;
+        },
         onselect = () => {return null;},
         onchange = () => {return null;},
         ondeselect = () => {return null;},
@@ -484,12 +519,10 @@ function example() {
     dbg(settings.blocked.adventure);
     dbg(block_mulsel.values.adventure);
   },5000);
-
 }
 /*
 let xp = new XPath();
-checkLoop({
+waitForElementByXpath({
   xpath:'//div[@id="homepage_settings_modal"]/div',
-  callback:example,
-});
+}).then(example);
 */
