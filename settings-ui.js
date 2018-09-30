@@ -7,7 +7,8 @@
 // @grant    GM.setValue
 // @grant    GM_getValue
 // @grant    GM_setValue
-// @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/54480aaaab13c3e421d0cd1d7fd25589aad5dcb9/common.js
+// @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/2f84a04d4adf05142fb4c9a727f1dcae4cfbc78c/common.js
+// @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/2f84a04d4adf05142fb4c9a727f1dcae4cfbc78c/uncommon.js
 // @match    https://mangadex.org/*
 // @author   Christopher McGinnis
 // @icon     https://mangadex.org/images/misc/default_brand.png?1
@@ -182,20 +183,100 @@ class SettingsUI {
         return createID(setting_item_id_prefix);
       }
       /**
+      @class SettingLeaf
+      @private
+      @type {Object}
+      @property {Object} obj -
+      @property {Object} obj.value - Getter/Setter for value of leaf.
+      @property {Object} obj.savable - Getter/Setter for value of leaf.
+      Like obj.value, but builds a new JSON stringifyable object based on the
+      current value. Used for saving/loading to/from JSON.
+      */
+
+      /**
+      Setting Leaf
+      @prop {Object} obj -
+      @prop {String} obj.key - Key to use for accessing this setting item in its parent tree's values list.
+      @prop {Boolean} [obj.autosave=false] - Should changes to this setting's value cause this setting group to save? Setting is inherited from tree if not set.
+      @prop {String} [obj.save_location] - A seperate location to save this setting.
+      @prop {Function} [obj.save_method] - Method used for saving this leaf. Called by autosave.
+      @prop {Function} [obj.load_method] - Method used for loading this leaf.
+      */
+      /**
       @class SettingTree
       @private
       @type {Object}
       @property {Object} obj -
-      @property {String} obj.key - Key to use for accessing this setting item in its parent's values list.
-      @property {Boolean} [obj.autosave=false] - Should changes to this setting's value or it's children's values cause this setting group to save? Setting is applied recursivly to children which don't define it.
-      @property {String} [obj.save_location] - A seperate location to save this setting tree and its children.
-      @property {Function} [obj.save_method] - Method used for saving this value. Called by autosave.
+      @property {Object} obj.values - Getter/Setter for values of all children.
+      @property {Object} obj.savable - Getter/Setter for values of all children.
+      Like obj.values, but builds a new JSON stringifyable object based on the
+      current values. Used for saving/loading to/from JSON.
+      */
+      function SettingLeaf({
+        key=throwMissingParam("new SettingTree","key",`'a unique key to access this SettingTree from its container'`),
+        autosave=false,
+        save_location,
+        save_method,
+        load_method,
+      }){
+        let sleaf = this;
+        if (!( sleaf instanceof SettingLeaf) ) {
+          // Your getting an instance wether you like it or not!
+          return new SettingLeaf(...arguments);
+        }
+        sleaf.key=key;
+        sleaf.autosave=autosave;
+        function defaultLoadMethod() {
+          getUserValue(save_location,stree.savable);
+        }
+        function defaultSaveMethod() {
+          setUserValue(save_location,stree.savable);
+        }
+        function getSaveMethod(save_method,save_location,fallback) {
+          if (typeof save_method === "function") {
+            return save_method;
+          }
+          else if (typeof save_location === "string") {
+            return defaultSaveMethod;
+          }
+          else if (typeof fallback === "function") {
+            return fallback;
+          }
+          dbg(`WARNING! We have no method of saving key <${key}>`);
+          return null;
+        }
+        function getLoadMethod(load_method,load_location,fallback) {
+          if (typeof load_method === "function") {
+            return load_method;
+          }
+          else if (typeof load_location === "string") {
+            return defaultLoadMethod;
+          }
+          else if (typeof fallback === "function") {
+            return fallback;
+          }
+          dbg(`NOTE! No method of retrieving key <${key}>`);
+          return null;
+        }
+      }
+      /**
+      Setting Tree
+      @prop {Object} obj -
+      @prop {String} obj.key - Key to use for accessing this setting item in its parent's values list.
+      @prop {Boolean} [obj.autosave=false] - Should changes to this setting's value or it's children's values cause this setting group to save? Setting is applied recursivly to children which don't define it.
+      @prop {String} [obj.save_location] - A seperate location to save this setting tree and its children.
+      @prop {Function} [obj.save_method] - Method used for saving this tree. Called by autosave.
+      @prop {Function} [obj.load_method] - Method used for loading this tree.
+      @prop {Function} [obj.get] - Getter for value. Used by leaf nodes.
+      @prop {Function} [obj.set] - Setter for value. Used by leaf nodes.
       */
       function SettingTree({
         key=throwMissingParam("new SettingTree","key",`'a unique key to access this SettingTree from its container'`),
         autosave=false,
         save_location,
         save_method,
+        load_method,
+        accessors,
       }){
         let stree = this;
         if (!( stree instanceof SettingTree) ) {
@@ -204,14 +285,122 @@ class SettingsUI {
         }
         stree.key=key;
         stree.autosave=autosave;
+        function defaultLoadMethod() {
+          getUserValue(save_location,stree.savable);
+        }
         function defaultSaveMethod() {
-          if (save_method) {
-            save_method(save_location);
+          setUserValue(save_location,stree.savable);
+        }
+        function getSaveMethod(save_method,save_location,fallback) {
+          if (typeof save_method === "function") {
+            return save_method;
           }
-          else if (save_location) {
-
+          else if (typeof save_location === "string") {
+            return defaultSaveMethod;
+          }
+          else if (typeof fallback === "function") {
+            return fallback;
+          }
+          dbg(`WARNING! We have no method of saving key <${key}>`);
+          return null;
+        }
+        function getLoadMethod(load_method,load_location,fallback) {
+          if (typeof load_method === "function") {
+            return load_method;
+          }
+          else if (typeof load_location === "string") {
+            return defaultLoadMethod;
+          }
+          else if (typeof fallback === "function") {
+            return fallback;
+          }
+          dbg(`NOTE! No method of retrieving key <${key}>`);
+          return null;
+        }
+        save_method = getSaveMethod(save_method,save_location);
+        load_method = getLoadMethod(load_method,save_location);
+        function try_save() {
+          if (typeof save_method === "function") {
+            save_method();
           }
         }
+        function try_load() {
+          if (typeof load_method === "function") {
+            load_method();
+          }
+        }
+        // NOTE existance of accessors means we are a leaf node
+        let is_leaf = typeof accessors === "object";
+        // Actual container for values. indirectly exposed through values property.
+
+        let values={};
+        // TODO Check accessors set and ensure type is function
+        Object.defineProperties(stree,{
+          values: {
+            get() {
+              if (is_leaf) {
+                return accessors.get();
+              }
+              return values;
+            },
+            set(obj) {
+              if (is_leaf) {
+                return accessors.set(obj);
+              }
+              return stree.savable=obj;
+            },
+            enumerable:true,
+          },
+          savable: {
+            get() {
+              if (is_leaf) {
+                return stree.values;
+              }
+              let obj = {};
+              for (let [key,child] of Object.entries(stree.children)) {
+                obj[key]=child.savable;
+              }
+              return obj;
+            },
+            set(obj) {
+              if (is_leaf) {
+                return stree.values=object;
+              }
+              for (let key of Reflect.ownKeys(obj)) {
+                stree.values[key]=obj[key];
+              }
+              //return setting.values;
+              return true;
+            },
+          },
+        });
+
+        stree.children={};
+        stree.createBranch = (args) => {
+          let child_save_method = getSaveMethod(args.save_method, args.save_location, save_method);
+          let child_load_method = getSaveMethod(args.load_method, args.save_location, load_method);
+          let childTree = new SettingTree({ ...args, save_method:child_save_method, load_method:child_load_method });
+          stree.children[childTree.key] = childTree;
+          let desc = Reflect.getOwnPropertyDescriptor(childTree,'values');
+          Object.defineProperty(stree.values,childTree.key,desc);
+          return childTree;
+        };
+        stree.createLeaf = ({accessors, ...args}) => {
+          // FIXME something isnt right with this check here
+          throwOnBadParam((typeof accessors !== "object" || typeof accessors.get !== "function" || typeof accessors.set !== "function"),
+          'createLeaf', 'accessors', 'get and set functions must exist!',accessors );
+          let child_save_method = getSaveMethod(args.save_method, args.save_location, save_method);
+          let child_load_method = getSaveMethod(args.load_method, args.save_location, load_method);
+          let childTree = new SettingTree({ ...args, accessors:accessors, save_method:child_save_method, load_method:child_load_method });
+          stree.children[childTree.key] = childTree;
+          let desc = Reflect.getOwnPropertyDescriptor(childTree,'values');
+          Object.defineProperty(stree.values,childTree.key,desc);
+          return childTree;
+        };
+        stree.save = () => {
+          try_save();
+        };
+        return stree;
       }
       function OptionItem({
         key=throwMissingParam("new OptionItem","key",`'a unique key for this select group'`),
@@ -226,6 +415,8 @@ class SettingsUI {
         onselect = () => {return null;},
         onchange = () => {return null;},
         ondeselect = () => {return null;},
+        parrent_setting_tree,
+        select_id,
         selected=false
       }) {
         let item = this;
@@ -282,6 +473,19 @@ class SettingsUI {
           enabled=new_value;
           onchange(item,new_value,old_value);
         };
+        let st = parrent_setting_tree.createLeaf({
+          key:key,
+          accessors: {
+            get() { return enabled; },
+            set(new_value) {
+              enabled=new_value;
+              item.elm.selected=new_value;
+              // update select picker text
+              $('#' + select_id ).selectpicker('refresh');
+              return new_value;
+            },
+          }
+        });
         return item;
       };
 
@@ -291,6 +495,7 @@ class SettingsUI {
         title = key,
         title_text,
         multiselect=false,
+        parrent_setting_tree=throwMissingParam("new Select","parrent_setting_tree",`Container's SettingTree instance`),
         onchange = () => {return null;},
         options=[],
       }) {
@@ -299,6 +504,7 @@ class SettingsUI {
             return new Select(...arguments);
         }
         setting.key=key;
+        let st = parrent_setting_tree.createBranch({key:key});
         setting.elm = htmlToElement(`<div class="form-group row">
     			<label class="col-lg-3 col-form-label-modal">${title}:</label>
     			<div class="col-lg-9">
@@ -338,15 +544,6 @@ class SettingsUI {
             //setting.select.removeChild(setting.options[option.select_value]);
           //}
           setting.options[option.key] = option;
-          Object.defineProperty(setting.values, option.key,{
-            get() {
-              return option.enabled;
-            },
-            set(val) {
-              return option.enabled=val;
-            },
-            enumerable: true,
-          });
           setting.select.appendChild(option.elm);
           last_used_value=option.select_value;
         };
@@ -364,36 +561,17 @@ class SettingsUI {
         * @returns {Node} The settings tab node (already attatched to DOM). Add some children to it to build your ui.
         */
         setting.addOption = (args) => {
-          setting.addExistingOption(new OptionItem({value: nextOptionValueToUse(), ...args}));
+          setting.addExistingOption(new OptionItem({value: nextOptionValueToUse(),select_id:id, parrent_setting_tree:st, ...args}));
         };
 
         for (let [idx,option] of options.entries()) {
           setting.addExistingOption(option);
         }
-
-        Object.defineProperties(setting,{
-          savable: {
-            get() {
-              let obj = {};
-              //for (let key of Reflect.ownKeys(setting.values)) {
-              for (let [key,val] of Object.entries(setting.values)) {
-                obj[key]=val;
-              }
-              return obj;
-            },
-            set(obj) {
-              for (let key of Reflect.ownKeys(obj)) {
-                setting.values[key]=obj[key];
-              }
-              //return setting.values;
-              return true;
-            },
-          },
-        });
         return setting;
       };
       settings.subgroup_objects={};
       settings.subgroup={};
+      let st = new SettingTree({key:group_name});
 
       settings.values=settings.subgroup;
       function addSetting(setting) {
@@ -403,19 +581,10 @@ class SettingsUI {
           //dbg("WARNING! Option value reused within Select! Remoing Existing!");
           //setting.select.removeChild(setting.options[option.select_value]);
         //}
-        Reflect.defineProperty(settings.subgroup, setting.key,{
-          enumerable:true,
-          get() {
-            return setting.values;
-          },
-          // FIXME support non-multiselect
-          set(val) {
-            return setting.savable=val;
-          },
-        });
       }
+
       settings.addMultiselect = (args) => {
-        let setting = new Select({multiselect:true,container:container,...args});
+        let setting = new Select({multiselect:true,container:container,parrent_setting_tree:st,...args});
         addSetting(setting);
         return setting;
       };
@@ -430,29 +599,11 @@ class SettingsUI {
       * @returns {Select} Select setting instance.
       */
       settings.addSelect = (args) => {
-        let setting = new Select({container:container,...args});
+        let setting = new Select({container:container, parrent_setting_tree:st,...args});
         addSetting(setting);
         return setting;
       };
-      Object.defineProperties(settings,{
-        savable: {
-          get() {
-            let obj = {};
-            //for (let key of Reflect.ownKeys(setting.values)) {
-            for (let [key,val] of Object.entries(settings.subgroup_objects)) {
-              obj[key]=val.savable;
-            }
-            return obj;
-          },
-          set(obj) {
-            for (let [key,val] of Object.entries(obj)) {
-              settings.values[key]=val;
-            }
-            //return setting.values;
-            return true;
-          },
-        },
-      });
+      settings.setting_tree=st;
       return settings;
     }
     // END SelectUIInstance
@@ -484,21 +635,18 @@ function example() {
       key: o, // key will also be the unique genre name. could be anything, but this makes it easier to manualy refer to.
       ontoggle: (item,value) => {
         // Do something
-        dbg(item);
+        dbg(`Changed <${key}> to <${value}>`);
         dbg(value);
-        dbg("changed!");
       },
       onselect: (item,value) => {
         // Do something
-        dbg(item);
+        dbg(`Selected <${key}>`);
         dbg(value);
-        dbg("NOW SELECTED!");
       },
       ondeselect: (item,value) => {
         // Do something
-        dbg(item);
+        dbg(`Deselected <${key}>`);
         dbg(value);
-        dbg("NOW NOT SELECTED!");
       }
     });
   }
@@ -506,23 +654,21 @@ function example() {
   let selectAuto = settings_ui.addMultiselect({key:"Autocomplete"});
   selectAuto.addOption({key:"Manga", autosave:true});
   selectAuto.addOption({key:"Users"});
-  let settings = settings_ui.values;
+  let settings = settings_ui.setting_tree.values;
   // Get value from Blacklist every 5 seconds.
-  dbg("Settings");
   dbg(settings_ui.savable);
-  dbg("Select");
   dbg(selectAuto.savable);
   settings_ui.savable={blocked:{adventure:true}};
   // Prove that all our easy methods for accessing/setting state stay in sync with the ui.
+  unsafeWindow.settings_ui = settings_ui;
   setInterval(() => {
-    dbg(settings_ui.values.blocked.adventure);
+    dbg(settings_ui.setting_tree.values.blocked.adventure);
     dbg(settings.blocked.adventure);
     dbg(block_mulsel.values.adventure);
   },5000);
 }
-/*
+
 let xp = new XPath();
 waitForElementByXpath({
   xpath:'//div[@id="homepage_settings_modal"]/div',
 }).then(example);
-*/
