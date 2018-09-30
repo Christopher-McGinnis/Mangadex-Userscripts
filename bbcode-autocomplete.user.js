@@ -8,8 +8,9 @@
 // @grant    GM.setValue
 // @grant    GM_getValue
 // @grant    GM_setValue
-// @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/54480aaaab13c3e421d0cd1d7fd25589aad5dcb9/common.js
-// @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/3bddd3bd409592419ccb33b5ccfd35d4dc549035/settings-ui.js
+// @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/2f84a04d4adf05142fb4c9a727f1dcae4cfbc78c/common.js
+// @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/2f84a04d4adf05142fb4c9a727f1dcae4cfbc78c/uncommon.js
+// @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/2f84a04d4adf05142fb4c9a727f1dcae4cfbc78c/settings-ui.js
 // @require  https://cdn.rawgit.com/component/textarea-caret-position/af904838644c60a7c48b21ebcca8a533a5967074/index.js
 // @match    https://mangadex.org/*
 // @author   Christopher McGinnis
@@ -409,7 +410,7 @@ function initSettingsDialog(loaded_settings) {
   let settings=settings_ui.values;
   return settings;
 }
-function main({read_posts_history,loaded_settings:settings}) {
+function main({read_posts_history,settings: loaded_settings}) {
   let settings=initSettingsDialog(loaded_settings);
   let user_id=getCurrentUserID();
   let uhist = new UserHistory({read_posts_history:read_posts_history,user_id:user_id});
@@ -444,4 +445,4 @@ function main({read_posts_history,loaded_settings:settings}) {
 getUserValues({
   read_posts_history: [],
   settings:{},
-},main);
+}).then(main);

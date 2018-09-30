@@ -6,7 +6,8 @@
 // @grant    unsafeWindow
 // @grant    GM.setClipboard
 // @grant    GM_setClipboard
-// @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/c2f35786a2a72ffbc37a104f5f720e1fb4c41854/common.js
+// @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/2f84a04d4adf05142fb4c9a727f1dcae4cfbc78c/common.js
+// @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/2f84a04d4adf05142fb4c9a727f1dcae4cfbc78c/uncommon.js
 // @match    https://mangadex.org/*
 // @license  MIT
 // @author   Christopher McGinnis
@@ -103,4 +104,4 @@ function main() {
   });
 }
 dbg("RUNNING");
-checkLoop({xpath: "//a[contains(@class,'navbar-brand')]",callback: main });
+waitForElementByXpath({xpath: "//a[contains(@class,'navbar-brand')]"}).then(main);
