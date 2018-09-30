@@ -61,6 +61,14 @@ function createToolTip({title,text}) {
 // has passed. Sequential autosave triggers will reset the delay.
 // NOTE until these are implementecd, you must save manualy. recommened
 // passing that in onchange callback.
+
+/**
+* SettingsUI singlton
+* @param {Object} obj -
+* @param {string} obj.group_name - Name of new settings group tab.
+* @returns {SettingsUIInstance} - The UI instance for obj.group_name. Creates new
+* instance if one wasn't found.
+*/
 class SettingsUI {
   // Singlton group
   constructor({
@@ -71,6 +79,10 @@ class SettingsUI {
       return id_prefix + (currentID++);
     }
     let xp = new XPath();
+    /**
+    * A builder for Setting tabs.
+    * @returns {SettingsTabBuilder} The new tab builder.
+    */
     function SettingsTabBuilder() {
       let sgroup = this;
       if (!( sgroup instanceof SettingsTabBuilder) ) {
@@ -82,11 +94,10 @@ class SettingsUI {
       let modal_body=xp.new('.//div').with(xp.new().contains('@class','modal-body')).getElement(dialog);
       let modal_content=modal_body.parentNode;
 
-
       // Remove mangadex settings header title. We will use our own version of it.
       header.removeChild(header.children[0]);
 
-      // Create new header and containers
+      // Create new header and tab navigation list
       let header_content=htmlToElement(`<div></div>`);
       let tab_nav_container=htmlToElement(`
         <div class="h5 d-flex align-items-center">
@@ -100,13 +111,14 @@ class SettingsUI {
       header.insertBefore(header_content,header.children[0]);
       let tab_nav=tab_nav_container.children[1];
 
-      // Create new body and containers
+      // Create new body and tab content containers
       let tab_content = htmlToElement(`
         <div class="tab-content">
         </div>
       `);
       modal_content.insertBefore(tab_content,modal_body);
 
+      // Define tab/nav creation methods
       sgroup.appendNavItem = ({title,active=false,id}) => {
         let item=htmlToElement(`
         <li class="nav-item ${active ? "active" : "" }">
@@ -114,7 +126,6 @@ class SettingsUI {
         </li>`);
         tab_nav.appendChild(item);
       };
-
       sgroup.appendTabItem = ({title,active=false,id}) => {
         let item = htmlToElement(`
          <div class="modal-body tab-pane ${active ? "show active" : "" }" role="tabpanel" id=${id}>
@@ -124,11 +135,24 @@ class SettingsUI {
         return item;
       };
 
+      // Unified method for creating tab navs and tab containers.
+      /**
+      * Adds a settings tab group
+      * @param {Object} obj -
+      * @param {String} obj.title - Name of new settings group tab.
+      * @param {Bool} [obj.active=false] - True only if this tab should be activated by default.
+      * @param {String} obj.id - unique id, required for bootstrap tabs to function.
+      * @returns {Node} The settings tab node (already attatched to DOM). Add some children to it to build your ui.
+      */
       sgroup.addGroup = (args) => {
         sgroup.appendNavItem(args);
         let container = sgroup.appendTabItem(args);
         return container;
       };
+
+      // Now that methods are all defined, lets finish initializing.
+      // Just need to move Mangadex's settings menu into a tab, so it won't
+      // be displayed when we switch to other tabs.
       let mangadex_tab = sgroup.addGroup({title:"Mangadex", active:true, id: createID('mangadex-setting-header-tab-')});
       modal_content.removeChild(modal_body);
       for (let child of modal_body.children) {
@@ -140,6 +164,12 @@ class SettingsUI {
       return sgroup;
     }
 
+    /**
+     @class SettingsUIInstance
+     @private
+     @type {Object}
+     @property {Object} values - Setting Values getter/setter chain.
+     */
     function SettingsUIInstance({group_name,container=throwMissingParam("new SettingsUIInstance","container","HTML_Node")}) {
       let settings = this;
       if (!( settings instanceof SettingsUIInstance) ) {
@@ -285,6 +315,19 @@ class SettingsUI {
           setting.select.appendChild(option.elm);
           last_used_value=option.select_value;
         };
+
+        /**
+        * Adds an option to a select.
+        * @param {Object} obj -
+        * @param {String} obj.key - Key to use to access this from values list
+        * @param {String} [obj.icon] - Displayed opyion title to use in UI.
+        * @param {String} [obj.title=obj.key] - Displayed opyion title to use in UI.
+        * @param {String} [obj.value=obj.key] - Value to use in the select node.
+        * @param {Function} [obj.onselect] - Callback to call when option is selected.
+        * @param {Function} [obj.ondeselect] - Callback to call when option is deselected.
+        * @param {Function} [obj.onchange] - Callback to call when option select state is changed.
+        * @returns {Node} The settings tab node (already attatched to DOM). Add some children to it to build your ui.
+        */
         setting.addOption = (args) => {
           setting.addExistingOption(new OptionItem({value: nextOptionValueToUse(), ...args}));
         };
@@ -316,6 +359,7 @@ class SettingsUI {
       };
       settings.subgroup_objects={};
       settings.subgroup={};
+
       settings.values=settings.subgroup;
       function addSetting(setting) {
         throwOnBadArg(settings.subgroup[setting.key] != null,"Select.addSetting(new Setting)","key",'"UniqueSettingKey"',setting.key);
@@ -340,6 +384,16 @@ class SettingsUI {
         addSetting(setting);
         return setting;
       };
+
+      /**
+      * Adds an option to a select.
+      * @param {Object} obj -
+      * @param {String} [obj.key] - Key to use to access this from values list
+      * @param {Bool} [obj.multiselect=false] - True if multiple options may be selected at the same time.
+      * @param {String} [obj.title=obj.key] - text to use for label in the UI.
+      * @param {Function} [obj.onchange] - Callback to call when select state is changed. ie. when any option is selected/deselected.
+      * @returns {Select} Select setting instance.
+      */
       settings.addSelect = (args) => {
         let setting = new Select({container:container,...args});
         addSetting(setting);
@@ -385,7 +439,7 @@ class SettingsUI {
   }
 }
 
-
+// Simple usage example. Also used for testing functionality.
 function example() {
   let settings_ui = new SettingsUI({group_name:"AdvancedFilter"});
   let block_mulsel = settings_ui.addMultiselect({key:"blocked", title:"Blacklist", autosave:true});
@@ -424,6 +478,7 @@ function example() {
   dbg("Select");
   dbg(selectAuto.savable);
   settings_ui.savable={blocked:{adventure:true}};
+  // Prove that all our easy methods for accessing/setting state stay in sync with the ui.
   setInterval(() => {
     dbg(settings_ui.values.blocked.adventure);
     dbg(settings.blocked.adventure);
