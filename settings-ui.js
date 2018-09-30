@@ -667,8 +667,9 @@ function example() {
     dbg(block_mulsel.values.adventure);
   },5000);
 }
-
+/*
 let xp = new XPath();
 waitForElementByXpath({
   xpath:'//div[@id="homepage_settings_modal"]/div',
 }).then(example);
+*/
