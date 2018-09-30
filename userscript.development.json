@@ -16,6 +16,10 @@
     },
     {
       "gitURI_prefix": "https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts",
+      "filePath": "uncommon.js"
+    },
+    {
+      "gitURI_prefix": "https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts",
       "filePath": "settings-ui.js"
     },
     {
