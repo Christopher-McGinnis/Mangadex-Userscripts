@@ -256,6 +256,7 @@ class SettingsUI {
         let undefered_value = {
           autosave:autosave,
           autosave_delay:autosave_delay,
+          autosave_timeout:undefined,
           save_method:save_method,
           load_method:load_method,
         };
@@ -267,6 +268,24 @@ class SettingsUI {
             return defer[defer_key];
           }
           return default_value;
+        }
+        function getStorageMethod(storage_method_key, default_method) {
+          // first try using a defined save method.
+          if (typeof undefered_value[storage_method_key] === 'function') {
+            return undefered_value[storage_method_key];
+          }
+          // Use the default save method on us if we save to a new location.
+          else if (typeof save_location !== 'null' && typeof save_location !== 'undefined') {
+            return default_method;
+          }
+          // If we are a child, defer to our parent node
+          else if (typeof defer === "object") {
+            return defer[storage_method_key];
+          }
+          // We are a root node without a defined save method nor location.
+          // There is no function we can/should return.
+          // We wont log this as an error here, instead we do that when we try to call it.
+          return default_method;
         }
         Object.defineProperties(our_methods,{
           autosave: {
@@ -313,7 +332,7 @@ class SettingsUI {
           },
           save_method: {
             get() {
-              return getOrDefer('save_method', defaultSaveMethod);
+              return getStorageMethod('save_method', defaultSaveMethod);
             },
             set(val) {
               undefered_value.save_method=val;
@@ -321,7 +340,7 @@ class SettingsUI {
           },
           load_method: {
             get() {
-              return getOrDefer('load_method', defaultLoadMethod);
+              return getStorageMethod('load_method', defaultLoadMethod);
             },
             set(val) {
               undefered_value.load_method=val;
@@ -339,16 +358,16 @@ class SettingsUI {
         }
 
         stree.save = () => {
-          if (typeof save_method === "function") {
+          if (typeof our_methods.save_method === "function") {
             dbg(`Saving ${key}`);
-            return save_method();
+            return our_methods.save_method();
           }
           dbg(`No save method found for ${key}`);
         };
         stree.load = () => {
-          if (typeof load_method === "function") {
+          if (typeof our_methods.load_method === "function") {
             dbg(`Loading ${key}`);
-            return load_method();
+            return our_methods.load_method();
           }
           dbg(`No load method found for ${key}`);
         };
