@@ -199,9 +199,11 @@ class SettingsUI {
       @type {Object}
       @property {Object} obj -
       @property {Object} obj.value - Getter/Setter for value of all children.
-      @property {Object} obj.savable - Getter/Setter for value of all children.
+      @property {Object} obj.all_savable - Getter/Setter for value of all children.
       Like obj.value, but builds a new JSON stringifyable object based on the
       current value. Used for saving/loading to/from JSON.
+      @property {Object} obj.own_savable - Like obj.all_savable, but doesn't
+      descend on children with diffrent save methods.
       */
 
       /**
@@ -240,7 +242,7 @@ class SettingsUI {
         stree.autosave_delay=autosave_delay;
         dbg(`Creating key ${key} with autosave=${autosave}`);
         function defaultLoadMethod() {
-          return getUserValue(save_location,stree.savable).then((obj) => {
+          return getUserValue(save_location,stree.own_savable).then((obj) => {
             stree.value = obj;
             return stree.value;
           });
@@ -249,7 +251,7 @@ class SettingsUI {
           // plus we return a promise they can use as a oneoff onchange event.
         }
         function defaultSaveMethod() {
-          return setUserValue(save_location,stree.savable);
+          return setUserValue(save_location,stree.own_savable);
         }
         // Allow the child to utilize some of our functions/values when unspecified.
         let our_methods = {};
@@ -390,21 +392,13 @@ class SettingsUI {
             value = obj;
           }
           else {
-            //stree.savable = obj;
             for (let key of Reflect.ownKeys(obj)) {
               // TODO: Optionaly permit setting non-existant keys.
               // Could be used to auto-build settings ui
               // Or could be used for private/non-ui keys
               if (typeof stree.children[key] === 'object') {
-                // if only_same_save_method, then check if child is in the same save location.
-                // needed for ensuring loaded saved values dont overwrite keys from
-                // another save location. May occure if new save_locations are added to key.
-                // NOTE this is not realy necassary, and could be more harmfull to use than helpfull.
-                // This effectivly stops us from being able to load settings from old config if we changed the
-                // save location for one of the children.
-                if ( !only_same_save_method || stree.children[key].is_same_method(our_methods.save_method, 'save_method')) {
-                  accessors[key]=obj[key];
-                }
+                accessors[key]=obj[key];
+              }
             }
           }
           autosave_method();
@@ -417,17 +411,6 @@ class SettingsUI {
             },
             set(val) {
               set_value_common(stree.value, val);
-              update_ui_callback(val);
-              return value;
-            },
-            enumerable: true,
-          },
-          own_value: {
-            get() {
-              return value;
-            },
-            set(val) {
-              set_value_common(stree.value, val, true);
               update_ui_callback(val);
               return value;
             },
@@ -804,13 +787,14 @@ function example() {
   select_nsfw.addOption({title: "Echi", key:"echi", settings_tree_config: { autosave:true }, });
   // title is optional. Defaults to key value.
   // Add an option labeled <Smut> to the multiselect. Accessible from the settings tree via the <Smut> key.
-  select_nsfw.addOption({key:"Smut"});
+  select_nsfw.addOption({
+    key:"Smut",
+    settings_tree_config: { autosave:true, save_location:"SmutIsSpecial", },
+  });
   // Optional callbacks for select, deselct, and toggle.
   select_nsfw.addOption({
     key:"NSFW",
     settings_tree_config: {
-      save_location:"SmutIsSpecial",
-      autosave:true,
       onchange: (item,value) => {
         dbg(`Doing something everytime NSFW value changes.`);
         dbg(`In this case, printg the new value <${value}> on the console`);
@@ -854,7 +838,7 @@ function example() {
 
   // Check if yaoi is blocked.
   dbg('Check if yaoi is blocked');
-  dbg(settings_ui.settings_tree.savable);
+  dbg(settings_ui.settings_tree.all_savable);
   dbg(settings.blocked.yaoi);
   // Change value from outside ui. UI will update to reflect the new value.
   // Block yaoi.
@@ -913,16 +897,19 @@ function example() {
 
   // settings_tree.value is a tree of getters/setters.
   // If we want a snapshot of the current value, we need to use
-  // settings_tree.savable instead.
+  // settings_tree.all_savable instead.
   // savable is usefull for encoding an entire tree or subtree to JSON, or
   // printing a tree to screen.
   // As a demo, first lets look at what value gives you on a tree
   dbg("settings_tree.value is nothing but getters/setters");
   dbg(settings_ui.settings_tree.value);
   // Next lets print the savable.
-  dbg("settings_tree.saveable accesses value, calling the getters and yielding a snapshot of the current value.");
-  dbg(settings_ui.settings_tree.savable);
-  dbg(select_nsfw.settings_tree.savable);
+  dbg("settings_tree.all_savable accesses value, calling the getters and yielding a snapshot of the current value.");
+  dbg(settings_ui.settings_tree.all_savable);
+  dbg("all_savable returns a snapshot of all children, regardless of their save method.");
+  dbg(select_nsfw.settings_tree.all_savable);
+  dbg("own_savable returns a snapshot containing only children with the same save method.");
+  dbg(select_nsfw.settings_tree.own_savable);
   // You can also assign to value. If you assigning an object to value
   // we will descend the object and setting tree by the shared key, when we
   // encounter a leaf node, we will assign it the object/value that shares its
@@ -935,13 +922,13 @@ function example() {
   // DO NOT TRY THIS
   dbg('Savable getter returns a snapshot. Assignments to the snapshot can NOT be used to change the settings_tree value');
   // DO NOT TRY THIS.
-  let savable=settings_ui.settings_tree.savable;
+  let savable=settings_ui.settings_tree.all_savable;
   // DO NOT TRY THIS. Sports will not update on the UI nor settings tree. Replaces with value instead
   savable.blocked.sports=true;
   // DO NOT TRY THIS. Sports will not update on the UI nor settings tree. Replaces with value instead
   savable={blocked:{sports:true}};
   dbg('blocked.sports was not updated in settings tree, because assignment occured on a snapshot object, completly detatched from the settings tree.');
-  dbg(settings_ui.settings_tree.savable)
+  dbg(settings_ui.settings_tree.all_savable)
   // TL;DR settings_tree.value returns getters/setters attatched to the tree.
   // savable returns an object with a snapshot of the value, but completly detatched from the tree.
 
