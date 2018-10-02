@@ -7,6 +7,8 @@
 // @grant    GM.setValue
 // @grant    GM_getValue
 // @grant    GM_setValue
+// @grant    GM_listValues
+// @grant    GM_listValues
 // @require  https://cdn.rawgit.com/Brandon-Beck/Mangadex-Userscripts/2f84a04d4adf05142fb4c9a727f1dcae4cfbc78c/common.js
 // @require  https://cdn.rawgit.com/Brandon-Beck/Mangadex-Userscripts/2f84a04d4adf05142fb4c9a727f1dcae4cfbc78c/uncommon.js
 // @match    https://mangadex.org/*
@@ -76,6 +78,8 @@ class SettingsUI {
   constructor({
     group_name=throwMissingParam("new SettingsUI","group_name",'"SettingGroupName" || "UserscriptName"'),
     save_location,
+    autosave,
+    autosave_delay,
   }={}) {
     let currentID=new Date().valueOf() + Math.floor(Math.random() * 100000);
     function createID(id_prefix=throwMissingArg('createID(id_prefix)','id_prefix','settings.group_name')) {
@@ -174,7 +178,12 @@ class SettingsUI {
      @type {Object}
      @property {Object} value - Setting value getter/setter chain.
      */
-    function SettingsUIInstance({group_name,container=throwMissingParam("new SettingsUIInstance","container","HTML_Node")}) {
+    function SettingsUIInstance({
+      group_name,
+      container=throwMissingParam("new SettingsUIInstance","container","HTML_Node"),
+      autosave,
+      save_location,
+    }) {
       let settings = this;
       if (!( settings instanceof SettingsUIInstance) ) {
           return new SettingsUIInstance(...arguments);
@@ -205,7 +214,7 @@ class SettingsUI {
       @prop {String} [obj.initial_value] - Initial value, does not trigger onchange/update_ui callbacks. Used by leaf nodes.
       @prop {Function} [obj.onchange] - Callback for when the UI changes the value.
       @prop {Function} [obj.update_ui_callback] - Callback for when the value is changed outside the UI.
-      @prop {Boolean} [obj.autosave=false] - Should changes to this setting's value or it's children's value cause this setting group to save? Setting is applied recursivly to children which don't define it.
+      @prop {Boolean} [obj.autosave] - Should changes to this setting's value or it's children's value cause this setting group to save? If undefined, it will defer to its parrent tree, or false if it is a root node.
       @prop {String} [obj.save_location] - A seperate location to save this setting tree and its children.
       @prop {Function} [obj.save_method] - Method used for saving this tree. Called by autosave.
       @prop {Function} [obj.load_method] - Method used for loading this tree.
@@ -215,6 +224,8 @@ class SettingsUI {
       function SettingsTree({
         key=throwMissingParam("new SettingsTree","key",`'a unique key to access this SettingsTree from its container'`),
         autosave=false,
+        autosave_delay=500,
+        autosave_method,
         initial_value,
         onchange=()=>{return null;},
         update_ui_callback=()=>{return null;},
@@ -230,6 +241,8 @@ class SettingsUI {
         }
         stree.key=key;
         stree.autosave=autosave;
+        stree.autosave_delay=autosave_delay;
+        dbg(`Creating key ${key} with autosave=${autosave}`);
         function defaultLoadMethod() {
           return getUserValue(save_location,stree.savable).then((obj) => {
             stree.value = obj;
@@ -252,6 +265,18 @@ class SettingsUI {
           else if (typeof fallback === "function") {
             return fallback;
           }
+          // only
+          let autosave_timeout;
+          if (typeof autosave_method !== "function") {
+            autosave_method = ({autosave,autosave_delay}) => {
+              clearTimeout(autosave_timeout);
+              if (stree.autosave) {
+                if (typeof save_method === "function") {
+                  autosave_timeout = setTimeout(() => { save_method(); }, autosave_delay );
+                }
+              }
+            };
+          }
           dbg(`WARNING! We have no method of saving key <${key}>`);
           return null;
         }
@@ -270,17 +295,13 @@ class SettingsUI {
         }
         save_method = getSaveMethod(save_method,save_location);
         load_method = getLoadMethod(load_method,save_location);
-        let autosave_timeout;
-        let _autosave = () => {
-          clearTimeout(autosave_timeout);
-          if (typeof save_method === "function") {
-            autosave_timeout = setTimeout(() => { save_method(); }, autosave_delay );
-          }
-        };
+
         stree.save = () => {
           if (typeof save_method === "function") {
+            dbg(`Saving ${key}`);
             return save_method();
           }
+          dbg(`No save method found for ${key}`);
         };
         stree.load = () => {
           if (typeof load_method === "function") {
@@ -297,7 +318,7 @@ class SettingsUI {
           value=initial_value;
         }
         // avoid duplicating code
-        function set_value_common(obj) {
+        function set_value_common(accessors,obj) {
           if (is_leaf) {
             value = obj;
           }
@@ -308,13 +329,11 @@ class SettingsUI {
               // Could be used to auto-build settings ui
               // Or could be used for private/non-ui keys
               if (typeof stree.children[key] === 'object') {
-                stree.value[key]=obj[key];
+                accessors[key]=obj[key];
               }
             }
           }
-          if (autosave) {
-            _autosave();
-          }
+          _autosave();
         }
         // FIXME block adding new keys to value
         Object.defineProperties(stree, {
@@ -323,7 +342,7 @@ class SettingsUI {
               return value;
             },
             set(val) {
-              set_value_common(val);
+              set_value_common(stree.value, val);
               update_ui_callback(val);
               return value;
             },
@@ -345,14 +364,21 @@ class SettingsUI {
         });
         // Similar to this.value, but for the UI.
         // Not added to settings tree, passed directly to ui for privacy.
-        let ui_accessor={};
+        let ui_accessor={
+          children_accessors:{},
+        };
         Object.defineProperties(ui_accessor,{
           value: {
             get() {
-              return value;
+              if (is_leaf) {
+                return value;
+              }
+              else {
+                return ui_accessor.children_accessors;
+              }
             },
             set(val) {
-              set_value_common(val);
+              set_value_common(ui_accessor.children_accessors,val);
               onchange(val);
               return value;
             },
@@ -360,27 +386,89 @@ class SettingsUI {
         });
         stree.update_ui_callback=update_ui_callback;
 
+        // Allow the child to utilize some of our functions/values when unspecified.
+        let deferer_for_child = {};
+        let undefered_value = {
+          autosave:autosave,
+          autosave_delay:autosave_delay,
+          save_method:save_method,
+          load_method:load_method,
+        };
+        function getOrDefer(defer_key, default_value) {
+          if (typeof undefered_value[defer_key] !== "undefined" && typeof undefered_value[defer_key] !== "null") {
+            return undefered_value[defer_key];
+          }
+          else if (typeof defer === "object") {
+            return defer[defer_key];
+          }
+          return default_value;
+        }
+        Object.defineProperties(deferer_for_child,{
+          autosave: {
+            get() {
+              return getOrDefer('autosave', false);
+            },
+            set(val) {
+              undefered_value.autosave=val;
+            },
+          },
+          autosave_delay: {
+            get() {
+              return getOrDefer('autosave_delay', 500);
+            },
+            set(val) {
+              undefered_value.autosave_delay=val;
+            },
+          },
+          save_method: {
+            get() {
+              return getOrDefer('save_method', defaultSaveMethod);
+            },
+            set(val) {
+              undefered_value.save_method=val;
+            },
+          },
+          load_method: {
+            get() {
+              return getOrDefer('load_method', defaultLoadMethod);
+            },
+            set(val) {
+              undefered_value.load_method=val;
+            },
+          },
+        });
+
         stree.children={};
         stree.createBranch = (args) => {
-          let child_save_method = getSaveMethod(args.save_method, args.save_location, save_method);
-          let child_load_method = getSaveMethod(args.load_method, args.save_location, load_method);
-          let [childTree, ui_accessor] = new SettingsTree({ ...args, save_method:child_save_method, load_method:child_load_method });
+          let [childTree, child_ui_accessor] = new SettingsTree({
+            defer:deferer_for_child,
+            ...args,
+          });
           stree.children[childTree.key] = childTree;
           let desc = Reflect.getOwnPropertyDescriptor(childTree,'value');
           Object.defineProperty(stree.value,childTree.key,desc);
-          return [childTree, ui_accessor];
+          let ui_desc = Reflect.getOwnPropertyDescriptor(child_ui_accessor,'value');
+          Object.defineProperty(ui_accessor.value,childTree.key,ui_desc);
+          return [childTree, child_ui_accessor];
         };
         stree.createLeaf = (args) => {
-          let child_save_method = getSaveMethod(args.save_method, args.save_location, save_method);
-          let child_load_method = getSaveMethod(args.load_method, args.save_location, load_method);
-          let [childTree, ui_accessor] = new SettingsTree({ ...args, save_method:child_save_method, load_method:child_load_method, is_leaf:true });
+          let [childTree, child_ui_accessor] = new SettingsTree({
+            // Defaults
+            defer:deferer_for_child,
+            ...args,
+            // Overrides
+            is_leaf:true,
+          });
           stree.children[childTree.key] = childTree;
           let desc = Reflect.getOwnPropertyDescriptor(childTree,'value');
           Object.defineProperty(stree.value,childTree.key,desc);
-          return [childTree, ui_accessor];
+          let ui_desc = Reflect.getOwnPropertyDescriptor(child_ui_accessor,'value');
+          Object.defineProperty(ui_accessor.value,childTree.key,ui_desc);
+          return [childTree, child_ui_accessor];
         };
         return [stree,ui_accessor];
       }
+
 
       function OptionItem({
         key=throwMissingParam("new OptionItem","key",`'a unique key for this select group'`),
@@ -388,7 +476,8 @@ class SettingsUI {
         title=key,
         title_text,
         value=key,
-        autosave=false,
+        autosave,
+        autosave_delay,
         save = ({obj,key}) => {
           return null;
         },
@@ -407,6 +496,9 @@ class SettingsUI {
         let [settings_tree,ui_accessor] = parrent_settings_tree.createLeaf({
           key:key,
           initial_value:false,
+          autosave:autosave,
+          autosave_delay:autosave_delay,
+          onchange:onchange,
           update_ui_callback: (new_value) => {
             item.elm.selected=new_value;
             // update select picker text
@@ -455,6 +547,8 @@ class SettingsUI {
         container=throwMissingParam("new Select","container",`'the container element for <${settings.group_name}>'`),
         title = key,
         title_text,
+        autosave,
+        autosave_delay,
         multiselect=false,
         parrent_settings_tree=throwMissingParam("new Select","parrent_settings_tree",`Container's SettingsTree instance`),
         onchange = () => {return null;},
@@ -467,6 +561,8 @@ class SettingsUI {
         setting.key=key;
         let [settings_tree,ui_accessor] = parrent_settings_tree.createBranch({
           key:key,
+          autosave:autosave,
+          autosave_delay:autosave_delay,
         });
         setting.settings_tree=settings_tree;
 
@@ -485,7 +581,7 @@ class SettingsUI {
         container.appendChild(setting.elm);
         //
         $('#' + id ).on("changed.bs.select",function (e,clickedIndex,newValue,oldValue) {
-          dbg("CHANGE");
+          /*dbg("CHANGE");
           dbg(e);
           dbg("idx");
           dbg(clickedIndex);
@@ -493,12 +589,13 @@ class SettingsUI {
           dbg(newValue);
           dbg("old");
           dbg(oldValue);
+          */
           // New value is bool related to the changed option . oldValue is array of previously selected options 'value' attribute
           if (typeof clickedIndex === "number") {
             //setting.select.children[clickedIndex].change_callback(newValue,oldValue);
             let option_key=setting.select.children[clickedIndex].dataset.option_key;
             ui_accessor.value[option_key]=newValue;
-            dbg();
+            //setting.options[option_key].change_callback(newValue);
             if (newValue) {
               setting.options[option_key].select_callback(newValue,oldValue);
             }
@@ -577,7 +674,11 @@ class SettingsUI {
       };
       settings.subgroup_objects={};
       settings.subgroup={};
-      let [settings_tree] = new SettingsTree({key:group_name, save_location:save_location });
+      let [settings_tree] = new SettingsTree({
+        key:group_name,
+        save_location:save_location,
+        autosave:autosave
+      });
 
       settings.value=settings_tree.value;
       function addSetting(setting) {
@@ -632,7 +733,11 @@ class SettingsUI {
     if (!SettingsUI.instance.groups[group_name]) {
       let group_id=createID(group_name + '-tab-');
       let container = SettingsUI.tab_builder.addGroup({title:group_name, id:group_id});
-      SettingsUI.instance.groups[group_name]=new SettingsUIInstance({group_name:group_name,container:container});
+      SettingsUI.instance.groups[group_name]=new SettingsUIInstance({
+        group_name:group_name,
+        save_location:save_location,
+        container:container
+      });
     }
     // Return the requested group instance.
     let settings = SettingsUI.instance.groups[group_name];
@@ -669,7 +774,7 @@ function example() {
     let item = block_mulsel.addOption({
       title: name,
       key: name,
-      ontoggle: (item,value) => {
+      onchange: (value) => {
         // Do something
         dbg(`Changed <${name}> to <${value}>`);
         dbg(value);
@@ -775,11 +880,20 @@ function example() {
   // savable returns an object with a snapshot of the value, but completly detatched from the tree.
 
   // Export settings_ui for playing with in the console.
+  settings_ui.list_all_values = () => {
+    return new Promise((r,e) => {
+      let gm_values = GM_listValues();
+      let length =  gm_values.length;
+      for (let v of Object.values(gm_values)) {
+      	console.log(`${v} = ${GM_getValue(v,undefined)}`);  //+ ' = ' +  GM_getValue(arry[p]) );
+      }
+    });
+  };
+
   unsafeWindow.settings_ui = settings_ui;
 }
-/*
+
 let xp = new XPath();
 waitForElementByXpath({
   xpath:'//div[@id="homepage_settings_modal"]/div',
 }).then(example);
-*/
