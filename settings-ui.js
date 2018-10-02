@@ -18,7 +18,7 @@
 // ==/UserScript==
 // Note, above metablock is only processed when installed directly
 // Done for debugging purposes
-"use strict";
+'use strict';
 
 function createToolTip({title,text}) {
   let tooltip_elm = htmlToElement(`<div>${title}<br><span>${text}</span></div>`);
@@ -237,10 +237,14 @@ class SettingsUI {
           // Your getting an instance wether you like it or not!
           return new SettingsTree(...arguments);
         }
-        stree.key=key;
+        // Expose tvariables we should be capable of directly altering later
+        //stree.key=key;
         stree.autosave=autosave;
         stree.autosave_delay=autosave_delay;
-        dbg(`Creating key ${key} with autosave=${autosave}`);
+        //stree.save_location=save_location;
+        //stree.save_method=save_method;
+        //stree.load_method=load_method;
+        dbg(`Creating key ${key} with autosave=${stree.autosave}`);
         function defaultLoadMethod() {
           return getUserValue(save_location,stree.own_savable).then((obj) => {
             stree.value = obj;
@@ -255,16 +259,15 @@ class SettingsUI {
         }
         // Allow the child to utilize some of our functions/values when unspecified.
         let our_methods = {};
-        let undefered_value = {
-          autosave:autosave,
-          autosave_delay:autosave_delay,
+        let private_object = {
+          children:{},
           autosave_timeout:undefined,
           save_method:save_method,
           load_method:load_method,
         };
-        function getOrDefer(defer_key, default_value) {
-          if (typeof undefered_value[defer_key] !== "undefined" && typeof undefered_value[defer_key] !== "null") {
-            return undefered_value[defer_key];
+        function getOrDefer(undefered_object, defer_key, default_value) {
+          if (typeof undefered_object[defer_key] !== "undefined" && typeof undefered_object[defer_key] !== "null") {
+            return undefered_object[defer_key];
           }
           else if (typeof defer === "object") {
             return defer[defer_key];
@@ -273,8 +276,8 @@ class SettingsUI {
         }
         function getStorageMethod(storage_method_key, default_method) {
           // first try using a defined save method.
-          if (typeof undefered_value[storage_method_key] === 'function') {
-            return undefered_value[storage_method_key];
+          if (typeof private_object[storage_method_key] === 'function') {
+            return private_object[storage_method_key];
           }
           // Use the default save method on us if we save to a new location.
           else if (typeof save_location !== 'null' && typeof save_location !== 'undefined') {
@@ -292,44 +295,44 @@ class SettingsUI {
         Object.defineProperties(our_methods,{
           autosave: {
             get() {
-              return getOrDefer('autosave', false);
+              return getOrDefer(stree, 'autosave', false);
             },
             set(val) {
-              undefered_value.autosave=val;
+              stree.autosave=val;
             },
           },
           autosave_delay: {
             get() {
-              return getOrDefer('autosave_delay', 500);
+              return getOrDefer(stree, 'autosave_delay', 500);
             },
             set(val) {
-              undefered_value.autosave_delay=val;
+              stree.autosave_delay=val;
             },
           },
           autosave_timeout: {
             get() {
               // We use the timeout of whoever ownes the save method.
-              if (typeof undefered_value.save_method === 'function') {
-                return undefered_value.autosave_timeout;
+              if (typeof private_object.save_method === 'function') {
+                return private_object.autosave_timeout;
               }
               else if (typeof defer === 'object') {
                 return defer.autosave_timeout;
               }
               // There is no save method. One will be generated in this root
               // context, so return ours.
-              return undefered_value.autosave_timeout;
+              return private_object.autosave_timeout;
             },
             set(val) {
               // We use the timeout of whoever ownes the save method.
-              if (typeof undefered_value.save_method === 'function') {
-                return undefered_value.autosave_timeout=val;
+              if (typeof private_object.save_method === 'function') {
+                return private_object.autosave_timeout=val;
               }
               else if (typeof defer === 'object') {
                 return defer.autosave_timeout=val;
               }
               // There is no save method. One will be generated in this root
               // context, so use ours.
-              return undefered_value.autosave_timeout=val;
+              return private_object.autosave_timeout=val;
             },
           },
           save_method: {
@@ -337,7 +340,7 @@ class SettingsUI {
               return getStorageMethod('save_method', defaultSaveMethod);
             },
             set(val) {
-              undefered_value.save_method=val;
+              private_object.save_method=val;
             },
           },
           load_method: {
@@ -345,7 +348,7 @@ class SettingsUI {
               return getStorageMethod('load_method', defaultLoadMethod);
             },
             set(val) {
-              undefered_value.load_method=val;
+              private_object.load_method=val;
             },
           },
         });
@@ -355,20 +358,39 @@ class SettingsUI {
         };
 
         function autosave_method() {
-          clearTimeout(our_methods.autosave_timeout);
           if (our_methods.autosave) {
+            clearTimeout(our_methods.autosave_timeout);
             if (typeof our_methods.save_method === "function") {
-              our_methods.autosave_timeout = setTimeout(() => { our_methods.save_method(); }, autosave_delay );
+              our_methods.autosave_timeout = setTimeout(() => { our_methods.save_method(); }, our_methods.autosave_delay );
             }
           }
         }
-
+        stree.get_all_save_methods = () => {
+          let save_methods=new Set([]);
+          if (typeof our_methods.save_method === "function") {
+            dbg(`Will Save ${key}`);
+            save_methods.add(our_methods.save_method);
+          }
+          for (let [key,child] of Object.entries(private_object.children)) {
+            child.get_all_save_methods().forEach( (decendent_save_method) => {
+              save_methods.add(decendent_save_method);
+            });
+          }
+          return save_methods;
+        };
         stree.save = () => {
           if (typeof our_methods.save_method === "function") {
             dbg(`Saving ${key}`);
             return our_methods.save_method();
           }
           dbg(`No save method found for ${key}`);
+        };
+        stree.save_all = () => {
+          let save_methods = stree.get_all_save_methods();
+          dbg(`Have a total of ${save_methods.size} save methods`);
+          save_methods.forEach( (decendent_save_method) => {
+            decendent_save_method();
+          });
         };
         stree.load = () => {
           if (typeof our_methods.load_method === "function") {
@@ -396,7 +418,7 @@ class SettingsUI {
               // TODO: Optionaly permit setting non-existant keys.
               // Could be used to auto-build settings ui
               // Or could be used for private/non-ui keys
-              if (typeof stree.children[key] === 'object') {
+              if (typeof private_object.children[key] === 'object') {
                 accessors[key]=obj[key];
               }
             }
@@ -405,6 +427,20 @@ class SettingsUI {
         }
         // FIXME block adding new keys to value
         Object.defineProperties(stree, {
+          children: {
+            get() {
+              // return a copy of children, so we dont accidently try to assign new children..
+              let locked_children={};
+              Object.assign(locked_children,private_object.children);
+              Object.freeze(locked_children);
+              return locked_children;
+            },
+          },
+          key: {
+            get() {
+              return key;
+            },
+          },
           value: {
             get() {
               return value;
@@ -423,7 +459,7 @@ class SettingsUI {
                 return value;
               }
               let obj = {};
-              for (let [key,child] of Object.entries(stree.children)) {
+              for (let [key,child] of Object.entries(private_object.children)) {
                 obj[key]=child.all_savable;
               }
               return obj;
@@ -437,8 +473,10 @@ class SettingsUI {
                 return value;
               }
               let obj = {};
-              for (let [key,child] of Object.entries(stree.children)) {
+              for (let [key,child] of Object.entries(private_object.children)) {
                 // FIXME ugly patch to detect same save methods
+                dbg(`Got key <${key}> with SettingsTree` );
+                dbg (child);
                 if (child.is_same_method(our_methods.save_method, 'save_method')) {
                   obj[key]=child.own_savable;
                 }
@@ -477,35 +515,37 @@ class SettingsUI {
           }
         });
         stree.update_ui_callback=update_ui_callback;
-
-        stree.children={};
-        stree.createBranch = (args) => {
-          let [childTree, child_ui_accessor] = new SettingsTree({
-            defer:our_methods,
-            ...args,
-          });
-          stree.children[childTree.key] = childTree;
-          let desc = Reflect.getOwnPropertyDescriptor(childTree,'value');
-          Object.defineProperty(stree.value,childTree.key,desc);
-          let ui_desc = Reflect.getOwnPropertyDescriptor(child_ui_accessor,'value');
-          Object.defineProperty(ui_accessor.value,childTree.key,ui_desc);
-          return [childTree, child_ui_accessor];
-        };
-        stree.createLeaf = (args) => {
-          let [childTree, child_ui_accessor] = new SettingsTree({
-            // Defaults
-            defer:our_methods,
-            ...args,
-            // Overrides
-            is_leaf:true,
-          });
-          stree.children[childTree.key] = childTree;
-          let desc = Reflect.getOwnPropertyDescriptor(childTree,'value');
-          Object.defineProperty(stree.value,childTree.key,desc);
-          let ui_desc = Reflect.getOwnPropertyDescriptor(child_ui_accessor,'value');
-          Object.defineProperty(ui_accessor.value,childTree.key,ui_desc);
-          return [childTree, child_ui_accessor];
-        };
+        if (!is_leaf) {
+          stree.createBranch = (args) => {
+            let [childTree, child_ui_accessor] = new SettingsTree({
+              defer:our_methods,
+              ...args,
+            });
+            private_object.children[childTree.key] = childTree;
+            let desc = Reflect.getOwnPropertyDescriptor(childTree,'value');
+            Object.defineProperty(stree.value,childTree.key,desc);
+            let ui_desc = Reflect.getOwnPropertyDescriptor(child_ui_accessor,'value');
+            Object.defineProperty(ui_accessor.value,childTree.key,ui_desc);
+            return [childTree, child_ui_accessor];
+          };
+          stree.createLeaf = (args) => {
+            let [childTree, child_ui_accessor] = new SettingsTree({
+              // Defaults
+              defer:our_methods,
+              ...args,
+              // Overrides
+              is_leaf:true,
+            });
+            private_object.children[childTree.key] = childTree;
+            let desc = Reflect.getOwnPropertyDescriptor(childTree,'value');
+            Object.defineProperty(stree.value,childTree.key,desc);
+            let ui_desc = Reflect.getOwnPropertyDescriptor(child_ui_accessor,'value');
+            Object.defineProperty(ui_accessor.value,childTree.key,ui_desc);
+            return [childTree, child_ui_accessor];
+          };
+        }
+        Object.seal(stree);
+        Object.seal(ui_accessor);
         return [stree,ui_accessor];
       }
 
@@ -789,7 +829,7 @@ function example() {
   // Add an option labeled <Smut> to the multiselect. Accessible from the settings tree via the <Smut> key.
   select_nsfw.addOption({
     key:"Smut",
-    settings_tree_config: { autosave:true, save_location:"SmutIsSpecial", },
+    settings_tree_config: { save_location:"SmutIsSpecial", }, // NOTE, autosave is off
   });
   // Optional callbacks for select, deselct, and toggle.
   select_nsfw.addOption({
@@ -935,7 +975,9 @@ function example() {
   unsafeWindow.settings_ui = settings_ui;
 }
 
+/*
 let xp = new XPath();
 waitForElementByXpath({
   xpath:'//div[@id="homepage_settings_modal"]/div',
 }).then(example);
+*/
