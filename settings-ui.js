@@ -347,6 +347,10 @@ class SettingsUI {
             },
           },
         });
+        // FIXME: Ugly patch to permit detecting same save method.
+        stree.is_same_method = (parent_method,key) => {
+          return parent_method === our_methods[key];
+        };
 
         function autosave_method() {
           clearTimeout(our_methods.autosave_timeout);
@@ -381,7 +385,7 @@ class SettingsUI {
           value=initial_value;
         }
         // avoid duplicating code
-        function set_value_common(accessors,obj) {
+        function set_value_common(accessors, obj, only_same_save_method=false) {
           if (is_leaf) {
             value = obj;
           }
@@ -392,8 +396,15 @@ class SettingsUI {
               // Could be used to auto-build settings ui
               // Or could be used for private/non-ui keys
               if (typeof stree.children[key] === 'object') {
-                accessors[key]=obj[key];
-              }
+                // if only_same_save_method, then check if child is in the same save location.
+                // needed for ensuring loaded saved values dont overwrite keys from
+                // another save location. May occure if new save_locations are added to key.
+                // NOTE this is not realy necassary, and could be more harmfull to use than helpfull.
+                // This effectivly stops us from being able to load settings from old config if we changed the
+                // save location for one of the children.
+                if ( !only_same_save_method || stree.children[key].is_same_method(our_methods.save_method, 'save_method')) {
+                  accessors[key]=obj[key];
+                }
             }
           }
           autosave_method();
@@ -411,19 +422,54 @@ class SettingsUI {
             },
             enumerable: true,
           },
-          savable: {
+          own_value: {
+            get() {
+              return value;
+            },
+            set(val) {
+              set_value_common(stree.value, val, true);
+              update_ui_callback(val);
+              return value;
+            },
+            enumerable: true,
+          },
+          // all savables, even ones that save in a diffrent location
+          all_savable: {
             get() {
               if (is_leaf) {
                 return value;
               }
               let obj = {};
               for (let [key,child] of Object.entries(stree.children)) {
-                obj[key]=child.savable;
+                obj[key]=child.all_savable;
               }
               return obj;
             },
             // TODO Throw error on attempt to set to savable
           },
+          // a savable with only keys set to be stored in the same save_location
+          own_savable: {
+            get() {
+              if (is_leaf) {
+                return value;
+              }
+              let obj = {};
+              for (let [key,child] of Object.entries(stree.children)) {
+                // FIXME ugly patch to detect same save methods
+                if (child.is_same_method(our_methods.save_method, 'save_method')) {
+                  obj[key]=child.own_savable;
+                }
+              }
+              return obj;
+            },
+            // TODO Throw error on attempt to set to savable
+          },
+          // NOTE quick access method for all_savable.
+          // can't justify adding it.
+          // Too ambiguous.
+          /*savable: {
+            get() { return stree.all_savable; },
+          },*/
         });
         // Similar to this.value, but for the UI.
         // Not added to settings tree, passed directly to ui for privacy.
