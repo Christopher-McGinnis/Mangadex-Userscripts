@@ -241,21 +241,29 @@ class SettingsUI {
         //stree.key=key;
         stree.autosave=autosave;
         stree.autosave_delay=autosave_delay;
-        //stree.save_location=save_location;
-        //stree.save_method=save_method;
-        //stree.load_method=load_method;
+
         dbg(`Creating key ${key} with autosave=${stree.autosave}`);
         function defaultLoadMethod() {
-          return getUserValue(save_location,stree.own_savable).then((obj) => {
-            stree.value = obj;
-            return stree.value;
-          });
+          if (save_location === 'string' && save_location.length > 0) {
+            return getUserValue(save_location,stree.own_savable).then((obj) => {
+              stree.value = obj;
+              return stree.value;
+            });
+          }
+          else {
+            dbg(`WARNING! Attempted to load SettingsTree<${key}>, but no save_location was set!`);
+          }
           // FIXME Should we call onchange here? The user initiated this load, so its
           // possible for them to handle this on their own
           // plus we return a promise they can use as a oneoff onchange event.
         }
         function defaultSaveMethod() {
-          return setUserValue(save_location,stree.own_savable);
+          if (save_location === 'string' && save_location.length > 0) {
+            return setUserValue(save_location,stree.own_savable);
+          }
+          else {
+            dbg(`WARNING! Attempted to save SettingsTree<${key}>, but no save_location was set!`);
+          }
         }
         // Allow the child to utilize some of our functions/values when unspecified.
         let our_methods = {};
