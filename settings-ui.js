@@ -242,8 +242,15 @@ class SettingsUI {
         stree.autosave=autosave;
         stree.autosave_delay=autosave_delay;
 
-        dbg(`Creating key ${key} with autosave=${stree.autosave}`);
         function defaultLoadMethod() {
+          // FIXME: Autoload has a few small issues.
+          // 1) we may autosave on load. shouldn't be a big deal, but deffinitly not ideal.
+          // 2) we use stree.values, which can load over other save_locations if
+          // a child moved save locations. this could cause loaded values from children
+          // to be overwritten with old values from before structure change,
+          // and then sequentialy be saved. This IS an issue.
+          // For the time being, we are safe as long as we only use one save location,
+          // or there are no parent save locations.
           if (save_location === 'string' && save_location.length > 0) {
             return getUserValue(save_location,stree.own_savable).then((obj) => {
               stree.value = obj;
@@ -373,39 +380,45 @@ class SettingsUI {
             }
           }
         }
-        stree.get_all_save_methods = () => {
-          let save_methods=new Set([]);
-          if (typeof our_methods.save_method === "function") {
-            dbg(`Will Save ${key}`);
-            save_methods.add(our_methods.save_method);
+        // FIXME: Dont expose. instead, we should present this data the same way we present UI's accessors.
+        stree._get_method_tree = (method_name) => {
+          let methods=new Set([]);
+          if (typeof our_methods[method_name] === "function") {
+            methods.add(our_methods[method_name]);
           }
           for (let [key,child] of Object.entries(private_object.children)) {
-            child.get_all_save_methods().forEach( (decendent_save_method) => {
-              save_methods.add(decendent_save_method);
+            child._get_method_tree().forEach( (decendent_method) => {
+              methods.add(decendent_method);
             });
           }
-          return save_methods;
+          return methods;
         };
         stree.save = () => {
           if (typeof our_methods.save_method === "function") {
-            dbg(`Saving ${key}`);
             return our_methods.save_method();
           }
           dbg(`No save method found for ${key}`);
         };
-        stree.save_all = () => {
-          let save_methods = stree.get_all_save_methods();
-          dbg(`Have a total of ${save_methods.size} save methods`);
-          save_methods.forEach( (decendent_save_method) => {
-            decendent_save_method();
-          });
-        };
         stree.load = () => {
           if (typeof our_methods.load_method === "function") {
-            dbg(`Loading ${key}`);
+            //dbg(`Loading ${key}`);
             return our_methods.load_method();
           }
           dbg(`No load method found for ${key}`);
+        };
+        stree.save_all = () => {
+          let methods = stree._get_method_tree('save_method');
+          //dbg(`Found a total of ${save_methods.size} save methods`);
+          methods.forEach( (decendent_method) => {
+            decendent_method();
+          });
+        };
+        stree.load_all = () => {
+          let methods = stree._get_method_tree('load_method');
+          //dbg(`Found a total of ${save_methods.size} save methods`);
+          methods.forEach( (decendent_method) => {
+            decendent_method();
+          });
         };
 
         // Private value
@@ -417,7 +430,7 @@ class SettingsUI {
           value=initial_value;
         }
         // avoid duplicating code
-        function set_value_common(accessors, obj, only_same_save_method=false) {
+        function set_value_common(accessors, obj, allow_autosave=true) {
           if (is_leaf) {
             value = obj;
           }
@@ -431,7 +444,9 @@ class SettingsUI {
               }
             }
           }
-          autosave_method();
+          if (allow_autosave) {
+            autosave_method();
+          }
         }
         // FIXME block adding new keys to value
         Object.defineProperties(stree, {
