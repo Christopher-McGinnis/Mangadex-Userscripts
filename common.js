@@ -99,7 +99,7 @@ function getUserValue(key,defaultValue) {
       });
     }
     else if (typeof GM_getValue === 'function') {
-        resolve(JSON.parse(GM_getValue(key,jsonDefault)));
+      resolve(JSON.parse(GM_getValue(key,jsonDefault)));
     }
     else {
       reject("To use 'getUserValue' you must grant either GM.getValue or GM_getValue.");
@@ -109,9 +109,17 @@ function getUserValue(key,defaultValue) {
 function getUserValues(keys) {
   let prommises=[];
   Object.entries(keys).forEach(([key,defaultValue]) => {
-    prommises.push(getUserValue(key,defaultValue));
+    prommises.push(
+       getUserValue(key,defaultValue).then((v) => { let obj={}; obj[key]=v; return obj; } )
+    );
   });
-  return Promise.all(prommises);
+  return Promise.all(prommises).then( (itter) => {
+    let new_obj={};
+    for (let obj of itter) {
+      Object.assign(new_obj,obj);
+    }
+    return new_obj;
+  });
 }
 
 function setUserValue(key,value) {
