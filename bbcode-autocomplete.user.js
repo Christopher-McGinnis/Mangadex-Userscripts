@@ -8,15 +8,77 @@
 // @grant    GM.setValue
 // @grant    GM_getValue
 // @grant    GM_setValue
-// @require  https://cdn.rawgit.com/Brandon-Beck/Mangadex-Userscripts/2f84a04d4adf05142fb4c9a727f1dcae4cfbc78c/common.js
+// @require  https://cdn.rawgit.com/ichord/Caret.js/341fb20b6126220192b2cd226836cd5d614b3e09/dist/jquery.caret.js
+// @require  https://cdn.rawgit.com/ichord/At.js/1b7a52011ec2571f73385d0c0d81a61003142050/dist/js/jquery.atwho.js
+// @require  https://cdn.rawgit.com/Brandon-Beck/Mangadex-Userscripts/1f7a433657c0e3cdbba6e1fd49cc2b66cd2b27c4/common.js
 // @require  https://cdn.rawgit.com/Brandon-Beck/Mangadex-Userscripts/2f84a04d4adf05142fb4c9a727f1dcae4cfbc78c/uncommon.js
 // @require  https://cdn.rawgit.com/Brandon-Beck/Mangadex-Userscripts/e557a5a2207e890be6678537473cc0729cde028e/settings-ui.js
-// @require  https://cdn.rawgit.com/component/textarea-caret-position/af904838644c60a7c48b21ebcca8a533a5967074/index.js
+// @resource atwhoCSS https://cdn.rawgit.com/ichord/At.js/1b7a52011ec2571f73385d0c0d81a61003142050/dist/css/jquery.atwho.css
 // @match    https://mangadex.org/*
 // @author   Brandon Beck
 // @icon     https://mangadex.org/images/misc/default_brand.png?1
 // @license  MIT
 // ==/UserScript==
+'use strict';
+
+// For using AtWho's CSS. Disabled since it is difficault to make it use mangadex's active theme
+function addCssLink(css_url) {
+  let cssId = 'css_' + css_url.toString().replace(/\W/g,'_');
+  if (!document.getElementById(cssId)) {
+      let link  = document.createElement('link');
+      link.id   = cssId;
+      link.rel  = 'stylesheet';
+      link.type = 'text/css';
+      link.href = css_url;
+      //link.media = 'all';
+      document.head.appendChild(link);
+  }
+}
+//addCssLink('https://cdn.rawgit.com/ichord/At.js/1b7a52011ec2571f73385d0c0d81a61003142050/dist/css/jquery.atwho.css');
+
+function findCSS_Rule(classID) {
+  for(var i=0; i<document.styleSheets.length; i++){
+    try {
+      let stylesheet = document.styleSheets[i];
+      let style_rules = stylesheet.cssRules ? stylesheet.cssRules : stylesheet.rules;
+      if(style_rules){
+        for(var r=0; r<style_rules.length; r++){
+          if( style_rules[r].selectorText && style_rules[r].selectorText === classID ) {
+            return  {stylesheet:stylesheet, rule: style_rules[r] };
+          }
+        }
+      }
+    }
+    catch(e) {
+      // Rethrow exception if it's not a SecurityError. Note that SecurityError
+      // exception is specific to Firefox.
+      if(e.name !== 'SecurityError')
+        throw e;
+      continue;
+    }
+  }
+  return {};
+}
+
+function duplicate_cssRule(orig_selector, new_selector) {
+
+    //if(findCSS_Rule(new_selector)) return true;  // Must have already done this one
+
+    let {rule, stylesheet} = findCSS_Rule(orig_selector);
+    if(!rule) return false;
+    let css_text = rule.style.cssText;
+    if( stylesheet.insertRule ){
+      css_text = new_selector + ' {' + css_text + '}';
+      stylesheet.insertRule(css_text,stylesheet.cssRules.length);
+    }
+    else if(stylesheet.addRule){
+      stylesheet.addRule(new_selector,css_text);
+    }
+    return true;
+}
+
+
+
 let xp = new XPath();
 let posts=xp.new('//tr').with(xp.new().contains('@class','post'));
 // Because Javascript's does not require .sort to be Stable.
@@ -160,11 +222,16 @@ function UserHistory({read_posts_history=[],user_id,username}={}) {
     let time = xp.new('.//span').with( xp.new('./span').with(xp.new().contains('@class','fa-clock')) ).getElement(post).title;
     let thread=xp.new('./td/span/a').with( xp.new('preceding-sibling::span').with(xp.new().contains('@class','fa-clock')) ).getElement(post).href;
     let thread_id = parseInt(thread.match(/\/thread\/(\d+)\//)[1]);
-    let user=xp.new('./td/a[starts-with(@href,"/user/")]').getElement(post);
+
+    let user=xp.new('.//a[contains(@class,"user_level") and starts-with(@href,"/user/")]').getElement(post);
     let user_name=user.textContent;
+    // TODO: actualy store user level
+    let user_level=user.className;
+    let user_color=user.style.color;
+
     let user_id=parseInt(user.href.match(/\/user\/(\d+)\//)[1]);
-    let user_img=xp.new('./td/img').with(xp.new().contains('@class','avatar')).getElement(post).src;
-    let postContents=xp.new('./td/div').with('preceding-sibling::hr').getElement(post);
+    let user_img=xp.new('.//img').with(xp.new().contains('@class','avatar')).getElement(post).src;
+    let postContents=xp.new('.//div').with(xp.new().contains('@class','postbody')).getElement(post);
     let did_mention=Boolean(xp.new(`.//a[@href="https://mangadex.org/user/${uhist.user_id}"]`).getElement(postContents));
     // cleanText. Hide spoilers and other invisible crap
     let cleanText=getVisibleText(postContents);
@@ -172,12 +239,14 @@ function UserHistory({read_posts_history=[],user_id,username}={}) {
     this.history.unshift({
       thread_id:thread_id,
       user_name:user_name,
-      did_mention:did_mention,
-      post_id:post_id,
+      user_level:user_level,
+      user_color:user_color,
       user_id:user_id,
       user_img:user_img,
+      did_mention:did_mention,
+      post_id:post_id,
       excerpt:excerpt,
-      time:time
+      time:time,
     });
     cleanupHistory();
   };
@@ -414,13 +483,17 @@ function main({read_posts_history,settings: loaded_settings}) {
   let settings=initSettingsDialog(loaded_settings);
   let user_id=getCurrentUserID();
   let uhist = new UserHistory({read_posts_history:read_posts_history,user_id:user_id});
+  unsafeWindow.uhist=uhist;
   // Add current page's posts to history.
+
   let thread=xp.new(posts).append('//td/span/a').with( xp.new('preceding-sibling::span').with(xp.new().contains('@class','fa-clock')) ).getElement()
   if (thread) {
     thread = thread.href;
     let thread_id = parseInt(thread.match(/\/thread\/(\d+)\//)[1]);
     if (location.pathname.startsWith('/thread/')) {
-      for(let [i,post] = [posts.getItter()]; (()=>{post=i.iterateNext(); return post;})();) { uhist.push(post) };
+      posts.forEachOrderedElement( (post) => {
+        uhist.push(post);
+      } );
     } else {
       // Consider more efficient approch
       let snap = posts.getOrderedSnapshot();
@@ -429,14 +502,56 @@ function main({read_posts_history,settings: loaded_settings}) {
       };
     }
     setUserValues({read_posts_history:uhist.history});
-    xp.new('//textarea[@id="text"]').forEachElement( (textarea) => {
+    /*xp.new('//textarea[@id="text"]').forEachElement( (textarea) => {
       textarea.addEventListener("input",() => onTextareaInput({
         textarea:textarea,
         uhist:uhist,
         thread_id:thread_id,
       } ) );
       textarea.addEventListener("keydown", onTextareaKeyDown);
+    });*/
+    // NOTE there can be more than one textarea. but they all use the same id :O
+
+    function autoComplete(partial_name, render_view) {
+      //console.log(partial_name);
+      let r = uhist.autoComplete(partial_name,{thread_id:thread_id,case_sensitive:false,fuzzy:true});
+      //console.log(r);
+      //console.log(render_view);
+      render_view(r);
+    };
+    function formatDisplayItem(item) {
+      return  `<li class="dropdown-item d-flex justify-content-between align-items-center px-2" style="height:50px;" title="${item.excerpt}">
+        <div class="h-100">
+        <span class="">${item.did_mention ? '@' : ''}</span>
+        <span class="${item.thread_id === thread_id ? 'far fa-comments' : ''}"></span>
+        <img src="${item.user_img}" class="mh-100 rounded avatar"/>
+        </div>
+        <span class="${item.user_level}" style="color:${item.user_color};">${item.user_name}</span>
+        </li>`;
+    }
+
+    $('textarea[id="text"]').atwho({
+      at: "@",
+      displayTpl: formatDisplayItem,
+      insertTpl: "${atwho-at}${user_name}",
+      searchKey: "user_name",
+      // We don't want to use your filter or sorter. remoteFilter is a better fit for us.
+      data: [],
+      //data: uhist.history,
+      limit: 200,
+      callbacks: {
+        remoteFilter: autoComplete,
+        // NoOp
+        sorter: (_,i) => { return i; },
+      },
     });
+    // These make atwho dropdown menu use the same color theme as the site.
+    //$('.atwho-container').addClass('');
+    $('.atwho-view').addClass('container').css({display:'none' });
+    $('.atwho-view-ul').addClass('dropdown-menu show pre-scrollable');
+    // make the selected atwho user be highlighted using the same color theme as the site.
+    duplicate_cssRule('.dropdown-item:hover, .dropdown-item:focus','.cur');
+
     // For debugging
     unsafeWindow.uhist=uhist;
   }
