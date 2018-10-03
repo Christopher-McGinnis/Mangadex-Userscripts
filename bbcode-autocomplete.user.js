@@ -10,7 +10,7 @@
 // @grant    GM_setValue
 // @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/2f84a04d4adf05142fb4c9a727f1dcae4cfbc78c/common.js
 // @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/2f84a04d4adf05142fb4c9a727f1dcae4cfbc78c/uncommon.js
-// @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/2f84a04d4adf05142fb4c9a727f1dcae4cfbc78c/settings-ui.js
+// @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/e557a5a2207e890be6678537473cc0729cde028e/settings-ui.js
 // @require  https://cdn.rawgit.com/component/textarea-caret-position/af904838644c60a7c48b21ebcca8a533a5967074/index.js
 // @match    https://mangadex.org/*
 // @author   Christopher McGinnis
@@ -400,14 +400,14 @@ function disableAutocompletion() {
   //textarea.removeEventListener("input",() => onTextareaInput );
 }
 function initSettingsDialog(loaded_settings) {
-  let settings_ui = new SettingsUI({group_name:"Auto-Complete"});
+  let settings_ui = new SettingsUI({group_name:"Auto-Complete", settings_tree_config:{ save_location: '', autosave:true } });
   let autocompleteTypes=settings_ui.addMultiselect({title:"Types",key:"autocomplete_types"});
   autocompleteTypes.addOption({key:"usernames", title:"@Username"});
-  autocompleteTypes.addOption({key:"titles",title:":Title"});
+  autocompleteTypes.addOption({key:"titles", title:":Title"});
   // Load our saved settings object into the ui
-  settings_ui.savable=loaded_settings;
+  settings_ui.settings_tree.load_all();
   // return new settings object which is bound to the UI.
-  let settings=settings_ui.values;
+  let settings=settings_ui.settings_tree.values;
   return settings;
 }
 function main({read_posts_history,settings: loaded_settings}) {
