@@ -42,7 +42,7 @@ function fallbackCopyTextToClipboard(text) {
     console.log(`Fallback: Copying text command was ${msg}`)
   }
   catch (err) {
-    console.error('Fallback: Oops, unable to copy', err)
+    console.error('Fallback: Oops, unable to copy' ,err)
   }
   document.body.removeChild(textArea)
 }
@@ -59,8 +59,8 @@ function copyTextToClipboard(text) {
   else if (navigator && navigator.clipboard) {
     navigator.clipboard.writeText(text).then(() => {
       dbg('Async: Copying to clipboard was successful!')
-    }, (err) => {
-      dbg('Async: Could not copy text: ', err)
+    } ,(err) => {
+      dbg('Async: Could not copy text: ' ,err)
     })
   }
   else {
@@ -71,20 +71,20 @@ function copyTextToClipboard(text) {
  * XPath
  */
 
-function getSnapshotByXpath(path, node = document) {
-  return document.evaluate(path.toString(), node, null, XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE, null)
+function getSnapshotByXpath(path ,node = document) {
+  return document.evaluate(path.toString() ,node ,null ,XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE ,null)
 }
-function getOrderedSnapshotByXpath(path, node = document) {
-  return document.evaluate(path.toString(), node, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null)
+function getOrderedSnapshotByXpath(path ,node = document) {
+  return document.evaluate(path.toString() ,node ,null ,XPathResult.ORDERED_NODE_SNAPSHOT_TYPE ,null)
 }
-function getItterByXpath(path, node = document) {
-  return document.evaluate(path.toString(), node, null, XPathResult.UNORDERED_NODE_ITERATOR_TYPE, null)
+function getItterByXpath(path ,node = document) {
+  return document.evaluate(path.toString() ,node ,null ,XPathResult.UNORDERED_NODE_ITERATOR_TYPE ,null)
 }
-function getOrderedItterByXpath(path, node = document) {
-  return document.evaluate(path.toString(), node, null, XPathResult.ORDERED_NODE_ITERATOR_TYPE, null)
+function getOrderedItterByXpath(path ,node = document) {
+  return document.evaluate(path.toString() ,node ,null ,XPathResult.ORDERED_NODE_ITERATOR_TYPE ,null)
 }
-function getElementByXpath(path, node = document) {
-  return document.evaluate(path.toString(), node, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue
+function getElementByXpath(path ,node = document) {
+  return document.evaluate(path.toString() ,node ,null ,XPathResult.FIRST_ORDERED_NODE_TYPE ,null).singleNodeValue
 }
 
 // Gets all values for provided keys via GM_getValue, defaulting to the provided default values.
@@ -93,16 +93,16 @@ function getElementByXpath(path, node = document) {
 //   SomeGM_Key: SomeValue,
 //   AnotherGM_Key: AnotherValue
 // })
-function getUserValue(key, defaultValue) {
-  return new Promise((resolve, reject) => {
+function getUserValue(key ,defaultValue) {
+  return new Promise((resolve ,reject) => {
     const jsonDefault = JSON.stringify(defaultValue)
     if (typeof GM === 'object' && typeof GM.getValue === 'function') {
-      GM.getValue(key, jsonDefault).then((value) => {
+      GM.getValue(key ,jsonDefault).then((value) => {
         resolve(JSON.parse(value))
       })
     }
     else if (typeof GM_getValue === 'function') {
-      resolve(JSON.parse(GM_getValue(key, jsonDefault)))
+      resolve(JSON.parse(GM_getValue(key ,jsonDefault)))
     }
     else {
       reject(new Error("To use 'getUserValue' you must grant either GM.getValue or GM_getValue."))
@@ -111,29 +111,29 @@ function getUserValue(key, defaultValue) {
 }
 function getUserValues(keys) {
   const prommises = []
-  Object.entries(keys).forEach(([key, defaultValue]) => {
+  Object.entries(keys).forEach(([key ,defaultValue]) => {
     prommises.push(
-      getUserValue(key, defaultValue).then((v) => {
+      getUserValue(key ,defaultValue).then((v) => {
         const obj = {}; obj[key] = v; return obj
-      }),
+      }) ,
     )
   })
   return Promise.all(prommises).then((itter) => {
     const new_obj = {}
     for (const obj of itter) {
-      Object.assign(new_obj, obj)
+      Object.assign(new_obj ,obj)
     }
     return new_obj
   })
 }
 
-function setUserValue(key, value) {
-  return new Promise((resolve, reject) => {
+function setUserValue(key ,value) {
+  return new Promise((resolve ,reject) => {
     if (typeof GM === 'object' && typeof GM.setValue === 'function') {
-      GM.setValue(key, JSON.stringify(value)).then(resolve).catch(reject)
+      GM.setValue(key ,JSON.stringify(value)).then(resolve).catch(reject)
     }
     else if (typeof GM_setValue === 'function') {
-      GM_setValue(key, JSON.stringify(value))
+      GM_setValue(key ,JSON.stringify(value))
       resolve()
     }
     else {
@@ -143,13 +143,13 @@ function setUserValue(key, value) {
 }
 function setUserValues(objs) {
   const prommises = []
-  Object.entries(objs).forEach(([key, value]) => {
-    prommises.push(setUserValue(key, value))
+  Object.entries(objs).forEach(([key ,value]) => {
+    prommises.push(setUserValue(key ,value))
   })
   return Promise.all(prommises)
 }
 
-function createToolTip({ title, text }) {
+function createToolTip({ title ,text }) {
   const tooltip_elm = htmlToElement(`<div>${title}<br><span>${text}</span></div>`)
   const tooltip_text = tooltip_elm.children[1]
   tooltip_elm.style.display = 'none'
@@ -163,6 +163,6 @@ function createToolTip({ title, text }) {
   document.body.appendChild(tooltip_elm)
   return {
     tooltip: tooltip_elm
-    , text_container: tooltip_text
+    ,text_container: tooltip_text
   }
 }
