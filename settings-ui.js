@@ -9,7 +9,7 @@
 // @grant    GM_setValue
 // @grant    GM_listValues
 // @grant    GM_listValues
-// @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/2f84a04d4adf05142fb4c9a727f1dcae4cfbc78c/common.js
+// @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/1f7a433657c0e3cdbba6e1fd49cc2b66cd2b27c4/common.js
 // @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/2f84a04d4adf05142fb4c9a727f1dcae4cfbc78c/uncommon.js
 // @match    https://mangadex.org/*
 // @author   Christopher McGinnis
@@ -18,24 +18,25 @@
 // ==/UserScript==
 // Note, above metablock is only processed when installed directly
 // Done for debugging purposes
-'use strict';
 
-function createToolTip({title,text}) {
-  let tooltip_elm = htmlToElement(`<div>${title}<br><span>${text}</span></div>`);
-  let tooltip_text = tooltip_elm.children[1];
-  tooltip_elm.style.display="none";
-  tooltip_elm.style.backgroundColor="rgba(15,15,15,0.9)";
-  tooltip_elm.style.borderRadius="15px";
-  tooltip_elm.style.color="rgb(215,215,215)";
-  tooltip_elm.style.left="0%";
-  tooltip_elm.style.position="absolute";
-  tooltip_elm.style.zIndex=10;
-  tooltip_elm.style.textAlign="center";
-  document.body.appendChild(tooltip_elm);
+'use strict'
+
+function createToolTip({ title, text }) {
+  const tooltip_elm = htmlToElement(`<div>${title}<br><span>${text}</span></div>`)
+  const tooltip_text = tooltip_elm.children[1]
+  tooltip_elm.style.display = 'none'
+  tooltip_elm.style.backgroundColor = 'rgba(15,15,15,0.9)'
+  tooltip_elm.style.borderRadius = '15px'
+  tooltip_elm.style.color = 'rgb(215,215,215)'
+  tooltip_elm.style.left = '0%'
+  tooltip_elm.style.position = 'absolute'
+  tooltip_elm.style.zIndex = 10
+  tooltip_elm.style.textAlign = 'center'
+  document.body.appendChild(tooltip_elm)
   return {
-    tooltip:tooltip_elm,
-    text_container:tooltip_text
-  };
+    tooltip: tooltip_elm
+    , text_container: tooltip_text
+  }
 }
 // WARNING ALL SETTING UIs MUST BE BUILT SHORTLY AFTER THE USERSCRIPT STARTS!
 // We are utilizing the site's own bootstrap jquery based select builder..
@@ -76,70 +77,70 @@ function createToolTip({title,text}) {
 class SettingsUI {
   // Singlton group
   constructor({
-    group_name=throwMissingParam("new SettingsUI","group_name",'"SettingGroupName" || "UserscriptName"'),
-    settings_tree_config: settings_ui_st_args,
-  }={}) {
-    let currentID=new Date().valueOf() + Math.floor(Math.random() * 100000);
-    function createID(id_prefix=throwMissingArg('createID(id_prefix)','id_prefix','settings.group_name')) {
+    group_name = throwMissingParam('new SettingsUI', 'group_name', '"SettingGroupName" || "UserscriptName"'),
+    settings_tree_config: settings_ui_st_args
+  } = {}) {
+    let currentID = new Date().valueOf() + Math.floor(Math.random() * 100000)
+    function createID(id_prefix = throwMissingArg('createID(id_prefix)', 'id_prefix', 'settings.group_name')) {
       // Ensure standard complient. Must begin with a letter.
-      return "SettingsUI-id-" + (id_prefix.toString().replace(/\W/g,'_')) + (currentID++);
+      return `SettingsUI-id-${id_prefix.toString().replace(/\W/g, '_')}${currentID++}`
     }
-    let xp = new XPath();
+    const xp = new XPath()
     /**
     * A builder for Setting tabs.
     * @returns {SettingsTabBuilder} The new tab builder.
     */
     function SettingsTabBuilder() {
-      let sgroup = this;
-      if (!( sgroup instanceof SettingsTabBuilder) ) {
-          return new SettingsTabBuilder(...arguments);
+      const sgroup = this
+      if (!(sgroup instanceof SettingsTabBuilder)) {
+        return new SettingsTabBuilder(...arguments)
       }
       // Get Mangadex Quick Settings Dialog
-      let dialog=xp.new('//div[@id="homepage_settings_modal"]/div').with(xp.new().contains('@class','modal-dialog')).getElement();
-      let header=xp.new('.//div').with(xp.new().contains('@class','modal-header')).getElement(dialog);
-      let modal_body=xp.new('.//div').with(xp.new().contains('@class','modal-body')).getElement(dialog);
-      let modal_content=modal_body.parentNode;
+      const dialog = xp.new('//div[@id="homepage_settings_modal"]/div').with(xp.new().contains('@class', 'modal-dialog')).getElement()
+      const header = xp.new('.//div').with(xp.new().contains('@class', 'modal-header')).getElement(dialog)
+      const modal_body = xp.new('.//div').with(xp.new().contains('@class', 'modal-body')).getElement(dialog)
+      const modal_content = modal_body.parentNode
 
       // Remove mangadex settings header title. We will use our own version of it.
-      header.removeChild(header.children[0]);
+      header.removeChild(header.children[0])
 
       // Create new header and tab navigation list
-      let header_content=htmlToElement(`<div></div>`);
-      let tab_nav_container=htmlToElement(`
+      const header_content = htmlToElement('<div></div>')
+      const tab_nav_container = htmlToElement(`
         <div class="h5 d-flex align-items-center">
         <span class="fas fa-cog fa-fw " aria-hidden="true"></span>
         <ul class="nav nav-pills" roll="tablist">
 
         </ul>
         </div>
-      `);
-      header_content.appendChild(tab_nav_container);
-      header.insertBefore(header_content,header.children[0]);
-      let tab_nav=tab_nav_container.children[1];
+      `)
+      header_content.appendChild(tab_nav_container)
+      header.insertBefore(header_content, header.children[0])
+      const tab_nav = tab_nav_container.children[1]
 
       // Create new body and tab content containers
-      let tab_content = htmlToElement(`
+      const tab_content = htmlToElement(`
         <div class="tab-content">
         </div>
-      `);
-      modal_content.insertBefore(tab_content,modal_body);
+      `)
+      modal_content.insertBefore(tab_content, modal_body)
 
       // Define tab/nav creation methods
-      sgroup.appendNavItem = ({title,active=false,id}) => {
-        let item=htmlToElement(`
-        <li class="nav-item ${active ? "active" : "" }">
-          <a data-toggle="tab" role="tab" class="nav-link ${active ? "active show" : "" }" href="#${escape(id)}">${title}</a>
-        </li>`);
-        tab_nav.appendChild(item);
-      };
-      sgroup.appendTabItem = ({title,active=false,id}) => {
-        let item = htmlToElement(`
-         <div class="modal-body tab-pane ${active ? "show active" : "" }" role="tabpanel" id="${id}">
+      sgroup.appendNavItem = ({ title, active = false, id }) => {
+        const item = htmlToElement(`
+        <li class="nav-item ${active ? 'active' : ''}">
+          <a data-toggle="tab" role="tab" class="nav-link ${active ? 'active show' : ''}" href="#${escape(id)}">${title}</a>
+        </li>`)
+        tab_nav.appendChild(item)
+      }
+      sgroup.appendTabItem = ({ title, active = false, id }) => {
+        const item = htmlToElement(`
+         <div class="modal-body tab-pane ${active ? 'show active' : ''}" role="tabpanel" id="${id}">
          </div>
-        `);
-        tab_content.appendChild(item);
-        return item;
-      };
+        `)
+        tab_content.appendChild(item)
+        return item
+      }
 
       // Unified method for creating tab navs and tab containers.
       /**
@@ -151,23 +152,23 @@ class SettingsUI {
       * @returns {Node} The settings tab node (already attatched to DOM). Add some children to it to build your ui.
       */
       sgroup.addGroup = (args) => {
-        sgroup.appendNavItem(args);
-        let container = sgroup.appendTabItem(args);
-        return container;
-      };
+        sgroup.appendNavItem(args)
+        const container = sgroup.appendTabItem(args)
+        return container
+      }
 
       // Now that methods are all defined, lets finish initializing.
       // Just need to move Mangadex's settings menu into a tab, so it won't
       // be displayed when we switch to other tabs.
-      let mangadex_tab = sgroup.addGroup({title:"Mangadex", active:true, id: createID('mangadex-setting-header-tab-')});
-      modal_content.removeChild(modal_body);
-      for (let child of modal_body.children) {
-        mangadex_tab.appendChild(child);
+      const mangadex_tab = sgroup.addGroup({ title: 'Mangadex', active: true, id: createID('mangadex-setting-header-tab-') })
+      modal_content.removeChild(modal_body)
+      for (const child of modal_body.children) {
+        mangadex_tab.appendChild(child)
       }
 
-      //sgroup.tabs=tab_content;
-      //sgroup.navs=nav_content;
-      return sgroup;
+      // sgroup.tabs=tab_content;
+      // sgroup.navs=nav_content;
+      return sgroup
     }
 
     /**
@@ -178,18 +179,18 @@ class SettingsUI {
      */
     function SettingsUIInstance({
       group_name,
-      container=throwMissingParam("new SettingsUIInstance","container","HTML_Node"),
-      settings_tree_config:settings_ui_instance_st_args
+      container = throwMissingParam('new SettingsUIInstance', 'container', 'HTML_Node'),
+      settings_tree_config: settings_ui_instance_st_args
     }) {
-      let settings = this;
-      if (!( settings instanceof SettingsUIInstance) ) {
-          return new SettingsUIInstance(...arguments);
+      const settings = this
+      if (!(settings instanceof SettingsUIInstance)) {
+        return new SettingsUIInstance(...arguments)
       }
-      settings.group_name=group_name;
+      settings.group_name = group_name
       // Get Mangadex Quick Setting's Container
-      let setting_item_id_prefix=settings.group_name + "-item-";
+      const setting_item_id_prefix = `${settings.group_name}-item-`
       function createSettingID() {
-        return createID(setting_item_id_prefix);
+        return createID(setting_item_id_prefix)
       }
 
 
@@ -220,9 +221,9 @@ class SettingsUI {
       @prop {Function} [obj.load_method] - Method used for loading this tree.
       */
       function SettingsTree({
-        key=throwMissingParam("new SettingsTree","key",`'a unique key to access this SettingsTree from its container'`),
-        onchange=()=>{return null;},
-        update_ui_callback=()=>{return null;},
+        key = throwMissingParam('new SettingsTree', 'key', '\'a unique key to access this SettingsTree from its container\''),
+        onchange = () => null,
+        update_ui_callback = () => null,
         defer,
         autosave,
         autosave_delay,
@@ -230,17 +231,17 @@ class SettingsUI {
         save_location,
         save_method,
         load_method,
-        is_leaf=false,
+        is_leaf = false
       }) {
-        let stree = this;
-        if (!( stree instanceof SettingsTree) ) {
+        const stree = this
+        if (!(stree instanceof SettingsTree)) {
           // Your getting an instance wether you like it or not!
-          return new SettingsTree(...arguments);
+          return new SettingsTree(...arguments)
         }
         // Expose tvariables we should be capable of directly altering later
-        //stree.key=key;
-        stree.autosave=autosave;
-        stree.autosave_delay=autosave_delay;
+        // stree.key=key;
+        stree.autosave = autosave
+        stree.autosave_delay = autosave_delay
 
         function defaultLoadMethod() {
           // FIXME: Autoload has a few small issues.
@@ -252,200 +253,199 @@ class SettingsUI {
           // For the time being, we are safe as long as we only use one save location,
           // or there are no parent save locations.
           if (save_location === 'string' && save_location.length > 0) {
-            return getUserValue(save_location,stree.own_savable).then((obj) => {
-              stree.value = obj;
-              return stree.value;
-            });
+            return getUserValue(save_location, stree.own_savable).then((obj) => {
+              stree.value = obj
+              return stree.value
+            })
           }
-          else {
-            dbg(`WARNING! Attempted to load SettingsTree<${key}>, but no save_location was set!`);
-          }
+
+          dbg(`WARNING! Attempted to load SettingsTree<${key}>, but no save_location was set!`)
+
           // FIXME Should we call onchange here? The user initiated this load, so its
           // possible for them to handle this on their own
           // plus we return a promise they can use as a oneoff onchange event.
         }
         function defaultSaveMethod() {
           if (save_location === 'string' && save_location.length > 0) {
-            return setUserValue(save_location,stree.own_savable);
+            return setUserValue(save_location, stree.own_savable)
           }
-          else {
-            dbg(`WARNING! Attempted to save SettingsTree<${key}>, but no save_location was set!`);
-          }
+
+          dbg(`WARNING! Attempted to save SettingsTree<${key}>, but no save_location was set!`)
         }
         // Allow the child to utilize some of our functions/values when unspecified.
-        let our_methods = {};
-        let private_object = {
-          children:{},
-          autosave_timeout:undefined,
-          save_method:save_method,
-          load_method:load_method,
-        };
+        const our_methods = {}
+        const private_object = {
+          children: {}
+          , autosave_timeout: undefined
+          , save_method
+          , load_method
+        }
         function getOrDefer(undefered_object, defer_key, default_value) {
-          if (typeof undefered_object[defer_key] !== "undefined" && typeof undefered_object[defer_key] !== "null") {
-            return undefered_object[defer_key];
+          if (typeof undefered_object[defer_key] !== 'undefined' && typeof undefered_object[defer_key] !== 'null') {
+            return undefered_object[defer_key]
           }
-          else if (typeof defer === "object") {
-            return defer[defer_key];
+          if (typeof defer === 'object') {
+            return defer[defer_key]
           }
-          return default_value;
+          return default_value
         }
         function getStorageMethod(storage_method_key, default_method) {
           // first try using a defined save method.
           if (typeof private_object[storage_method_key] === 'function') {
-            return private_object[storage_method_key];
+            return private_object[storage_method_key]
           }
           // Use the default save method on us if we save to a new location.
-          else if (typeof save_location !== 'null' && typeof save_location !== 'undefined') {
-            return default_method;
+          if (typeof save_location !== 'null' && typeof save_location !== 'undefined') {
+            return default_method
           }
           // If we are a child, defer to our parent node
-          else if (typeof defer === "object") {
-            return defer[storage_method_key];
+          if (typeof defer === 'object') {
+            return defer[storage_method_key]
           }
           // We are a root node without a defined save method nor location.
           // There is no function we can/should return.
           // We wont log this as an error here, instead we do that when we try to call it.
-          return default_method;
+          return default_method
         }
-        Object.defineProperties(our_methods,{
+        Object.defineProperties(our_methods, {
           autosave: {
             get() {
-              return getOrDefer(stree, 'autosave', false);
-            },
-            set(val) {
-              stree.autosave=val;
-            },
-          },
-          autosave_delay: {
+              return getOrDefer(stree, 'autosave', false)
+            }
+            , set(val) {
+              stree.autosave = val
+            }
+          }
+          , autosave_delay: {
             get() {
-              return getOrDefer(stree, 'autosave_delay', 500);
-            },
-            set(val) {
-              stree.autosave_delay=val;
-            },
-          },
-          autosave_timeout: {
+              return getOrDefer(stree, 'autosave_delay', 500)
+            }
+            , set(val) {
+              stree.autosave_delay = val
+            }
+          }
+          , autosave_timeout: {
             get() {
               // We use the timeout of whoever ownes the save method.
               if (typeof private_object.save_method === 'function') {
-                return private_object.autosave_timeout;
+                return private_object.autosave_timeout
               }
-              else if (typeof defer === 'object') {
-                return defer.autosave_timeout;
+              if (typeof defer === 'object') {
+                return defer.autosave_timeout
               }
               // There is no save method. One will be generated in this root
               // context, so return ours.
-              return private_object.autosave_timeout;
-            },
-            set(val) {
+              return private_object.autosave_timeout
+            }
+            , set(val) {
               // We use the timeout of whoever ownes the save method.
               if (typeof private_object.save_method === 'function') {
-                return private_object.autosave_timeout=val;
+                return private_object.autosave_timeout = val
               }
-              else if (typeof defer === 'object') {
-                return defer.autosave_timeout=val;
+              if (typeof defer === 'object') {
+                return defer.autosave_timeout = val
               }
               // There is no save method. One will be generated in this root
               // context, so use ours.
-              return private_object.autosave_timeout=val;
-            },
-          },
-          save_method: {
+              return private_object.autosave_timeout = val
+            }
+          }
+          , save_method: {
             get() {
-              return getStorageMethod('save_method', defaultSaveMethod);
-            },
-            set(val) {
-              private_object.save_method=val;
-            },
-          },
-          load_method: {
+              return getStorageMethod('save_method', defaultSaveMethod)
+            }
+            , set(val) {
+              private_object.save_method = val
+            }
+          }
+          , load_method: {
             get() {
-              return getStorageMethod('load_method', defaultLoadMethod);
-            },
-            set(val) {
-              private_object.load_method=val;
-            },
-          },
-        });
+              return getStorageMethod('load_method', defaultLoadMethod)
+            }
+            , set(val) {
+              private_object.load_method = val
+            }
+          }
+        })
         // FIXME: Ugly patch to permit detecting same save method.
-        stree.is_same_method = (parent_method,key) => {
-          return parent_method === our_methods[key];
-        };
+        stree.is_same_method = (parent_method, key) => parent_method === our_methods[key]
 
         function autosave_method() {
           if (our_methods.autosave) {
-            clearTimeout(our_methods.autosave_timeout);
-            if (typeof our_methods.save_method === "function") {
-              our_methods.autosave_timeout = setTimeout(() => { our_methods.save_method(); }, our_methods.autosave_delay );
+            clearTimeout(our_methods.autosave_timeout)
+            if (typeof our_methods.save_method === 'function') {
+              our_methods.autosave_timeout = setTimeout(() => {
+                our_methods.save_method()
+              }, our_methods.autosave_delay)
             }
           }
         }
         // FIXME: Dont expose. instead, we should present this data the same way we present UI's accessors.
         stree._get_method_tree = (method_name) => {
-          let methods=new Set([]);
-          if (typeof our_methods[method_name] === "function") {
-            methods.add(our_methods[method_name]);
+          const methods = new Set([])
+          if (typeof our_methods[method_name] === 'function') {
+            methods.add(our_methods[method_name])
           }
-          for (let [key,child] of Object.entries(private_object.children)) {
-            child._get_method_tree().forEach( (decendent_method) => {
-              methods.add(decendent_method);
-            });
+          for (const [key, child] of Object.entries(private_object.children)) {
+            child._get_method_tree().forEach((decendent_method) => {
+              methods.add(decendent_method)
+            })
           }
-          return methods;
-        };
+          return methods
+        }
         stree.save = () => {
-          if (typeof our_methods.save_method === "function") {
-            return our_methods.save_method();
+          if (typeof our_methods.save_method === 'function') {
+            return our_methods.save_method()
           }
-          dbg(`No save method found for ${key}`);
-        };
+          dbg(`No save method found for ${key}`)
+        }
         stree.load = () => {
-          if (typeof our_methods.load_method === "function") {
-            //dbg(`Loading ${key}`);
-            return our_methods.load_method();
+          if (typeof our_methods.load_method === 'function') {
+            // dbg(`Loading ${key}`);
+            return our_methods.load_method()
           }
-          dbg(`No load method found for ${key}`);
-        };
+          dbg(`No load method found for ${key}`)
+        }
         stree.save_all = () => {
-          let methods = stree._get_method_tree('save_method');
-          //dbg(`Found a total of ${save_methods.size} save methods`);
-          methods.forEach( (decendent_method) => {
-            decendent_method();
-          });
-        };
+          const methods = stree._get_method_tree('save_method')
+          // dbg(`Found a total of ${save_methods.size} save methods`);
+          methods.forEach((decendent_method) => {
+            decendent_method()
+          })
+        }
         stree.load_all = () => {
-          let methods = stree._get_method_tree('load_method');
-          //dbg(`Found a total of ${save_methods.size} save methods`);
-          methods.forEach( (decendent_method) => {
-            decendent_method();
-          });
-        };
+          const methods = stree._get_method_tree('load_method')
+          // dbg(`Found a total of ${save_methods.size} save methods`);
+          methods.forEach((decendent_method) => {
+            decendent_method()
+          })
+        }
 
         // Private value
-        let value;
+        let value
         if (!is_leaf) {
-          value = {};
+          value = {}
         }
         else if (typeof initial_value !== 'undefined') {
-          value=initial_value;
+          value = initial_value
         }
         // avoid duplicating code
-        function set_value_common(accessors, obj, allow_autosave=true) {
+        function set_value_common(accessors, obj, allow_autosave = true) {
           if (is_leaf) {
-            value = obj;
+            value = obj
           }
           else {
-            for (let key of Reflect.ownKeys(obj)) {
+            for (const key of Reflect.ownKeys(obj)) {
               // TODO: Optionaly permit setting non-existant keys.
               // Could be used to auto-build settings ui
               // Or could be used for private/non-ui keys
               if (typeof private_object.children[key] === 'object') {
-                accessors[key]=obj[key];
+                accessors[key] = obj[key]
               }
             }
           }
           if (allow_autosave) {
-            autosave_method();
+            autosave_method()
           }
         }
         // FIXME block adding new keys to value
@@ -453,228 +453,229 @@ class SettingsUI {
           children: {
             get() {
               // return a copy of children, so we dont accidently try to assign new children..
-              let locked_children={};
-              Object.assign(locked_children,private_object.children);
-              Object.freeze(locked_children);
-              return locked_children;
-            },
-          },
-          key: {
+              const locked_children = {}
+              Object.assign(locked_children, private_object.children)
+              Object.freeze(locked_children)
+              return locked_children
+            }
+          }
+          , key: {
             get() {
-              return key;
-            },
-          },
-          value: {
+              return key
+            }
+          }
+          , value: {
             get() {
-              return value;
-            },
-            set(val) {
-              set_value_common(stree.value, val);
-              update_ui_callback(val);
-              return value;
-            },
-            enumerable: true,
-          },
+              return value
+            }
+            , set(val) {
+              set_value_common(stree.value, val)
+              update_ui_callback(val)
+              return value
+            }
+            , enumerable: true
+          }
           // all savables, even ones that save in a diffrent location
-          all_savable: {
+          , all_savable: {
             get() {
               if (is_leaf) {
-                return value;
+                return value
               }
-              let obj = {};
-              for (let [key,child] of Object.entries(private_object.children)) {
-                obj[key]=child.all_savable;
+              const obj = {}
+              for (const [key, child] of Object.entries(private_object.children)) {
+                obj[key] = child.all_savable
               }
-              return obj;
-            },
+              return obj
+            }
             // TODO Throw error on attempt to set to savable
-          },
+          }
           // a savable with only keys set to be stored in the same save_location
-          own_savable: {
+          , own_savable: {
             get() {
               if (is_leaf) {
-                return value;
+                return value
               }
-              let obj = {};
-              for (let [key,child] of Object.entries(private_object.children)) {
+              const obj = {}
+              for (const [key, child] of Object.entries(private_object.children)) {
                 // FIXME ugly patch to detect same save methods
-                dbg(`Got key <${key}> with SettingsTree` );
-                dbg (child);
+                dbg(`Got key <${key}> with SettingsTree`)
+                dbg(child)
                 if (child.is_same_method(our_methods.save_method, 'save_method')) {
-                  obj[key]=child.own_savable;
+                  obj[key] = child.own_savable
                 }
               }
-              return obj;
-            },
+              return obj
+            }
             // TODO Throw error on attempt to set to savable
-          },
+          }
           // NOTE quick access method for all_savable.
           // can't justify adding it.
           // Too ambiguous.
-          /*savable: {
+          /* savable: {
             get() { return stree.all_savable; },
-          },*/
-        });
+          }, */
+        })
         // Similar to this.value, but for the UI.
         // Not added to settings tree, passed directly to ui for privacy.
-        let ui_accessor={
-          children_accessors:{},
-        };
-        Object.defineProperties(ui_accessor,{
+        const ui_accessor = {
+          children_accessors: {}
+        }
+        Object.defineProperties(ui_accessor, {
           value: {
             get() {
               if (is_leaf) {
-                return value;
+                return value
               }
-              else {
-                return ui_accessor.children_accessors;
-              }
-            },
-            set(val) {
-              set_value_common(ui_accessor.children_accessors,val);
-              onchange(val);
-              return value;
-            },
+
+              return ui_accessor.children_accessors
+            }
+            , set(val) {
+              set_value_common(ui_accessor.children_accessors, val)
+              onchange(val)
+              return value
+            }
           }
-        });
-        stree.update_ui_callback=update_ui_callback;
+        })
+        stree.update_ui_callback = update_ui_callback
         if (!is_leaf) {
           stree.createBranch = (args) => {
-            let [childTree, child_ui_accessor] = new SettingsTree({
-              defer:our_methods,
-              ...args,
-            });
-            private_object.children[childTree.key] = childTree;
-            let desc = Reflect.getOwnPropertyDescriptor(childTree,'value');
-            Object.defineProperty(stree.value,childTree.key,desc);
-            let ui_desc = Reflect.getOwnPropertyDescriptor(child_ui_accessor,'value');
-            Object.defineProperty(ui_accessor.value,childTree.key,ui_desc);
-            return [childTree, child_ui_accessor];
-          };
+            const [childTree, child_ui_accessor] = new SettingsTree({
+              defer: our_methods
+              , ...args
+            })
+            private_object.children[childTree.key] = childTree
+            const desc = Reflect.getOwnPropertyDescriptor(childTree, 'value')
+            Object.defineProperty(stree.value, childTree.key, desc)
+            const ui_desc = Reflect.getOwnPropertyDescriptor(child_ui_accessor, 'value')
+            Object.defineProperty(ui_accessor.value, childTree.key, ui_desc)
+            return [childTree, child_ui_accessor]
+          }
           stree.createLeaf = (args) => {
-            let [childTree, child_ui_accessor] = new SettingsTree({
+            const [childTree, child_ui_accessor] = new SettingsTree({
               // Defaults
-              defer:our_methods,
-              ...args,
+              defer: our_methods
+              , ...args
               // Overrides
-              is_leaf:true,
-            });
-            private_object.children[childTree.key] = childTree;
-            let desc = Reflect.getOwnPropertyDescriptor(childTree,'value');
-            Object.defineProperty(stree.value,childTree.key,desc);
-            let ui_desc = Reflect.getOwnPropertyDescriptor(child_ui_accessor,'value');
-            Object.defineProperty(ui_accessor.value,childTree.key,ui_desc);
-            return [childTree, child_ui_accessor];
-          };
+              , is_leaf: true
+            })
+            private_object.children[childTree.key] = childTree
+            const desc = Reflect.getOwnPropertyDescriptor(childTree, 'value')
+            Object.defineProperty(stree.value, childTree.key, desc)
+            const ui_desc = Reflect.getOwnPropertyDescriptor(child_ui_accessor, 'value')
+            Object.defineProperty(ui_accessor.value, childTree.key, ui_desc)
+            return [childTree, child_ui_accessor]
+          }
         }
-        Object.seal(stree);
-        Object.seal(ui_accessor);
-        return [stree,ui_accessor];
+        Object.seal(stree)
+        Object.seal(ui_accessor)
+        return [stree, ui_accessor]
       }
 
 
       function OptionItem({
-        key=throwMissingParam("new OptionItem","key",`'a unique key for this select group'`),
+        key = throwMissingParam('new OptionItem', 'key', '\'a unique key for this select group\''),
         icon,
-        title=key,
+        title = key,
         title_text,
-        value=key,
+        value = key,
         settings_tree_config: st_args,
-        onselect = () => {return null;},
-        ondeselect = () => {return null;},
+        onselect = () => null,
+        ondeselect = () => null,
         parrent_settings_tree,
         select_id,
-        selected=false
+        selected = false
       }) {
-        let item = this;
-        if (!( item instanceof OptionItem) ) {
-            return new OptionItem(...arguments);
+        const item = this
+        if (!(item instanceof OptionItem)) {
+          return new OptionItem(...arguments)
         }
-        item.key=key;
-        let [settings_tree,ui_accessor] = parrent_settings_tree.createLeaf({
-          key:key,
-          initial_value:false,
-          ...st_args,
-          update_ui_callback: (new_value) => {
-            item.elm.selected=new_value;
+        item.key = key
+        const [settings_tree, ui_accessor] = parrent_settings_tree.createLeaf({
+          key
+          , initial_value: false
+          , ...st_args
+          , update_ui_callback: (new_value) => {
+            item.elm.selected = new_value
             // update select picker text
-            $('#' + select_id ).selectpicker('refresh');
-            return new_value;
-          },
-        });
-        item.settings_tree=settings_tree;
+            $(`#${select_id}`).selectpicker('refresh')
+            return new_value
+          }
+        })
+        item.settings_tree = settings_tree
 
         // TODO: Potentialy load settings here.
-        let ui = htmlToElement(`
-          <li class="${selected ? "selected" : ""}">
-          ${icon ? `<img class="" src="${icon}"/>` : "" }
+        const ui = htmlToElement(`
+          <li class="${selected ? 'selected' : ''}">
+          ${icon ? `<img class="" src="${icon}"/>` : ''}
           <span class="">${title}</span>
           </li>
-        `);
-        item.elm=htmlToElement(`
-          <option  ${selected ? "selected" : "" } value="${value}"/>${title}</option>
-        `);
+        `)
+        item.elm = htmlToElement(`
+          <option  ${selected ? 'selected' : ''} value="${value}"/>${title}</option>
+        `)
         // The value in select, usualy a unique index related to the items position in select.
         // Does NOT normaly change
-        Object.defineProperties(item,{
-          'select_value': {
-            get() { return item.elm.value; },
-          },
-        });
+        Object.defineProperties(item, {
+          select_value: {
+            get() {
+              return item.elm.value
+            }
+          }
+        })
 
-        item.elm.dataset.contents = ui.innerHTML;
-        item.elm.dataset.option_key = key;
+        item.elm.dataset.contents = ui.innerHTML
+        item.elm.dataset.option_key = key
 
         // callbacks not handled by settings tree
-        item.select_callback   = (new_value,old_value) => {
-          onselect(item,new_value,old_value);
-        };
-        item.deselect_callback = (new_value,old_value) => {
-          ondeselect(item,new_value,old_value);
-        };
-        item.change_callback = (new_value,old_value) => {
-          ui_accessor.value=new_value;
-        };
-        return item;
-      };
+        item.select_callback = (new_value, old_value) => {
+          onselect(item, new_value, old_value)
+        }
+        item.deselect_callback = (new_value, old_value) => {
+          ondeselect(item, new_value, old_value)
+        }
+        item.change_callback = (new_value, old_value) => {
+          ui_accessor.value = new_value
+        }
+        return item
+      }
 
       function Select({
-        key=throwMissingParam("new Select","key",`'a unique key for settings group <${settings.group_name}>'`),
-        container=throwMissingParam("new Select","container",`'the container element for <${settings.group_name}>'`),
+        key = throwMissingParam('new Select', 'key', `'a unique key for settings group <${settings.group_name}>'`),
+        container = throwMissingParam('new Select', 'container', `'the container element for <${settings.group_name}>'`),
         title = key,
         title_text,
         settings_tree_config: st_args,
-        multiselect=false,
-        parrent_settings_tree=throwMissingParam("new Select","parrent_settings_tree",`Container's SettingsTree instance`),
-        options=[],
+        multiselect = false,
+        parrent_settings_tree = throwMissingParam('new Select', 'parrent_settings_tree', 'Container\'s SettingsTree instance'),
+        options = []
       }) {
-        let setting = this;
-        if (!( setting instanceof Select) ) {
-            return new Select(...arguments);
+        const setting = this
+        if (!(setting instanceof Select)) {
+          return new Select(...arguments)
         }
-        setting.key=key;
-        let [settings_tree,ui_accessor] = parrent_settings_tree.createBranch({
-          key:key,
-          ...st_args,
-        });
-        setting.settings_tree=settings_tree;
+        setting.key = key
+        const [settings_tree, ui_accessor] = parrent_settings_tree.createBranch({
+          key
+          , ...st_args
+        })
+        setting.settings_tree = settings_tree
 
         setting.elm = htmlToElement(`<div class="form-group row">
     			<label class="col-lg-3 col-form-label-modal">${title}:</label>
     			<div class="col-lg-9">
-              <select ${ multiselect ? "multiple" : ""} class="form-control selectpicker show-tick" data-actions-box="true" data-selected-text-format="count > 5" data-size="10" title="${title}">
+              <select ${multiselect ? 'multiple' : ''} class="form-control selectpicker show-tick" data-actions-box="true" data-selected-text-format="count > 5" data-size="10" title="${title}">
               </select>
           </div>
-        </div>`);
-        setting.label=setting.elm.children[0];
-        setting.select=setting.elm.children[1].children[0];
-        let id=createSettingID();
-        setting.id=id;
-        setting.select.id=id;
-        container.appendChild(setting.elm);
+        </div>`)
+        setting.label = setting.elm.children[0]
+        setting.select = setting.elm.children[1].children[0]
+        const id = createSettingID()
+        setting.id = id
+        setting.select.id = id
+        container.appendChild(setting.elm)
         //
-        $('#' + id ).on("changed.bs.select",function (e,clickedIndex,newValue,oldValue) {
-          /*dbg("CHANGE");
+        $(`#${id}`).on('changed.bs.select', (e, clickedIndex, newValue, oldValue) => {
+          /* dbg("CHANGE");
           dbg(e);
           dbg("idx");
           dbg(clickedIndex);
@@ -684,59 +685,53 @@ class SettingsUI {
           dbg(oldValue);
           */
           // New value is bool related to the changed option . oldValue is array of previously selected options 'value' attribute
-          if (typeof clickedIndex === "number") {
-            //setting.select.children[clickedIndex].change_callback(newValue,oldValue);
-            let option_key=setting.select.children[clickedIndex].dataset.option_key;
-            ui_accessor.value[option_key]=newValue;
-            //setting.options[option_key].change_callback(newValue);
+          if (typeof clickedIndex === 'number') {
+            // setting.select.children[clickedIndex].change_callback(newValue,oldValue);
+            const option_key = setting.select.children[clickedIndex].dataset.option_key
+            ui_accessor.value[option_key] = newValue
+            // setting.options[option_key].change_callback(newValue);
             if (newValue) {
-              setting.options[option_key].select_callback(newValue,oldValue);
+              setting.options[option_key].select_callback(newValue, oldValue)
             }
             else {
-              setting.options[option_key].deselect_callback(newValue,oldValue);
+              setting.options[option_key].deselect_callback(newValue, oldValue)
             }
-            //onchange(e,setting,clickedIndex,newValue,oldValue);
-            //ui_accessor.value
+            // onchange(e,setting,clickedIndex,newValue,oldValue);
+            // ui_accessor.value
           }
           else {
-            let n = Object.values(setting.select.selectedOptions).map( (o) => {
-              return o.dataset.option_key;
-            } );
-            /*let o = Object.values(oldValue).map( (o) => {
+            const n = Object.values(setting.select.selectedOptions).map(o => o.dataset.option_key)
+            /* let o = Object.values(oldValue).map( (o) => {
               dbg(o);
               return setting.select.children[o].dataset.option_key;
-            } );*/
-            let o = oldValue;
+            } ); */
+            const o = oldValue
             // find diffrences between selected indexes
-            n.filter( (k) => {
-              return o.indexOf(k) < 0;
-            }).concat(o.filter( (k) => {
-              return n.indexOf(k) < 0;
-            })).forEach((changed_key) => {
+            n.filter(k => o.indexOf(k) < 0).concat(o.filter(k => n.indexOf(k) < 0)).forEach((changed_key) => {
               // and then set them to their boolean value.
-              ui_accessor.value[changed_key] = n.indexOf(changed_key) >= 0;
-            });
+              ui_accessor.value[changed_key] = n.indexOf(changed_key) >= 0
+            })
           }
-          dbg(setting.select);
-        });
+          dbg(setting.select)
+        })
         // Contains OptionItem instances
-        setting.options={};
+        setting.options = {}
         // Contains OptionItem selected state (getters/setters)
 
-        let last_used_value = -1;
+        let last_used_value = -1
         function nextOptionValueToUse() {
-          return ++last_used_value;
+          return ++last_used_value
         }
         setting.addExistingOption = (option) => {
-          throwOnBadArg(setting.options[option.key] != null,"Select.addExistingOption(new Option())","key", `a unique key for select group <${setting.key}>`,option.key);
-          //if (setting.options[option.select_value] != null) {
-            //dbg("WARNING! Option value reused within Select! Remoing Existing!");
-            //setting.select.removeChild(setting.options[option.select_value]);
-          //}
-          setting.options[option.key] = option;
-          setting.select.appendChild(option.elm);
-          last_used_value=option.select_value;
-        };
+          throwOnBadArg(setting.options[option.key] != null, 'Select.addExistingOption(new Option())', 'key', `a unique key for select group <${setting.key}>`, option.key)
+          // if (setting.options[option.select_value] != null) {
+          // dbg("WARNING! Option value reused within Select! Remoing Existing!");
+          // setting.select.removeChild(setting.options[option.select_value]);
+          // }
+          setting.options[option.key] = option
+          setting.select.appendChild(option.elm)
+          last_used_value = option.select_value
+        }
 
         /**
         * Adds an option to a select.
@@ -752,46 +747,46 @@ class SettingsUI {
         */
         setting.addOption = (args) => {
           setting.addExistingOption(new OptionItem({
-            //value: nextOptionValueToUse(),
-            //value: args.key,
-            select_id:id,
-            parrent_settings_tree:settings_tree,
-            ...args
-          }));
-        };
-
-        for (let [idx,option] of options.entries()) {
-          setting.addExistingOption(option);
+            // value: nextOptionValueToUse(),
+            // value: args.key,
+            select_id: id
+            , parrent_settings_tree: settings_tree
+            , ...args
+          }))
         }
-        return setting;
-      };
-      settings.subgroup_objects={};
-      settings.subgroup={};
-      let [settings_tree] = new SettingsTree({
-        key:group_name,
-        ...settings_ui_instance_st_args,
-      });
 
-      settings.value=settings_tree.value;
+        for (const [idx, option] of options.entries()) {
+          setting.addExistingOption(option)
+        }
+        return setting
+      }
+      settings.subgroup_objects = {}
+      settings.subgroup = {}
+      const [settings_tree] = new SettingsTree({
+        key: group_name
+        , ...settings_ui_instance_st_args
+      })
+
+      settings.value = settings_tree.value
       function addSetting(setting) {
-        throwOnBadArg(settings.subgroup[setting.key] != null,"Select.addSetting(new Setting)","key",'"UniqueSettingKey"',setting.key);
-        settings.subgroup_objects[setting.key]=setting;
-        //if (setting.options[option.select_value] != null) {
-          //dbg("WARNING! Option value reused within Select! Remoing Existing!");
-          //setting.select.removeChild(setting.options[option.select_value]);
-        //}
+        throwOnBadArg(settings.subgroup[setting.key] != null, 'Select.addSetting(new Setting)', 'key', '"UniqueSettingKey"', setting.key)
+        settings.subgroup_objects[setting.key] = setting
+        // if (setting.options[option.select_value] != null) {
+        // dbg("WARNING! Option value reused within Select! Remoing Existing!");
+        // setting.select.removeChild(setting.options[option.select_value]);
+        // }
       }
 
       settings.addMultiselect = (args) => {
-        let setting = new Select({
-          multiselect:true,
-          container:container,
-          parrent_settings_tree:settings_tree,
-          ...args
-        });
-        addSetting(setting);
-        return setting;
-      };
+        const setting = new Select({
+          multiselect: true
+          , container
+          , parrent_settings_tree: settings_tree
+          , ...args
+        })
+        addSetting(setting)
+        return setting
+      }
 
       /**
       * Adds an option to a select.
@@ -803,159 +798,159 @@ class SettingsUI {
       * @returns {Select} Select setting instance.
       */
       settings.addSelect = (args) => {
-        let setting = new Select({
-          container:container,
-          parrent_settings_tree:settings_tree,
-          ...args
-        });
-        addSetting(setting);
-        return setting;
-      };
-      settings.settings_tree=settings_tree;
-      return settings;
+        const setting = new Select({
+          container
+          , parrent_settings_tree: settings_tree
+          , ...args
+        })
+        addSetting(setting)
+        return setting
+      }
+      settings.settings_tree = settings_tree
+      return settings
     }
     // END SelectUIInstance
     // Actual constructor below
-    if (! SettingsUI.instance ) {
-      SettingsUI.instance = this;
-      SettingsUI.instance.groups=[];
-      SettingsUI.tab_builder = new SettingsTabBuilder();
+    if (!SettingsUI.instance) {
+      SettingsUI.instance = this
+      SettingsUI.instance.groups = []
+      SettingsUI.tab_builder = new SettingsTabBuilder()
     }
     // Create the group if it doesnt exist
     if (!SettingsUI.instance.groups[group_name]) {
-      let group_id=createID(group_name + '-tab-');
-      let container = SettingsUI.tab_builder.addGroup({title:group_name, id:group_id});
-      SettingsUI.instance.groups[group_name]=new SettingsUIInstance({
-        group_name:group_name,
-        container:container,
-        settings_tree_config:settings_ui_st_args,
-      });
+      const group_id = createID(`${group_name}-tab-`)
+      const container = SettingsUI.tab_builder.addGroup({ title: group_name, id: group_id })
+      SettingsUI.instance.groups[group_name] = new SettingsUIInstance({
+        group_name
+        , container
+        , settings_tree_config: settings_ui_st_args
+      })
     }
     // Return the requested group instance.
-    let settings = SettingsUI.instance.groups[group_name];
-    return settings;
+    const settings = SettingsUI.instance.groups[group_name]
+    return settings
   }
 }
 
 // Simple usage example. Also used for testing functionality.
 function example() {
   // Create a new setting tab with the label <Advanced Filter>.
-  let settings_ui = new SettingsUI({
-    group_name:"Advanced Filter",
-    settings_tree_config: { save_location:"FilterSettings" },
-  });
+  const settings_ui = new SettingsUI({
+    group_name: 'Advanced Filter'
+    , settings_tree_config: { save_location: 'FilterSettings' }
+  })
   // Create a new multiselect with the label <NSFW tags>, accessible from the settings tree via the key <nsfw_tags>.
-  let select_nsfw = settings_ui.addMultiselect({key:"nsfw_tags", title:"NSFW tags"});
+  const select_nsfw = settings_ui.addMultiselect({ key: 'nsfw_tags', title: 'NSFW tags' })
   // Add an option labeled <Echi> to the multiselect. Accessible from the settings tree via the <echi> key.
-  select_nsfw.addOption({title: "Echi", key:"echi", settings_tree_config: { autosave:true }, });
+  select_nsfw.addOption({ title: 'Echi', key: 'echi', settings_tree_config: { autosave: true } })
   // title is optional. Defaults to key value.
   // Add an option labeled <Smut> to the multiselect. Accessible from the settings tree via the <Smut> key.
   select_nsfw.addOption({
-    key:"Smut",
-    settings_tree_config: { save_location:"SmutIsSpecial", }, // NOTE, autosave is off
-  });
+    key: 'Smut'
+    , settings_tree_config: { save_location: 'SmutIsSpecial' } // NOTE, autosave is off
+  })
   // Optional callbacks for select, deselct, and toggle.
   select_nsfw.addOption({
-    key:"NSFW",
-    settings_tree_config: {
-      onchange: (item,value) => {
-        dbg(`Doing something everytime NSFW value changes.`);
-        dbg(`In this case, printg the new value <${value}> on the console`);
-      },
-    },
-    onselect: (item,value) => { dbg('We could also listen to only select events'); },
-    ondeselect: (item,value) => { dbg('We could also listen to only deselect events'); },
-  });
+    key: 'NSFW'
+    , settings_tree_config: {
+      onchange: (item, value) => {
+        dbg('Doing something everytime NSFW value changes.')
+        dbg(`In this case, printg the new value <${value}> on the console`)
+      }
+    }
+    , onselect: (item, value) => {
+      dbg('We could also listen to only select events')
+    }
+    , ondeselect: (item, value) => {
+      dbg('We could also listen to only deselect events')
+    }
+  })
   // Create another multiselect
-  let block_mulsel = settings_ui.addMultiselect({key:"blocked", title:"Blacklist", autosave:true});
+  const block_mulsel = settings_ui.addMultiselect({ key: 'blocked', title: 'Blacklist', autosave: true })
   // Create a bunch of options with the same callbacks.
-  for (let [idx,name] of ["yaoi", "sports", "mecha","no chapters"].entries()) {
-    let item = block_mulsel.addOption({
-      title: name,
-      key: name,
-      settings_tree_config: {
+  for (const [idx, name] of ['yaoi', 'sports', 'mecha', 'no chapters'].entries()) {
+    const item = block_mulsel.addOption({
+      title: name
+      , key: name
+      , settings_tree_config: {
         onchange: (value) => {
           // Do something
-          dbg(`Changed <${name}> to <${value}>`);
-          dbg(value);
-        },
-      },
-      onselect: (item,value) => {
-        // Do something
-        dbg(`Selected <${name}>`);
-        dbg(value);
-      },
-      ondeselect: (item,value) => {
-        // Do something
-        dbg(`Deselected <${name}>`);
-        dbg(value);
+          dbg(`Changed <${name}> to <${value}>`)
+          dbg(value)
+        }
       }
-    });
+      , onselect: (item, value) => {
+        // Do something
+        dbg(`Selected <${name}>`)
+        dbg(value)
+      }
+      , ondeselect: (item, value) => {
+        // Do something
+        dbg(`Deselected <${name}>`)
+        dbg(value)
+      }
+    })
   }
   // Great! Now everything was just built into our settings tree.
   // Now we just need a refrence to the value getter, which is stored in our
   // setting tree
-  let settings = settings_ui.settings_tree.value;
+  const settings = settings_ui.settings_tree.value
   // settings now refers to our settings getter. You can now access or change
   // the current state by changing the relavent key in settings.
 
   // Check if yaoi is blocked.
-  dbg('Check if yaoi is blocked');
-  dbg(settings_ui.settings_tree.all_savable);
-  dbg(settings.blocked.yaoi);
+  dbg('Check if yaoi is blocked')
+  dbg(settings_ui.settings_tree.all_savable)
+  dbg(settings.blocked.yaoi)
   // Change value from outside ui. UI will update to reflect the new value.
   // Block yaoi.
-  dbg('Blocked yaoi. Checking new value');
-  settings.blocked.yaoi=true;
-  dbg(settings.blocked.yaoi);
+  dbg('Blocked yaoi. Checking new value')
+  settings.blocked.yaoi = true
+  dbg(settings.blocked.yaoi)
 
   // Get value from Blacklist every 5 seconds.
   // Prove that all our easy methods for accessing/setting state stay in sync with the ui.
   // Try changing the value from the ui and see what we print.
 
   // Export settings_ui for playing with in the console.
-  settings_ui.list_all_values = () => {
-    return new Promise((r,e) => {
-      let gm_values = GM_listValues();
-      let length =  gm_values.length;
-      for (let v of Object.values(gm_values)) {
-      	console.log(`${v} = ${GM_getValue(v,undefined)}`);  //+ ' = ' +  GM_getValue(arry[p]) );
-      }
-    });
-  };
+  settings_ui.list_all_values = () => new Promise((r, e) => {
+    const gm_values = GM_listValues()
+    const length = gm_values.length
+    for (const v of Object.values(gm_values)) {
+      	console.log(`${v} = ${GM_getValue(v, undefined)}`) // + ' = ' +  GM_getValue(arry[p]) );
+    }
+  })
   setInterval(() => {
     // these should all print the same thing
-    dbg(settings_ui.settings_tree.value.blocked.yaoi);
+    dbg(settings_ui.settings_tree.value.blocked.yaoi)
     // note value is a refrence to settings_tree.value
-    //dbg(settings_ui.value.blocked.yaoi);
-    dbg(settings.blocked.yaoi);
-    dbg(block_mulsel.settings_tree.value.yaoi);
-    settings_ui.list_all_values();
-    //dbg(block_mulsel.value.yaoi);
-  },5000);
+    // dbg(settings_ui.value.blocked.yaoi);
+    dbg(settings.blocked.yaoi)
+    dbg(block_mulsel.settings_tree.value.yaoi)
+    settings_ui.list_all_values()
+    // dbg(block_mulsel.value.yaoi);
+  }, 5000)
 
   // NOTE:
   // SettingsTree.value reutrns getters/setters tree.
   // Refrences can be made to any non-leaf node without becoming detatched from
   // the SettingsTree.
   // These of these are bound to the SettingsTree
-  let st_a = settings_ui.settings_tree.value.blocked;
-  let st_b = settings.blocked;
-  let st_c = st_b;
+  const st_a = settings_ui.settings_tree.value.blocked
+  const st_b = settings.blocked
+  const st_c = st_b
 
   // Leaf nodes return actual value, not accessors. So refrences to them will
   // not be bound to the setting tree.
   // In our example, All of these would be leaf nodes.
   // As such, assignments to the new leaf_* variables will not affect the SettingsTree.
-  let leaf_a = settings_ui.settings_tree.value.blocked.sports;
-  let leaf_b = settings.blocked.sports;
-  let leaf_c = st_b.sports;
+  const leaf_a = settings_ui.settings_tree.value.blocked.sports
+  const leaf_b = settings.blocked.sports
+  const leaf_c = st_b.sports
   // This is only usefull for caching the value of the leaf to ensure that changes to it
   // do not affect an operation. If you don't need to cache the value
   // I recomend to always refrence the leaf through the parent tree.
   // This will help avoid
-
-
 
 
   // settings_tree.value is a tree of getters/setters.
@@ -964,38 +959,38 @@ function example() {
   // savable is usefull for encoding an entire tree or subtree to JSON, or
   // printing a tree to screen.
   // As a demo, first lets look at what value gives you on a tree
-  dbg("settings_tree.value is nothing but getters/setters");
-  dbg(settings_ui.settings_tree.value);
+  dbg('settings_tree.value is nothing but getters/setters')
+  dbg(settings_ui.settings_tree.value)
   // Next lets print the savable.
-  dbg("settings_tree.all_savable accesses value, calling the getters and yielding a snapshot of the current value.");
-  dbg(settings_ui.settings_tree.all_savable);
-  dbg("all_savable returns a snapshot of all children, regardless of their save method.");
-  dbg(select_nsfw.settings_tree.all_savable);
-  dbg("own_savable returns a snapshot containing only children with the same save method.");
-  dbg(select_nsfw.settings_tree.own_savable);
+  dbg('settings_tree.all_savable accesses value, calling the getters and yielding a snapshot of the current value.')
+  dbg(settings_ui.settings_tree.all_savable)
+  dbg('all_savable returns a snapshot of all children, regardless of their save method.')
+  dbg(select_nsfw.settings_tree.all_savable)
+  dbg('own_savable returns a snapshot containing only children with the same save method.')
+  dbg(select_nsfw.settings_tree.own_savable)
   // You can also assign to value. If you assigning an object to value
   // we will descend the object and setting tree by the shared key, when we
   // encounter a leaf node, we will assign it the object/value that shares its
   // key instead of descending. Any keys in object that do not have a
   // corasponging setting tree value will be skipped.
-  settings_ui.value={blocked:{sports:true}};
+  settings_ui.value = { blocked: { sports: true } }
 
   // Since savable is a snapshot, getting the value and then asigning to the
   // keys of the result will not affect the ui or setting tree.
   // DO NOT TRY THIS
-  dbg('Savable getter returns a snapshot. Assignments to the snapshot can NOT be used to change the settings_tree value');
+  dbg('Savable getter returns a snapshot. Assignments to the snapshot can NOT be used to change the settings_tree value')
   // DO NOT TRY THIS.
-  let savable=settings_ui.settings_tree.all_savable;
+  let savable = settings_ui.settings_tree.all_savable
   // DO NOT TRY THIS. Sports will not update on the UI nor settings tree. Replaces with value instead
-  savable.blocked.sports=true;
+  savable.blocked.sports = true
   // DO NOT TRY THIS. Sports will not update on the UI nor settings tree. Replaces with value instead
-  savable={blocked:{sports:true}};
-  dbg('blocked.sports was not updated in settings tree, because assignment occured on a snapshot object, completly detatched from the settings tree.');
+  savable = { blocked: { sports: true } }
+  dbg('blocked.sports was not updated in settings tree, because assignment occured on a snapshot object, completly detatched from the settings tree.')
   dbg(settings_ui.settings_tree.all_savable)
   // TL;DR settings_tree.value returns getters/setters attatched to the tree.
   // savable returns an object with a snapshot of the value, but completly detatched from the tree.
 
-  unsafeWindow.settings_ui = settings_ui;
+  unsafeWindow.settings_ui = settings_ui
 }
 
 /*

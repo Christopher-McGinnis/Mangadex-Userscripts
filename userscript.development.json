@@ -7,7 +7,8 @@
     "bbcodeify-links.user.js":[],
     "follow-reader.user.js":[],
     "bbcode-autocomplete.user.js":[],
-    "settings-ui.js":[]
+    "settings-ui.js":[],
+    "test.js":[]
   },
   "libraries": [
     {
