@@ -12,10 +12,10 @@
 // @require  https://cdn.rawgit.com/ichord/At.js/1b7a52011ec2571f73385d0c0d81a61003142050/dist/js/jquery.atwho.js
 // @require  https://cdn.rawgit.com/Brandon-Beck/Mangadex-Userscripts/ecfc52fda045b5262562cf6a25423603f1ac5a99/common.js
 // @require  https://cdn.rawgit.com/Brandon-Beck/Mangadex-Userscripts/ecfc52fda045b5262562cf6a25423603f1ac5a99/uncommon.js
-// @require  https://cdn.rawgit.com/Brandon-Beck/Mangadex-Userscripts/ecfc52fda045b5262562cf6a25423603f1ac5a99/settings-ui.js
+// @require  https://cdn.rawgit.com/Brandon-Beck/Mangadex-Userscripts/9d40d6365a9e233e987ce2577c0322072b6b6a1f/settings-ui.js
 // @match    https://mangadex.org/*
 // @author   Brandon Beck
-// @icon     https://mangadex.org/images/misc/default_brand.png?1
+// @icon     https://mangadex.org/images/misc/default_brand.png
 // @license  MIT
 // ==/UserScript==
 
@@ -221,7 +221,7 @@ function MangaList({ list = {} }) {
   return mangaList
 }
 
-function UserHistory({ read_posts_history = [] ,user_id ,username } = {}) {
+function UserHistory({ read_posts_history = [] ,user_id ,username ,historySize = 200 } = {}) {
   const uhist = this
   if (!(uhist instanceof UserHistory)) {
     return new UserHistory()
@@ -246,7 +246,7 @@ function UserHistory({ read_posts_history = [] ,user_id ,username } = {}) {
   }
   this.user_id = user_id
   this.username = '' // get from userid
-  this.max_size = 200
+  this.max_size = historySize
   this.history = read_posts_history
 
   this.push = (post) => {
@@ -348,23 +348,22 @@ function UserHistory({ read_posts_history = [] ,user_id ,username } = {}) {
   }
   return this
 }
+
 function getCurrentUserID() {
   xp.new('id("navbarSupportedContent")').with(xp.new().contains('@class' ,'navbarSupportedContent'))
   const current_user_id = xp.new('id("navbarSupportedContent")//a[contains(@href,"/user/")]').getElement().href.match(/\/user\/(\d+)\//)[1]
   return parseInt(current_user_id)
 }
 
-
-
 function initSettingsDialog(loaded_settings) {
-  const settings_ui = new SettingsUI({
-    group_name: 'Auto-Complete'
-    ,settings_tree_config: {
-      save_location: '' ,autosave: true
+  const settingsUi = new SettingsUI({
+    groupName: 'Auto-Complete'
+    ,settingsTreeConfig: {
+      saveLocation: 'settings' ,autosave: true
     }
   })
-  const autocompleteTypes = settings_ui.addMultiselect({
-    title: 'Types' ,key: 'autocomplete_types'
+  const autocompleteTypes = settingsUi.addMultiselect({
+    title: 'Types' ,key: 'autocompleteTypes'
   })
   autocompleteTypes.addOption({
     key: 'usernames' ,title: '@Username'
@@ -372,19 +371,38 @@ function initSettingsDialog(loaded_settings) {
   autocompleteTypes.addOption({
     key: 'titles' ,title: ':Title'
   })
+  const userHistLimit = settingsUi.addTextbox({
+    key: 'max_post_history'
+    ,title: 'User History Size'
+    ,value: 200
+    ,min: 20
+    ,max: 2000
+    ,titleText: 'Maximum number of user posts we should remember. Used for @mention autocompletion'
+    ,type: 'number'
+  })
+  const titleHistLimit = settingsUi.addTextbox({
+    key: 'max_title_history'
+    ,title: 'Title History Size'
+    ,value: 10
+    ,min: 0
+    ,max: 2000
+    ,titleText: 'Maximum number of Non-Followed titles we should remember. Used for :Title autocompletion. Added to history when you visit the title page.'
+    ,type: 'number'
+  })
   // Load our saved settings object into the ui
-  settings_ui.settings_tree.load_all()
+  // settingsUi.settingsTree.load_all()
+  settingsUi.settingsTree.value = loaded_settings
   // return new settings object which is bound to the UI.
-  const settings = settings_ui.settings_tree.values
+  const settings = settingsUi.settingsTree.value
   return settings
 }
 function main({ read_posts_history ,settings: loaded_settings }) {
-  /* WIP
   const settings = initSettingsDialog(loaded_settings)
-  */
   const user_id = getCurrentUserID()
   const uhist = new UserHistory({
-    read_posts_history ,user_id
+    read_posts_history
+    ,user_id
+    ,historySize: settings.max_post_history
   })
   unsafeWindow.uhist = uhist
   // Add current page's posts to history.
@@ -406,27 +424,17 @@ function main({ read_posts_history ,settings: loaded_settings }) {
       }
     }
     setUserValues({ read_posts_history: uhist.history })
-    /* xp.new('//textarea[@id="text"]').forEachElement( (textarea) => {
-      textarea.addEventListener("input",() => onTextareaInput({
-        textarea:textarea,
-        uhist:uhist,
-        thread_id:thread_id,
-      } ) );
-      textarea.addEventListener("keydown", onTextareaKeyDown);
-    }); */
+
     // NOTE there can be more than one textarea. but they all use the same id :O
 
     function autoComplete(partial_name ,render_view) {
-      // console.log(partial_name);
       const r = uhist.autoComplete(partial_name ,{
         thread_id ,case_sensitive: false ,fuzzy: true
       })
-      // console.log(r);
-      // console.log(render_view);
       render_view(r)
     }
     function formatDisplayItem(item) {
-      return `<li class="dropdown-item border-0" style=""><div class="d-flex justify-content-between align-items-center px-2" style="height:50px;" title="${item.excerpt}">
+      return `<li class="dropdown-item px-0 " style=""><div class="d-flex justify-content-between align-items-center px-2" style="height:50px;" title="${item.excerpt}">
         <div class="h-100">
         <span class="">${item.did_mention ? '@' : ''}</span>
         <span class="${item.thread_id === thread_id ? 'far fa-comments' : ''}"></span>
