@@ -40,6 +40,21 @@ function createToolTip({ title ,text }) {
     ,text_container: tooltipText
   }
 }
+
+class SettingsUIValidationError extends Error {
+  constructor({ feedback } ,...params) {
+    // Pass remaining arguments (including vendor specific ones) to parent constructor
+    if (params.length === 0) super(feedback)
+    else super(...params)
+    // Maintains proper stack trace for where our error was thrown (only available on V8)
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this ,SettingsUIValidationError)
+    }
+    // Custom debugging information
+    this.feedback = feedback
+  }
+}
+
 // WARNING ALL SETTING UIs MUST BE BUILT SHORTLY AFTER THE USERSCRIPT STARTS!
 // We are utilizing the site's own bootstrap jquery based select builder..
 // We are fighting a race against time to use it.
@@ -181,6 +196,7 @@ class SettingsUI {
      @type {Object}
      @property {Object} value - Setting value getter/setter chain.
      */
+
     function SettingsUIInstance({
       groupName
       ,container = throwMissingParam('new SettingsUIInstance' ,'container' ,'HTML_Node')
@@ -216,7 +232,11 @@ class SettingsUI {
       @prop {Object} obj -
       @prop {String} obj.key - Key to use for accessing this setting item in its parent's value list.
       @prop {Object} [obj.defer] - Accessor for parent SettingsTree methods. Used to inherit parrent settings when undefined for [saveLocation,saveMethod,loadMethod,autosave,autosaveDelay].
-      @prop {String} [obj.initialValue] - Initial value, does not trigger onchange/update_ui callbacks. Used by leaf nodes.
+      @prop {String} [obj.defaultValue] - Initial value, does not trigger onchange/update_ui callbacks. Used by leaf nodes.
+      @prop {Function} [obj.corrector] - Value Validationa and Correction callback. Called with the new value as the first parameter.
+      Should return a valid value based off of the passed value, or null/undefined to use default value.
+      If this throws an error, the value will not be set.
+      You may wish to throw an error catch it in your ui code to display a message to the user
       @prop {Function} [obj.onchange] - Callback for when the UI changes the value.
       @prop {Function} [obj.updateUiCallback] - Callback for when the value is changed outside the UI.
       @prop {Boolean} [obj.autosave] - Should changes to this setting's value or it's children's value cause this setting group to save? If undefined, it will defer to its parrent tree, or false if it is a root node.
@@ -226,12 +246,13 @@ class SettingsUI {
       */
       function SettingsTree({
         key = throwMissingParam('new SettingsTree' ,'key' ,'\'a unique key to access this SettingsTree from its container\'')
+        ,corrector
         ,onchange = () => null
         ,updateUiCallback = () => null
         ,defer
         ,autosave
         ,autosaveDelay
-        ,initialValue
+        ,defaultValue
         ,saveLocation
         ,saveMethod
         ,loadMethod
@@ -255,14 +276,14 @@ class SettingsUI {
           // to be overwritten with old values from before structure change,
           // and then sequentialy be saved. This IS an issue.
           // For the time being, we are safe as long as we only use one save location,
-          // or there are no parent save locations.
+          // or there are no parent save locations, or we dont change save locations.
           if (typeof saveLocation === 'string' && saveLocation.length > 0) {
             return getUserValue(saveLocation ,stree.own_savable).then((obj) => {
               stree.value = obj
               return stree.value
             })
           }
-          throw Error(`WARNING! Attempted to load SettingsTree<${key}>, but no saveLocation was set!`)
+          throw Error(`Attempted to load SettingsTree<${key}>, but no saveLocation was set!`)
 
           // FIXME Should we call onchange here? The user initiated this load, so its
           // possible for them to handle this on their own
@@ -272,16 +293,31 @@ class SettingsUI {
           if (typeof saveLocation === 'string' && saveLocation.length > 0) {
             return setUserValue(saveLocation ,stree.own_savable)
           }
-          throw Error(`WARNING! Attempted to save SettingsTree<${key}>, but no saveLocation was set!`)
+          throw Error(`Attempted to save SettingsTree<${key}>, but no saveLocation was set!`)
         }
         // Allow the child to utilize some of our functions/values when unspecified.
-        const ourMethods = {}
+
         const privateObject = {
           children: {}
           ,autosaveTimeout: undefined
           ,saveMethod
           ,loadMethod
+          ,value: isLeaf ? defaultValue : {}
         }
+        const privateMethods = {}
+
+        Object.defineProperties(privateMethods ,{
+          value: {
+            get() {
+              return privateObject.value
+            }
+            ,set(val) {
+              privateObject.value = val
+              return privateObject.value
+            }
+          }
+        })
+        const ourMethods = {}
         function getOrDefer(undeferedObject ,deferKey ,defaultValue) {
           if (undeferedObject[deferKey] != null) {
             return undeferedObject[deferKey]
@@ -423,18 +459,20 @@ class SettingsUI {
           })
         }
 
-        // Private value
-        let value
-        if (!isLeaf) {
-          value = {}
-        }
-        else if (typeof initialValue !== 'undefined') {
-          value = initialValue
-        }
         // avoid duplicating code
-        function setValueCommon(accessors ,obj ,allowAutosave = true) {
+        function setValueCommon({ accessors ,obj ,otherCallback ,myCallback ,allowAutosave = true }) {
           if (isLeaf) {
-            value = obj
+            if (typeof corrector === 'function') {
+              const correctedObj = corrector(obj)
+              if (correctedObj === obj) privateMethods.value = obj
+              else {
+                privateMethods.value = correctedObj
+                // notify the setter as well.
+                myCallback(privateMethods.value)
+              }
+            }
+            else privateMethods.value = obj
+            otherCallback(privateMethods.value)
           }
           else {
             for (const key of Reflect.ownKeys(obj)) {
@@ -468,12 +506,16 @@ class SettingsUI {
           }
           ,value: {
             get() {
-              return value
+              return privateMethods.value
             }
             ,set(val) {
-              setValueCommon(stree.value ,val)
-              updateUiCallback(val)
-              return value
+              setValueCommon({
+                accessors: stree.value
+                ,obj: val
+                ,otherCallback: updateUiCallback
+                ,myCallback: onchange
+              })
+              return privateMethods.value
             }
             ,enumerable: true
           }
@@ -481,7 +523,7 @@ class SettingsUI {
           ,all_savable: {
             get() {
               if (isLeaf) {
-                return value
+                return privateMethods.value
               }
               const obj = {}
               for (const [key ,child] of Object.entries(privateObject.children)) {
@@ -495,13 +537,11 @@ class SettingsUI {
           ,own_savable: {
             get() {
               if (isLeaf) {
-                return value
+                return privateMethods.value
               }
               const obj = {}
               for (const [key ,child] of Object.entries(privateObject.children)) {
                 // FIXME ugly patch to detect same save methods
-                dbg(`Got key <${key}> with SettingsTree`)
-                dbg(child)
                 if (child.is_same_method(ourMethods.saveMethod ,'saveMethod')) {
                   obj[key] = child.own_savable
                 }
@@ -524,15 +564,19 @@ class SettingsUI {
           value: {
             get() {
               if (isLeaf) {
-                return value
+                return privateMethods.value
               }
 
               return uiAccessor.children_accessors
             }
             ,set(val) {
-              setValueCommon(uiAccessor.children_accessors ,val)
-              onchange(val)
-              return value
+              setValueCommon({
+                accessors: uiAccessor.children_accessors
+                ,obj: val
+                ,otherCallback: onchange
+                ,myCallback: updateUiCallback
+              })
+              return privateMethods.value
             }
           }
         })
@@ -581,7 +625,6 @@ class SettingsUI {
         ,ondeselect = () => null
         ,parrentSettingsTree
         ,selectId
-        ,selected = false
       }) {
         const item = this
         if (!(item instanceof OptionItem)) {
@@ -590,7 +633,7 @@ class SettingsUI {
         item.key = key
         const [settingsTree ,uiAccessor] = parrentSettingsTree.createLeaf({
           key
-          ,initialValue: false
+          ,defaultValue: false
           ,...stArgs
           ,updateUiCallback: (newValue) => {
             item.elm.selected = newValue
@@ -603,13 +646,13 @@ class SettingsUI {
 
         // TODO: Potentialy load settings here.
         const ui = htmlToElement(`
-          <li class="${selected ? 'selected' : ''}">
+          <li class="${settingsTree.value ? 'selected' : ''}">
           ${icon ? `<img class="" src="${icon}"/>` : ''}
           <span class="">${title}</span>
           </li>
         `)
         item.elm = htmlToElement(`
-          <option  ${selected ? 'selected' : ''} value="${value}"/>${title}</option>
+          <option  ${settingsTree.value ? 'selected' : ''} value="${value}"/>${title}</option>
         `)
         // The value in select, usualy a unique index related to the items position in select.
         // Does NOT normaly change
@@ -757,12 +800,11 @@ class SettingsUI {
         ,title = key
         ,type = 'text'
         ,titleText = title
-        ,placeholder = titleText
-        ,value
+        ,settingsTreeConfig: stArgs
+        ,placeholder = stArgs.defaultValue
         ,min
         ,max
         ,step
-        ,settingsTreeConfig: stArgs
         ,parrentSettingsTree = throwMissingParam('new Textbox' ,'parrentSettingsTree' ,'Container\'s SettingsTree instance')
       }) {
         const setting = this
@@ -774,7 +816,6 @@ class SettingsUI {
         setting.elements = {}
         const [settingsTree ,uiAccessor] = parrentSettingsTree.createLeaf({
           key
-          ,initialValue: value
           ,updateUiCallback: (newValue) => {
             setting.elements.input.value = newValue
             return newValue
@@ -786,18 +827,34 @@ class SettingsUI {
           <label class="col-lg-3 col-form-label-modal">${title}:</label>
           <div class="col-lg-9">
               <input class="form-control" title="${titleText}" placeholder="${placeholder}" type="${type}"
-              ${value != null ? `value="${value}"` : ''}
+              ${settingsTree.value != null ? `value="${settingsTree.value}"` : ''}
               ${min != null ? `min="${min}"` : ''}
               ${max != null ? `max="${max}"` : ''}
               ${step != null ? `step="${step}"` : ''}
               >
+              <div class="valid-feedback"></div>
+              <div class="invalid-feedback"></div>
           </div>
         </div>`)
         setting.elements.label = setting.elements.root.children[0]
         setting.elements.input = setting.elements.root.children[1].children[0]
+        setting.elements.valid = setting.elements.root.children[1].children[1]
+        setting.elements.invalid = setting.elements.root.children[1].children[2]
         // ;[setting.elements.label ,{ children: [setting.elements.input] }] = setting.elements.root.children
         setting.elements.input.onchange = () => {
-          uiAccessor.value = setting.elements.input.value
+          try {
+            uiAccessor.value = setting.elements.input.value
+            setting.elements.input.setCustomValidity('')
+            // setting.elements.input.classList.remove('is-invalid')
+            // setting.elements.input.classList.add('is-valid')
+          }
+          catch (e) {
+            if (!(e instanceof SettingsUIValidationError)) throw e
+            setting.elements.invalid.textContent = e.feedback
+            setting.elements.input.setCustomValidity(e.feedback)
+            // setting.elements.input.classList.remove('is-valid')
+            // setting.elements.input.classList.add('is-invalid')
+          }
         }
         container.appendChild(setting.elements.root)
         return setting
