@@ -10,9 +10,9 @@
 // @grant    GM_setValue
 // @require  https://cdn.rawgit.com/ichord/Caret.js/341fb20b6126220192b2cd226836cd5d614b3e09/dist/jquery.caret.js
 // @require  https://cdn.rawgit.com/ichord/At.js/1b7a52011ec2571f73385d0c0d81a61003142050/dist/js/jquery.atwho.js
-// @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/ecfc52fda045b5262562cf6a25423603f1ac5a99/common.js
-// @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/ecfc52fda045b5262562cf6a25423603f1ac5a99/uncommon.js
-// @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/4a72bdff62c865d36e72fc364cafac2650ba9489/settings-ui.js
+// @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/a480c30b64fba63fad4e161cdae01e093bce1e4c/common.js
+// @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/a480c30b64fba63fad4e161cdae01e093bce1e4c/uncommon.js
+// @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/a480c30b64fba63fad4e161cdae01e093bce1e4c/settings-ui.js
 // @match    https://mangadex.org/*
 // @author   Christopher McGinnis
 // @icon     https://mangadex.org/images/misc/default_brand.png
@@ -20,6 +20,8 @@
 // ==/UserScript==
 
 'use strict'
+
+const MANGADEX_BASE_URI = 'https://mangadex.org'
 
 /* *************************************
  * Functions That ought to go in a library
@@ -62,7 +64,7 @@ function insertIntoStylesheet({ stylesheet ,selector ,css_text }) {
     stylesheet.addRule(selector ,css_text)
   }
 }
-function findCSS_Rules3({ classID ,exactProperties = [] ,matchProperties = [] ,ignoredStylesheets = [] }) {
+function findCSS_Rules({ classID ,exactProperties = [] ,matchProperties = [] ,ignoredStylesheets = [] }) {
   let resultRule = {}
   let resultCssText = ''
   let exactCssText = ''
@@ -109,7 +111,7 @@ function findCSS_Rules3({ classID ,exactProperties = [] ,matchProperties = [] ,i
   }
 }
 
-function duplicate_cssRule3({
+function duplicate_cssRule({
   origSelector
   ,newSelector
   ,exactProperties
@@ -119,7 +121,7 @@ function duplicate_cssRule3({
 }) {
   // if(findCSS_Rule(new_selector)) return true;  // Must have already done this one
 
-  const { stylesheet: origStylesheet ,rule ,matchCssText ,exactCssText ,resultCssText } = findCSS_Rules3({
+  const { stylesheet: origStylesheet ,rule ,matchCssText ,exactCssText ,resultCssText } = findCSS_Rules({
     classID: origSelector ,exactProperties ,matchProperties ,ignoredStylesheets
   })
   let cssText = matchProperties ? matchCssText : resultCssText
@@ -158,30 +160,272 @@ function stableSort(arr ,cmp = (a ,b) => {
 /* *************************************
  * Our crap
  */
+function mangadexStyleURIComponent(str) {
+  // replace all non-alpha-numeric characters with dashing dashes
+  return str.replace(/[^a-zA-Z0-9]/g ,'-')
+}
+
+function clipText(text ,max_length) {
+  return (text.length > max_length) ? `${text.substr(0 ,max_length - 1)}&hellip;` : text
+}
+
+function getVisibleText(node) {
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent
+  const style = getComputedStyle(node)
+  if (style && style.display === 'none') return ''
+  let text = ''
+  for (let i = 0; i < node.childNodes.length; i++) text += getVisibleText(node.childNodes[i])
+  return text
+}
+
 
 // iill use classes once we get private variables
-function Manga({ id ,title ,description ,img }) {
+function Manga({ id ,title ,description ,image ,isFollowing }) {
   const manga = this
   if (!(manga instanceof Manga)) {
     return new Manga()
   }
-  manga.id = id
-  manga.title = title
-  manga.description = description
-  manga.img = img
-  return manga
+  const privateObject = {
+    id
+    ,title: title ? title.trim() : undefined
+    ,description: description ? description.trim() : undefined
+    ,image
+    ,isFollowing
+    ,lastViewedDate: Date.now()
+  }
+  Object.defineProperties(this ,{
+    id: {
+      get() {
+        return privateObject.id
+      }
+      ,enumerable: true
+    }
+    ,title: {
+      get() {
+        return privateObject.title
+      }
+      ,set(val) {
+        return privateObject.title = val.trim()
+      }
+      ,enumerable: true
+    }
+    ,description: {
+      get() {
+        return privateObject.description
+      }
+      ,set(val) {
+        return privateObject.description = val.trim()
+      }
+      ,enumerable: true
+    }
+    ,excerpt: {
+      get() {
+        return clipText(privateObject.description ,100)
+      }
+      ,enumerable: true
+    }
+    ,thumbnail: {
+      get() {
+        return `${MANGADEX_BASE_URI}/images/manga/${privateObject.id}.thumb.jpg`
+      }
+      ,enumerable: true
+    }
+    ,image: {
+      get() {
+        return privateObject.image || this.thumbnail
+      }
+      ,set(val) {
+        return privateObject.image = val
+      }
+      ,enumerable: true
+    }
+    ,isFollowing: {
+      get() {
+        return privateObject.isFollowing
+      }
+      ,set(val) {
+        return privateObject.isFollowing = val
+      }
+      ,enumerable: true
+    }
+    ,url: {
+      get() {
+        // TODO make this gnerate a nicer link. nothing after the id really maters, but its nice to have a readable link
+        return `${MANGADEX_BASE_URI}/title/${privateObject.id}/${mangadexStyleURIComponent(privateObject.title)}`
+      }
+      ,enumerable: true
+    }
+    ,lastViewedDate: {
+      get() {
+        return privateObject.lastViewedDate
+      }
+    }
+  })
+  this.updateViewedTime = () => {
+    privateObject.lastViewedDate = Date.now()
+  }
+  this.savable = () => privateObject
+  return this
 }
 
-function MangaList({ list = {} }) {
+function AttemptParseMangaTitlePage(mangaList) {
+  let id
+  try {
+    [,id] = window.location.href.match(/^https:\/\/mangadex\.org\/title\/(\d+)/)
+  }
+  catch (e) {
+    return undefined
+  }
+  // return if this is not a tile page
+  if (id == null) return undefined
+
+  // Bulild manga entry
+  xp.new(`//*[${XPath2.containsClass('card-header')} and ./span[${XPath2.containsClass('fa-book')}] ]`)
+  const titleElm = xp.new(`//*[${XPath2.containsClass('card-header')} and ./span[${XPath2.containsClass('fa-book')}] ]`).getElement()
+  const title = titleElm.textContent
+  // At the least, we need to know the extention
+  const imgElm = xp.new(`//*[${XPath2.containsClass('card-body')}]//img[starts-with(@src,'/images/manga/${id}')]`).getElement()
+  const image = imgElm.src
+  const descriptionElm = xp.new(`//*[${XPath2.containsClass('card-body')}]//div[./div[1][text() = 'Description:']]/div[2]`).getElement()
+  const description = descriptionElm.textContent
+  const followingElm = xp.new(`//*[${XPath2.containsClass('card-body')}]//div[./div[1][text() = 'Actions:']]/div[2]/div[${XPath2.containsClass('btn-group')}]/div[${XPath2.containsClass('dropdown-menu')} and ./a/span[@title='Follow'] ]/a[${XPath2.containsClass('disabled')}]`).getElement()
+  let isFollowing = false
+  if (followingElm) {
+    isFollowing = true
+  }
+  mangaList.push({
+    title
+    ,id
+    ,description
+    ,image
+    ,isFollowing
+  })
+}
+function AttemptParseMangaFollowUpdates(mangaList) {
+  const isHome = window.location.href.match(/^https:\/\/mangadex\.org(\/[^/]*)?$/) != null
+  // return if this is not on home page
+  if (!isHome) return undefined
+
+  const entries = xp.new(`//div[@id='follows_update']/div[${XPath2.containsClass('row')}]/div`)
+
+  entries.forEachElement((entry) => {
+    const titleElm = xp.new(`.//a[${XPath2.containsClass('manga_title')} and starts-with(@href,'/title/')]`).getElement(entry)
+    const [,id] = titleElm.getAttribute('href').match(/\/title\/(\d+)\//)
+
+    if (id == null) return undefined
+
+    const title = titleElm.textContent
+    // NOTE No point getting images for thumbnails ATM. we can generate those links
+    const isFollowing = true
+
+    mangaList.push({
+      title
+      ,id
+      ,isFollowing
+    })
+  })
+  // Bulild manga entry
+}
+
+
+function MangaList({
+  list: loadableList = {
+    followed: {} ,unfollowed: {}
+  }
+  ,titleHistLimit = 200
+}) {
   const mangaList = this
   if (!(mangaList instanceof MangaList)) {
     return new MangaList()
   }
-  mangaList.list = list
-  mangaList.push = (manga) => {
-    mangaList.list[manga.id] = manga
+  this.maxSize = titleHistLimit
+  mangaList.list = {
+    followed: {} ,unfollowed: {}
   }
-  return mangaList
+
+  const cleanupHistory = () => {
+    if (Object.keys(this.list.unfollowed).length <= this.maxSize) return false
+    let cnt = 0
+    this.list.unfollowed = Object.entries(this.list.unfollowed).sort(([,a] ,[,b]) => a.lastViewedDate > b.lastViewedDate).filter(() => {
+      if (this.maxSize > cnt++) return true
+      return false
+    })
+  }
+  this.load = (val) => {
+    Object.entries(val.followed).forEach(([k ,v]) => {
+      this.list.followed[k] = new Manga(v)
+    })
+    Object.entries(val.unfollowed).forEach(([k ,v]) => {
+      this.list.unfollowed[k] = new Manga(v)
+    })
+  }
+
+  this.savable = () => {
+    const obj = {
+      followed: {} ,unfollowed: {}
+    }
+    Object.entries(mangaList.list.followed).forEach(([k ,v]) => {
+      obj.followed[k] = v.savable()
+    })
+    Object.entries(mangaList.list.unfollowed).forEach(([k ,v]) => {
+      obj.unfollowed[k] = v.savable()
+    })
+    return obj
+  }
+  this.push = ({ id ,description ,image ,title ,isFollowing ,...mangaArgs }) => {
+    const manga = this.list.followed[id] || this.list.unfollowed[id] || new Manga({
+      id ,...mangaArgs
+    })
+    if (description) manga.description = description
+    if (image) manga.image = image
+    if (title) manga.title = title
+    if (isFollowing != null) manga.isFollowing = isFollowing
+    if (manga.isFollowing) {
+      this.list.followed[manga.id] = manga
+      delete (this.list.unfollowed[manga.id])
+    }
+    else {
+      this.list.unfollowed[manga.id] = manga
+      delete (this.list.followed[manga.id])
+    }
+    cleanupHistory()
+  }
+
+  this.autoComplete = (partial_name ,{ case_sensitive = false ,fuzzy = true ,showUnfollowed = 0 } = {}) => {
+    let matches = Object.values(this.list.followed).concat(showUnfollowed === 0 ? Object.values(this.list.unfollowed) : []).filter((e) => {
+      // If this user is already marked as the highest priority match, dont process them anymore.
+      const regex_partial_name = new RegExp(`${fuzzy ? '' : '^'}${partial_name}` ,`${case_sensitive ? '' : 'i'}`)
+
+      if (e.title.match(regex_partial_name)) {
+        return true
+      }
+      return false
+    })
+    matches = stableSort(matches ,(a ,b) => {
+      // List people whos names start with partial before those with partial anywhere in name
+      if (fuzzy) {
+        const regex_partial_name = new RegExp(`^${partial_name}` ,`${case_sensitive ? '' : 'i'}`)
+        const am = a.title.match(regex_partial_name) != null
+        const bm = b.title.match(regex_partial_name) != null
+        if (am !== bm) {
+          return bm
+        }
+      }
+      // List those we are following before those we are not
+      {
+        const am = a.isFollowing
+        const bm = b.isFollowing
+        if (am !== bm) {
+          return bm
+        }
+      }
+    })
+    return matches
+  }
+
+
+  this.load(loadableList)
+  return this
 }
 
 function History({ history: loadedHistory = [] ,historySize = 200 } = {}) {
@@ -325,35 +569,14 @@ function Thread({ id ,title ,manga_id }) {
   thread.manga_id = manga_id
   return thread
 }
-function MangaList({ list = {} }) {
-  const mangaList = this
-  if (!(mangaList instanceof MangaList)) {
-    return new MangaList()
-  }
-  mangaList.list = list
-  mangaList.push = (manga) => {
-    mangaList.list[manga.id] = manga
-  }
-  return mangaList
-}
+
 
 function UserHistory({ read_posts_history = [] ,user_id ,username ,historySize = 200 } = {}) {
   const uhist = this
   if (!(uhist instanceof UserHistory)) {
     return new UserHistory()
   }
-  function clipText(text ,max_length) {
-    return (text.length > max_length) ? `${text.substr(0 ,max_length - 1)}&hellip;` : text
-  }
 
-  function getVisibleText(node) {
-    if (node.nodeType === Node.TEXT_NODE) return node.textContent
-    const style = getComputedStyle(node)
-    if (style && style.display === 'none') return ''
-    let text = ''
-    for (let i = 0; i < node.childNodes.length; i++) text += getVisibleText(node.childNodes[i])
-    return text
-  }
   const cleanupHistory = () => {
     while (this.history.length > this.max_size) {
       // delete(this.history.entries().next().value[0]);
@@ -389,20 +612,33 @@ function UserHistory({ read_posts_history = [] ,user_id ,username ,historySize =
     if (exists) {
       return false
     }
-    const time = xp.new('.//span').with(xp.new('./span').with(xp.new().contains('@class' ,'fa-clock'))).getElement(post).title
-    const thread = xp.new('./td/span/a').with(xp.new('preceding-sibling::span').with(xp.new().contains('@class' ,'fa-clock'))).getElement(post).href
-    const thread_id = parseInt(thread.match(/\/thread\/(\d+)\//)[1])
+    let time; let thread; let thread_id; let user; let user_name; let user_level
+    let user_color
+    let user_img
+    let postContents
+    let did_mention
+    try {
+      time = xp.new('.//span').with(xp.new('./span').with(xp.new().contains('@class' ,'fa-clock'))).getElement(post).title
+      thread = xp.new('./td/span/a').with(xp.new('preceding-sibling::span').with(xp.new().contains('@class' ,'fa-clock'))).getElement(post).href
+      thread_id = parseInt(thread.match(/\/thread\/(\d+)\//)[1])
+      user = xp.new('.//a[contains(@class,"user_level") and starts-with(@href,"/user/")]').getElement(post)
+      user_name = user.textContent
+      // TODO: actualy store user level
+      user_level = user.className
+      user_color = user.style.color
+      user_id = parseInt(user.href.match(/\/user\/(\d+)\//)[1])
+      user_img = xp.new(`.//img[${XPath2.containsClass('avatar')}]`).getElement(post).src
+      postContents = xp.new('.//div').with(xp.new().contains('@class' ,'postbody')).getElement(post)
+      did_mention = Boolean(xp.new(`.//a[@href="https://mangadex.org/user/${uhist.user_id}"]`).getElement(postContents))
+    }
+    catch (e) {
+      dbg('Error occured while trying to parse post.')
+      dbg(post)
+      dbg(e)
+      // an error occured
+      return undefined
+    }
 
-    const user = xp.new('.//a[contains(@class,"user_level") and starts-with(@href,"/user/")]').getElement(post)
-    const user_name = user.textContent
-    // TODO: actualy store user level
-    const user_level = user.className
-    const user_color = user.style.color
-
-    const user_id = parseInt(user.href.match(/\/user\/(\d+)\//)[1])
-    const user_img = xp.new('.//img').with(xp.new().contains('@class' ,'avatar')).getElement(post).src
-    const postContents = xp.new('.//div').with(xp.new().contains('@class' ,'postbody')).getElement(post)
-    const did_mention = Boolean(xp.new(`.//a[@href="https://mangadex.org/user/${uhist.user_id}"]`).getElement(postContents))
     // cleanText. Hide spoilers and other invisible crap
     const cleanText = getVisibleText(postContents)
     const excerpt = clipText(cleanText ,100)
@@ -475,7 +711,7 @@ function getCurrentUserID() {
   return parseInt(current_user_id)
 }
 
-function initSettingsDialog(loaded_settings) {
+function initSettingsDialog({ loaded_settings ,atWhoMethods }) {
   const settingsUi = new SettingsUI({
     groupName: 'Auto-Complete'
     ,settingsTreeConfig: {
@@ -496,7 +732,18 @@ function initSettingsDialog(loaded_settings) {
     ,title: ':Title'
     ,settingsTreeConfig: { defaultValue: true }
   })
-
+  /*const userCompletionCharCount = settingsUi.addTextbox({
+    key: 'userCompletionCharCount'
+    ,title: 'Minimum username length'
+    ,settingsTreeConfig: {
+      defaultValue: 0
+      ,corrector: newNumberCorrector(0 ,10)
+    }
+    ,min: 0
+    ,max: 10
+    ,titleText: 'Mnimum number of characters in the Username you must type before autocompletion starts. Default: 0'
+    ,type: 'number'
+  })*/
   const showUsersWho = settingsUi.addSelect({
     title: 'Show users who'
     ,key: 'showUsersWho'
@@ -556,9 +803,72 @@ function initSettingsDialog(loaded_settings) {
     ,titleText: 'Maximum number of user posts we should remember. Used for @mention autocompletion'
     ,type: 'number'
   })
+  const titleCompletionChar = settingsUi.addTextbox({
+    key: 'titleCompletionChar'
+    ,title: 'Title Completion Trigger'
+    ,settingsTreeConfig: {
+      defaultValue: ':'
+      ,onchange: () => {
+        atWhoMethods.rebuild()
+      }
+      // ,corrector: newNumberCorrector(0 ,2000)
+    }
+    ,titleText: 'Character(s) you must type in order to trigger Manga Title auto completion. default: colon character <:>'
+  })
+  /*const titleCompletionCharCount = settingsUi.addTextbox({
+    key: 'titleCompletionCharCount'
+    ,title: 'Minimum title length'
+    ,settingsTreeConfig: {
+      defaultValue: 200
+      ,corrector: newNumberCorrector(0 ,10)
+    }
+    ,min: 0
+    ,max: 10
+    ,titleText: 'Mnimum number of characters in the Title you must type before autocompletion starts. Default: 0'
+    ,type: 'number'
+  })*/
+  const showUnfollowed = settingsUi.addSelect({
+    title: 'Unfollowed manga is'
+    ,key: 'showUnfollowed'
+    // ,placeholder: 'Are in this thread'
+    // ,branchingSingleselect: true
+    ,settingsTreeConfig: { defaultValue: 0 }
+  })
+  showUnfollowed.addOption({
+    title: 'Shown'
+    // ,value: true
+  })
+  showUnfollowed.addOption({
+    title: 'Hiden'
+    // ,value: false
+  })
+  const autocompleteTitleInto = settingsUi.addMultiselect({
+    title: 'Title to bbcode'
+    ,key: 'autocompleteTitleInto'
+    ,titleText: 'Autocompleted Manga titles can be transformed into bbcode!'
+    ,placeholder: 'No Magic! ...Just a title please'
+    // ,branchingSingleselect: true
+    // ,settingsTreeConfig: { defaultValue: 0 }
+  })
+  autocompleteTitleInto.addOption({
+    key: 'thumbnail'
+    ,title: 'Thumbnail'
+    ,settingsTreeConfig: { defaultValue: false }
+  })
+  autocompleteTitleInto.addOption({
+    key: 'link'
+    ,title: 'Link'
+    ,settingsTreeConfig: { defaultValue: true }
+  })
+  autocompleteTitleInto.addOption({
+    key: 'description'
+    ,title: 'Description Spoiler' // potentialy way to long to put outside a spoiler
+    ,settingsTreeConfig: { defaultValue: false }
+  })
+
   const titleHistLimit = settingsUi.addTextbox({
     key: 'max_title_history'
-    ,title: 'Title History Size'
+    ,title: 'Unfollowed memory size'
     ,settingsTreeConfig: {
       defaultValue: 10
       ,corrector: newNumberCorrector(0 ,2000)
@@ -571,18 +881,115 @@ function initSettingsDialog(loaded_settings) {
   // Load our saved settings object into the ui
   // settingsUi.settingsTree.load_all()
   settingsUi.settingsTree.value = loaded_settings
-  dbg('DONE')
   // return new settings object which is bound to the UI.
   const settings = settingsUi.settingsTree.value
   return settings
 }
-function main({ read_posts_history ,settings: loaded_settings }) {
-  const settings = initSettingsDialog(loaded_settings)
+
+
+function autoComplete(partial_name ,render_view) {
+  const r = uhist.autoComplete(partial_name ,{
+    thread_id ,case_sensitive: false ,fuzzy: true ,showUsersWho: settings.showUsersWho
+  })
+  render_view(r)
+}
+
+function autoCompleteManga(partial_name ,render_view) {
+  const r = mangaList.autoComplete(partial_name ,{
+    case_sensitive: false ,fuzzy: true ,showUnfollowed: settings.showUnfollowed
+  })
+  render_view(r)
+}
+
+function formatDisplayItem(item) {
+  return `<li class="dropdown-item px-0 " style=""><div class="d-flex justify-content-between align-items-center px-2" style="height:50px;" title="${item.excerpt}">
+    <div class="h-100">
+    <span class="">${item.did_mention ? '@' : ''}</span>
+    <span class="${item.thread_id === thread_id ? 'far fa-comments' : ''}"></span>
+    <img src="${item.user_img}" class="mh-100 rounded avatar"/>
+    </div>
+    <span class="${item.user_level}" style="color:${item.user_color};">${item.user_name}</span>
+    </div></li>`
+}
+
+function formatMangaItem(item) {
+  // When getters/setters are present, the object is assigned to name. For some reason
+  const obj = item.name
+  // TODO text carosel for long names
+  return `<li class="dropdown-item px-0 " style="">
+  <div class="d-flex justify-content-between align-items-center px-2" style="height:50px; max-width: 400px;"
+  title="${obj.description != null ? clipText(obj.description ,1000) : 'Description unavailible until you visit the title page'}">
+    <div class="h-100">
+    <span class="${obj.isFollowing ? 'far fa-bookmark' : ''}"></span>
+    <img src="${obj.image}" class="mh-100 rounded avatar"/>
+    </div>
+    <span class="manga_title d-inline-block text-truncate" style="">${obj.title}</span>
+    </div></li>`
+}
+
+
+function main({ read_posts_history ,mangaTitleHistory ,settings: loaded_settings }) {
+  const atWhoMethods = { rebuild: () => undefined }
+  const settings = initSettingsDialog({
+    loaded_settings ,atWhoMethods
+  })
+  atWhoMethods.rebuild = () => {
+    $('textarea[id="text"]').atwho('destroy')
+    $('textarea[id="text"]').atwho({
+      at: '@'
+      ,displayTpl: formatDisplayItem
+      ,insertTpl: '${atwho-at}${user_name}'
+      ,searchKey: 'user_name'
+      // We don't want to use your filter or sorter. remoteFilter is a better fit for us.
+      ,data: []
+      // data: uhist.history,
+      ,limit: 200
+      ,callbacks: {
+        remoteFilter: autoComplete
+        // NoOp
+        ,sorter: (_ ,i) => i
+
+      }
+    }).atwho({
+      at: settings.titleCompletionChar
+      ,displayTpl: formatMangaItem
+      ,insertTpl: ({ 'atwho-at': atwhoat ,name: item }) => `${
+        settings.autocompleteTitleInto.thumbnail
+          ? `[img]${item.thumbnail}[/img]`
+          : ''}${
+        settings.autocompleteTitleInto.link
+          ? `[url=${item.url}]${item.title}[/url]`
+          : item.title}${
+        settings.autocompleteTitleInto.description && item.description != null
+          ? `Description: [spoiler]${item.description}[/spoiler]`
+          : ''
+      }`
+      ,searchKey: 'title'
+      ,data: []
+      // ,data: [...Object.values(mangaList.list.followed) ,...Object.values(mangaList.list.unfollowed)]
+      ,limit: 200
+      ,callbacks: {
+        remoteFilter: autoCompleteManga
+        // NoOp
+        ,sorter: (_ ,i) => i
+      }
+    })
+  }
+
+  // Manga  History
+  const mangaList = new MangaList({
+    list: mangaTitleHistory ,titleHistLimit: settings.max_title_history
+  })
+  AttemptParseMangaTitlePage(mangaList)
+  AttemptParseMangaFollowUpdates(mangaList)
+  setUserValue('mangaTitleHistory' ,mangaList.savable())
+  unsafeWindow.mangaList = mangaList
+  // User History
   const user_id = getCurrentUserID()
   const uhist = new UserHistory({
     read_posts_history
     ,user_id
-    // NOTE History size will only take effect on next page load.
+    // NOTE History size changes will only take effect once a new post is seen.
     ,historySize: settings.max_post_history
   })
   unsafeWindow.uhist = uhist
@@ -609,39 +1016,8 @@ function main({ read_posts_history ,settings: loaded_settings }) {
 
     // NOTE there can be more than one textarea. but they all use the same id :O
 
-    function autoComplete(partial_name ,render_view) {
-      const r = uhist.autoComplete(partial_name ,{
-        thread_id ,case_sensitive: false ,fuzzy: true ,showUsersWho: settings.showUsersWho
-      })
-      render_view(r)
-    }
-    function formatDisplayItem(item) {
-      return `<li class="dropdown-item px-0 " style=""><div class="d-flex justify-content-between align-items-center px-2" style="height:50px;" title="${item.excerpt}">
-        <div class="h-100">
-        <span class="">${item.did_mention ? '@' : ''}</span>
-        <span class="${item.thread_id === thread_id ? 'far fa-comments' : ''}"></span>
-        <img src="${item.user_img}" class="mh-100 rounded avatar"/>
-        </div>
-        <span class="${item.user_level}" style="color:${item.user_color};">${item.user_name}</span>
-        </div></li>`
-    }
+    atWhoMethods.rebuild()
 
-    $('textarea[id="text"]').atwho({
-      at: '@'
-      ,displayTpl: formatDisplayItem
-      ,insertTpl: '${atwho-at}${user_name}'
-      ,searchKey: 'user_name'
-      // We don't want to use your filter or sorter. remoteFilter is a better fit for us.
-      ,data: []
-      // data: uhist.history,
-      ,limit: 200
-      ,callbacks: {
-        remoteFilter: autoComplete
-        // NoOp
-        ,sorter: (_ ,i) => i
-
-      }
-    })
     // HACK make atwho use flex instead of block
     $('.atwho-container').addClass('container ')
     $('.atwho-view').css({ display: 'none' })
@@ -656,14 +1032,14 @@ function main({ read_posts_history ,settings: loaded_settings }) {
     // const atwhoStylesheet = addCssLink('https://cdn.rawgit.com/ichord/At.js/1b7a52011ec2571f73385d0c0d81a61003142050/dist/css/jquery.atwho.css')
     const customStylesheet = insertStylesheet('')
     // HACK dropdown-menu breaks atwho autoscroll somehow. lets just copy parts of the theme
-    duplicate_cssRule3({
+    duplicate_cssRule({
       origSelector: '.dropdown-menu'
       ,newSelector: '.atwho-view-ul'
       ,matchProperties: ['background' ,'color' ,'border' ,'margin' ,'padding']
       // ,ignoredStylesheets: [atwhoStylesheet]
       ,targetStylesheet: customStylesheet
     })
-    duplicate_cssRule3({
+    duplicate_cssRule({
       origSelector: '.dropdown-menu.show'
       ,newSelector: '.atwho-view-ul'
       ,matchProperties: ['background' ,'color' ,'border' ,'margin' ,'padding']
@@ -671,7 +1047,7 @@ function main({ read_posts_history ,settings: loaded_settings }) {
       ,targetStylesheet: customStylesheet
     })
     // make the selected atwho user be highlighted using the same color theme as the site.
-    duplicate_cssRule3({
+    duplicate_cssRule({
       origSelector: '.dropdown-item:hover, .dropdown-item:focus'
       ,newSelector: '.atwho-view .cur'
       ,matchProperties: ['background' ,'color']
@@ -685,6 +1061,9 @@ function main({ read_posts_history ,settings: loaded_settings }) {
 // setTimeout( () => {
 getUserValues({
   read_posts_history: []
+  ,mangaTitleHistory: {
+    followed: {} ,unfollowed: {}
+  }
   ,settings: {}
 }).then(main)
 // },1000)
