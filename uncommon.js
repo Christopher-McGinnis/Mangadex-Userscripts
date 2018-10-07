@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     Mangadex Uncommon functions
-// @version  0.0.5
+// @version  0.0.6
 // @description WARNING Should NOT be required by other userscripts. Lets be honest, no one else wants this crap. This is a personal library for personal problems.
 // ==/UserScript==
 /* eslint no-unused-vars: ["off"] */
@@ -132,6 +132,21 @@ function XPath(xpath_str = '') {
     }
   }
   return xp
+}
+
+class XPath2 {
+  constructor(xpathStr) {
+    this.xpath = xpathStr.toString()
+  }
+
+  static containsNormalized(attr ,text) {
+    return `contains(concat(' ', normalize-space(${attr}), ' '), ' ${text} ')`
+  }
+
+  static containsClass(classes) {
+    const classArr = (typeof classes === 'string') ? [classes] : classes
+    return classArr.reduce((accum ,aClass) => `${accum.length > 0 ?  `${accum} and ` : accum}${XPath2.containsNormalized('@class' ,aClass)}`, '')
+  }
 }
 
 

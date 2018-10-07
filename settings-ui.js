@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     Mangadex Settings
-// @version  0.0.1
+// @version  0.0.2
 // @description Settings UI builder for Mangadex userscripts. Should be required by other userscripts.
 // @grant    unsafeWindow
 // @grant    GM.getValue
@@ -724,7 +724,7 @@ class SettingsUI {
           })
 
         setting.settingsTree = settingsTree
-        setting.elm = htmlToElement(`<div class="form-group row">
+        setting.elm = htmlToElement(`<div class="form-group row" title="${titleText}">
           <label class="col-lg-3 col-form-label-modal">${title}:</label>
           <div class="col-lg-9">
               <select ${multiselect ? 'multiple' : ''} class="form-control selectpicker show-tick" data-actions-box="true" data-selected-text-format="count > 5" data-size="10" title="${placeholder}">
