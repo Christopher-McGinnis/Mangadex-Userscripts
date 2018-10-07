@@ -2,7 +2,7 @@
 // @name     Mangadex Autocomplete
 // @description Autocompletes @mention usernames. Maintains a small history of user posts you recently viewed and searches that for matches. Example image shown in additional info
 // @namespace https://github.com/Brandon-Beck
-// @version  0.0.8
+// @version  0.0.9
 // @grant    unsafeWindow
 // @grant    GM.getValue
 // @grant    GM.setValue
@@ -1017,17 +1017,15 @@ function main({ read_posts_history ,mangaTitleHistory ,settings: loaded_settings
         $('textarea[id="text"]').atwho({
           at: settings.titleCompletionChar
           ,displayTpl: formatMangaItem
-          ,insertTpl: ({ 'atwho-at': atwhoat ,name: item }) => `${
-            settings.autocompleteTitleInto.thumbnail
-              ? `[img]${item.thumbnail}[/img]`
-              : ''}${
-            settings.autocompleteTitleInto.link
-              ? `[url=${item.url}]${item.title}[/url]`
-              : item.title}${
-            settings.autocompleteTitleInto.description && item.description != null
-              ? `Description: [spoiler]${item.description}[/spoiler]`
-              : ''
-          }`
+          ,insertTpl: ({ 'atwho-at': atwhoat ,name: item }) => {
+            let img = settings.autocompleteTitleInto.thumbnail ? `[img]${item.thumbnail}[/img]` : ''
+            const desc = settings.autocompleteTitleInto.description && item.description != null ? ` | Description: [spoiler]${item.description}[/spoiler]` : ''
+            if (settings.autocompleteTitleInto.link) img=`[url=${item.url}]${img}[/url]`
+            img=`\n${img}`
+            return `${settings.autocompleteTitleInto.link
+              ? `[url=${item.url}]${item.title}[/url]${desc}${img}`
+              : `${item.title}${desc}${img}`}`
+          }
           ,searchKey: 'title'
           ,data: []
           // ,data: [...Object.values(mangaList.list.followed) ,...Object.values(mangaList.list.unfollowed)]
