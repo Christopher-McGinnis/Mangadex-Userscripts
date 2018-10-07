@@ -2,7 +2,7 @@
 // @name     Mangadex Autocomplete
 // @description Autocompletes @mention usernames. Maintains a small history of user posts you recently viewed and searches that for matches. Example image shown in additional info
 // @namespace https://github.com/Brandon-Beck
-// @version  0.0.7
+// @version  0.0.8
 // @grant    unsafeWindow
 // @grant    GM.getValue
 // @grant    GM.setValue
@@ -12,7 +12,7 @@
 // @require  https://cdn.rawgit.com/ichord/At.js/1b7a52011ec2571f73385d0c0d81a61003142050/dist/js/jquery.atwho.js
 // @require  https://cdn.rawgit.com/Brandon-Beck/Mangadex-Userscripts/ecfc52fda045b5262562cf6a25423603f1ac5a99/common.js
 // @require  https://cdn.rawgit.com/Brandon-Beck/Mangadex-Userscripts/ecfc52fda045b5262562cf6a25423603f1ac5a99/uncommon.js
-// @require  https://cdn.rawgit.com/Brandon-Beck/Mangadex-Userscripts/9d40d6365a9e233e987ce2577c0322072b6b6a1f/settings-ui.js
+// @require  https://cdn.rawgit.com/Brandon-Beck/Mangadex-Userscripts/4a72bdff62c865d36e72fc364cafac2650ba9489/settings-ui.js
 // @match    https://mangadex.org/*
 // @author   Brandon Beck
 // @icon     https://mangadex.org/images/misc/default_brand.png
@@ -21,6 +21,9 @@
 
 'use strict'
 
+/* *************************************
+ * Functions That ought to go in a library
+ */
 function insertStylesheet(cssText) {
   // const cssId = `css_${cssText.toString().replace(/\W/g ,'_')}`
   const style = document.createElement('style')
@@ -133,12 +136,6 @@ function duplicate_cssRule3({
   return true
 }
 
-
-const xp = new XPath()
-const posts = xp.new('//tr').with(xp.new().contains('@class' ,'post'))
-// Because Javascript's does not require .sort to be Stable.
-// Currently Chrome alone uses Unstable sort. They are now moving to Stable.
-// This returns the same results for all browsers,
 function stableSort(arr ,cmp = (a ,b) => {
   if (a < b) return -1
   if (a > b) return 1
@@ -156,6 +153,135 @@ function stableSort(arr ,cmp = (a ,b) => {
   }
   return arr
 }
+
+
+/* *************************************
+ * Our crap
+ */
+
+// iill use classes once we get private variables
+function Manga({ id ,title ,description ,img }) {
+  const manga = this
+  if (!(manga instanceof Manga)) {
+    return new Manga()
+  }
+  manga.id = id
+  manga.title = title
+  manga.description = description
+  manga.img = img
+  return manga
+}
+
+function MangaList({ list = {} }) {
+  const mangaList = this
+  if (!(mangaList instanceof MangaList)) {
+    return new MangaList()
+  }
+  mangaList.list = list
+  mangaList.push = (manga) => {
+    mangaList.list[manga.id] = manga
+  }
+  return mangaList
+}
+
+function History({ history: loadedHistory = [] ,historySize = 200 } = {}) {
+  const uhist = this
+  if (!(uhist instanceof History)) {
+    return new History()
+  }
+  function clipText(text ,max_length) {
+    return (text.length > max_length) ? `${text.substr(0 ,max_length - 1)}&hellip;` : text
+  }
+
+  function getVisibleText(node) {
+    if (node.nodeType === Node.TEXT_NODE) return node.textContent
+    const style = getComputedStyle(node)
+    if (style && style.display === 'none') return ''
+    let text = ''
+    for (let i = 0; i < node.childNodes.length; i++) text += getVisibleText(node.childNodes[i])
+    return text
+  }
+  const cleanupHistory = () => {
+    if (this.history.size > this.max_size) {
+      // delete(this.history.entries().next().value[0]);
+      this.history.shift()
+    }
+  }
+  this.max_size = historySize
+  this.history = loadedHistory
+
+  this.push = (item) => {
+    function array_move(arr ,old_index ,new_index) {
+      arr.splice(new_index ,0 ,arr.splice(old_index ,1)[0])
+      return arr
+    }
+    let exists = false
+    this.history.some((e ,k) => {
+      if (e.id === item.id) {
+        exists = true
+        array_move(this.history ,k ,0)
+        return true
+      }
+      return false
+    })
+    if (exists) {
+      return false
+    }
+
+    this.history.unshift(item)
+    cleanupHistory()
+  }
+  this.autoComplete = (partial_name ,{ case_sensitive = false ,fuzzy = true } = {}) => {
+    let matches = this.history.filter((e) => {
+      // If this user is already marked as the highest priority match, dont process them anymore.
+      const regex_partial_name = new RegExp(`${fuzzy ? '' : '^'}${partial_name}` ,`${case_sensitive ? '' : 'i'}`)
+      if (e.user_name.match(regex_partial_name)) {
+        return true
+      }
+      return false
+    })
+    matches = stableSort(matches ,(a ,b) => {
+      // List those from this thread before other threads
+      {
+        const am = a.thread_id === thread_id
+        const bm = b.thread_id === thread_id
+        if (am !== bm) {
+          return bm
+        }
+      }
+      // List people whos names start with partial before those with partial anywhere in name
+      if (fuzzy) {
+        const regex_partial_name = new RegExp(`^${partial_name}` ,`${case_sensitive ? '' : 'i'}`)
+        const am = a.user_name.match(regex_partial_name) != null
+        const bm = b.user_name.match(regex_partial_name) != null
+        if (am !== bm) {
+          return bm
+        }
+      }
+      // List those who mentioned us before those who did not.
+      if (a.did_mention !== b.did_mention) {
+        return b.did_mention
+      }
+    })
+    const seen = {}
+    matches = matches.filter((e) => {
+      if (seen[e.user_id]) {
+        return false
+      }
+      seen[e.user_id] = true
+      return true
+    })
+    return matches
+  }
+  return this
+}
+
+const xp = new XPath()
+const posts = xp.new('//tr').with(xp.new().contains('@class' ,'post'))
+// Because Javascript's does not require .sort to be Stable.
+// Currently Chrome alone uses Unstable sort. They are now moving to Stable.
+// This returns the same results for all browsers,
+
 // userid = Your user ID
 function User({ name ,id ,img }) {
   const user = this
@@ -199,16 +325,6 @@ function Thread({ id ,title ,manga_id }) {
   thread.manga_id = manga_id
   return thread
 }
-function Manga({ id ,title ,description }) {
-  const manga = this
-  if (!(thread instanceof Manga)) {
-    return new Manga()
-  }
-  manga.id = id
-  manga.title = title
-  manga.description = description
-  return manga
-}
 function MangaList({ list = {} }) {
   const mangaList = this
   if (!(mangaList instanceof MangaList)) {
@@ -239,14 +355,14 @@ function UserHistory({ read_posts_history = [] ,user_id ,username ,historySize =
     return text
   }
   const cleanupHistory = () => {
-    if (this.history.size > this.max_size) {
+    while (this.history.length > this.max_size) {
       // delete(this.history.entries().next().value[0]);
-      this.history.shift()
+      this.history.pop()
     }
   }
   this.user_id = user_id
   this.username = '' // get from userid
-  this.max_size = historySize
+  this.max_size = parseInt(historySize)
   this.history = read_posts_history
 
   this.push = (post) => {
@@ -304,12 +420,16 @@ function UserHistory({ read_posts_history = [] ,user_id ,username ,historySize =
     })
     cleanupHistory()
   }
-  this.autoComplete = (partial_name ,{ thread_id = 0 ,case_sensitive = false ,fuzzy = true } = {}) => {
+  this.autoComplete = (partial_name ,{ thread_id = 0 ,case_sensitive = false ,fuzzy = true ,showUsersWho = 3 } = {}) => {
     let matches = this.history.filter((e) => {
       // If this user is already marked as the highest priority match, dont process them anymore.
       const regex_partial_name = new RegExp(`${fuzzy ? '' : '^'}${partial_name}` ,`${case_sensitive ? '' : 'i'}`)
+
       if (e.user_name.match(regex_partial_name)) {
-        return true
+        if (showUsersWho === 2) return true
+        if (showUsersWho === 1 && e.did_mention) return true
+        if (showUsersWho <= 1 && e.thread_id === thread_id) return true
+        return false
       }
       return false
     })
@@ -363,18 +483,74 @@ function initSettingsDialog(loaded_settings) {
     }
   })
   const autocompleteTypes = settingsUi.addMultiselect({
-    title: 'Types' ,key: 'autocompleteTypes'
+    title: 'Autocomplete'
+    ,key: 'autocompleteTypes'
   })
   autocompleteTypes.addOption({
-    key: 'usernames' ,title: '@Username'
+    key: 'usernames'
+    ,title: '@Mentions'
+    ,settingsTreeConfig: { defaultValue: true }
   })
   autocompleteTypes.addOption({
-    key: 'titles' ,title: ':Title'
+    key: 'titles'
+    ,title: ':Title'
+    ,settingsTreeConfig: { defaultValue: true }
   })
+
+  const showUsersWho = settingsUi.addSelect({
+    title: 'Show users who'
+    ,key: 'showUsersWho'
+    // ,placeholder: 'Are in this thread'
+    // ,branchingSingleselect: true
+    ,settingsTreeConfig: { defaultValue: 0 }
+  })
+  showUsersWho.addOption({
+    // key: 'areInThread'
+    // key: 0
+    title: 'Are in this thread'
+    // ,settingsTreeConfig: { defaultValue: true }
+  })
+  showUsersWho.addOption({
+    // key: 'haveMentionedYou'
+    title: 'Have @mentioned you'
+    // ,settingsTreeConfig: { defaultValue: true }
+  })
+  showUsersWho.addOption({
+    // key: 'everyone'
+    title: 'We know exist'
+    // ,settingsTreeConfig: { defaultValue: true }
+  })
+  function newNumberValidator(min ,max) {
+    return (textVal) => {
+      const val = parseInt(textVal)
+      if (textVal.match(/[^0-9]/) || typeof val !== 'number' || val < min || val > max) {
+        throw new SettingsUIValidationError({ feedback: `Must be a number between ${min} and ${max}` })
+      }
+      return true
+    }
+  }
+  function newNumberCorrector(min ,max) {
+    return (textVal) => {
+      const val = parseInt(textVal)
+      if (
+        textVal == null
+        || (typeof textVal === 'string' && (textVal.length === 0 || textVal.match(/[^0-9]/)))
+        || typeof val !== 'number') {
+        return undefined
+      }
+      if (val < min) return min
+      if (val > max) return max
+      // dont triger callback via type change.
+      return textVal
+    }
+  }
   const userHistLimit = settingsUi.addTextbox({
     key: 'max_post_history'
     ,title: 'User History Size'
-    ,value: 200
+    ,settingsTreeConfig: {
+      defaultValue: 200
+      ,corrector: newNumberCorrector(20 ,2000)
+    }
     ,min: 20
     ,max: 2000
     ,titleText: 'Maximum number of user posts we should remember. Used for @mention autocompletion'
@@ -383,7 +559,10 @@ function initSettingsDialog(loaded_settings) {
   const titleHistLimit = settingsUi.addTextbox({
     key: 'max_title_history'
     ,title: 'Title History Size'
-    ,value: 10
+    ,settingsTreeConfig: {
+      defaultValue: 10
+      ,corrector: newNumberCorrector(0 ,2000)
+    }
     ,min: 0
     ,max: 2000
     ,titleText: 'Maximum number of Non-Followed titles we should remember. Used for :Title autocompletion. Added to history when you visit the title page.'
@@ -392,6 +571,7 @@ function initSettingsDialog(loaded_settings) {
   // Load our saved settings object into the ui
   // settingsUi.settingsTree.load_all()
   settingsUi.settingsTree.value = loaded_settings
+  dbg('DONE')
   // return new settings object which is bound to the UI.
   const settings = settingsUi.settingsTree.value
   return settings
@@ -402,9 +582,11 @@ function main({ read_posts_history ,settings: loaded_settings }) {
   const uhist = new UserHistory({
     read_posts_history
     ,user_id
+    // NOTE History size will only take effect on next page load.
     ,historySize: settings.max_post_history
   })
   unsafeWindow.uhist = uhist
+  unsafeWindow.settings = settings
   // Add current page's posts to history.
 
   let thread = xp.new(posts).append('//td/span/a').with(xp.new('preceding-sibling::span').with(xp.new().contains('@class' ,'fa-clock'))).getElement()
@@ -429,7 +611,7 @@ function main({ read_posts_history ,settings: loaded_settings }) {
 
     function autoComplete(partial_name ,render_view) {
       const r = uhist.autoComplete(partial_name ,{
-        thread_id ,case_sensitive: false ,fuzzy: true
+        thread_id ,case_sensitive: false ,fuzzy: true ,showUsersWho: settings.showUsersWho
       })
       render_view(r)
     }
@@ -500,8 +682,9 @@ function main({ read_posts_history ,settings: loaded_settings }) {
     // unsafeWindow.uhist = uhist
   }
 }
-
+// setTimeout( () => {
 getUserValues({
   read_posts_history: []
   ,settings: {}
 }).then(main)
+// },1000)
