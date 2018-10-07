@@ -659,10 +659,12 @@ class SettingsUI {
         `)
         // The value in select, usualy a unique index related to the items position in select.
         // Does NOT normaly change
+        // The value we will uise in single select mode. not directly attatched to html value
         Object.defineProperties(item ,{
-          select_value: {
+          selectValue: {
             get() {
-              return item.elm.value
+              // return item.elm.value
+              return value
             }
           }
         })
@@ -691,6 +693,7 @@ class SettingsUI {
         ,placeholder = titleText
         ,settingsTreeConfig: stArgs
         ,multiselect = false
+        ,branchingSingleselect = false
         ,parrentSettingsTree = throwMissingParam('new Select' ,'parrentSettingsTree' ,'Container\'s SettingsTree instance')
         ,options = []
       }) {
@@ -699,7 +702,7 @@ class SettingsUI {
           return new Select(...arguments)
         }
         setting.key = key
-        const [settingsTree ,uiAccessor] = multiselect
+        const [settingsTree ,uiAccessor] = (multiselect || branchingSingleselect)
           ? parrentSettingsTree.createBranch({
             key
             ,...stArgs
@@ -724,7 +727,7 @@ class SettingsUI {
         setting.elm = htmlToElement(`<div class="form-group row">
           <label class="col-lg-3 col-form-label-modal">${title}:</label>
           <div class="col-lg-9">
-              <select ${multiselect ? 'multiple' : ''} class="form-control selectpicker show-tick" data-actions-box="true" data-selected-text-format="count > 5" data-size="10" title="${titleText}">
+              <select ${multiselect ? 'multiple' : ''} class="form-control selectpicker show-tick" data-actions-box="true" data-selected-text-format="count > 5" data-size="10" title="${placeholder}">
               </select>
           </div>
         </div>`)
@@ -740,8 +743,8 @@ class SettingsUI {
           // New value is bool related to the changed option . oldValue is array of previously selected options 'value' attribute
           if (typeof clickedIndex === 'number') {
             const optionKey = setting.select.children[clickedIndex].dataset.optionKey
-            if (!multiselect) {
-              uiAccessor.value = setting.select.children[clickedIndex].dataset.optionKey
+            if (!(multiselect || branchingSingleselect)) {
+              uiAccessor.value = setting.options[optionKey].selectValue
               // setting.select.children[clickedIndex].value
               return
             }
@@ -754,7 +757,7 @@ class SettingsUI {
             }
           }
           else {
-            if (!multiselect) {
+            if (!(multiselect || branchingSingleselect)) {
               dbg('WE NEED TO dO SOMETHING HERE')
               return
             }
@@ -775,9 +778,9 @@ class SettingsUI {
         setting.options = {}
         // Contains OptionItem selected state (getters/setters)
 
-        let lastUsedIndex = -1
-        function nextOptionIndexToUse() {
-          return ++lastUsedIndex
+        let lastUsedValue = -1
+        function nextOptionValueToUse() {
+          return ++lastUsedValue
         }
         setting.addExistingOption = (option) => {
           throwOnBadArg(setting.options[option.key] != null ,'Select.addExistingOption(new Option())' ,'key' ,`a unique key for select group <${setting.key}>` ,option.key)
@@ -788,7 +791,7 @@ class SettingsUI {
           setting.options[option.key] = option
           setting.select.appendChild(option.elm)
           $(`#${id}`).selectpicker('refresh')
-          // lastUsedIndex = option.selectIndex
+          lastUsedValue = option.selectValue
         }
 
         /**
@@ -804,13 +807,14 @@ class SettingsUI {
         * @returns {Node} The settings tab node (already attatched to DOM). Add some children to it to build your ui.
         */
         let childParentTree = settingsTree
-        if (!multiselect) [childParentTree] = new SettingsTree({ key: 'SingleSelectRoot' })
+        if (!(multiselect || branchingSingleselect)) [childParentTree] = new SettingsTree({ key: 'SingleSelectRoot' })
 
         setting.addOption = (args) => {
           setting.addExistingOption(new OptionItem({
-            // value: nextOptionValueToUse(),
-            // value: args.key,
-            selectId: id
+            // value: nextOptionValueToUse()
+            // User specified value for multiselect. default to index for select
+            key: multiselect ? undefined : nextOptionValueToUse()
+            ,selectId: id
             // ,selectIndex: nextOptionIndexToUse()
             ,parrentSettingsTree: childParentTree
             ,...args
