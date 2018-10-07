@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     Mangadex Common
-// @version  0.0.5
+// @version  0.0.6
 // @description Common function library for Mangadex. Should be required by other userscripts.
 // ==/UserScript==
 /* eslint no-unused-vars: ["off"] */
