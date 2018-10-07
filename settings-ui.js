@@ -435,14 +435,11 @@ class SettingsUI {
           if (typeof ourMethods.saveMethod === 'function') {
             return ourMethods.saveMethod()
           }
-          dbg(`No save method found for ${key}`)
         }
         stree.load = () => {
           if (typeof ourMethods.loadMethod === 'function') {
-            // dbg(`Loading ${key}`);
             return ourMethods.loadMethod()
           }
-          dbg(`No load method found for ${key}`)
         }
         stree.save_all = () => {
           const methods = stree._getMethodTree('saveMethod')
@@ -463,7 +460,14 @@ class SettingsUI {
         function setValueCommon({ accessors ,obj ,otherCallback ,myCallback ,allowAutosave = true }) {
           if (isLeaf) {
             if (typeof corrector === 'function') {
-              const correctedObj = corrector(obj)
+              let correctedObj
+              try {
+                correctedObj = corrector(obj)
+              }
+              catch (e) {
+                dbg(`NOTE: Corrector for <${key}> threw the error <${e.message}>! If this was unintentional, review your code!`)
+                throw e
+              }
               if (correctedObj === obj) privateMethods.value = obj
               else {
                 privateMethods.value = correctedObj
@@ -475,12 +479,12 @@ class SettingsUI {
             otherCallback(privateMethods.value)
           }
           else {
-            for (const key of Reflect.ownKeys(obj)) {
+            for (const childKey of Reflect.ownKeys(obj)) {
               // TODO: Optionaly permit setting non-existant keys.
               // Could be used to auto-build settings ui
               // Or could be used for private/non-ui keys
-              if (typeof privateObject.children[key] === 'object') {
-                accessors[key] = obj[key]
+              if (typeof privateObject.children[childKey] === 'object') {
+                accessors[childKey] = obj[childKey]
               }
             }
           }
@@ -540,10 +544,10 @@ class SettingsUI {
                 return privateMethods.value
               }
               const obj = {}
-              for (const [key ,child] of Object.entries(privateObject.children)) {
+              for (const [childKey ,child] of Object.entries(privateObject.children)) {
                 // FIXME ugly patch to detect same save methods
                 if (child.is_same_method(ourMethods.saveMethod ,'saveMethod')) {
-                  obj[key] = child.own_savable
+                  obj[childKey] = child.own_savable
                 }
               }
               return obj
@@ -643,16 +647,15 @@ class SettingsUI {
           }
         })
         item.settingsTree = settingsTree
-
         // TODO: Potentialy load settings here.
         const ui = htmlToElement(`
-          <li class="${settingsTree.value ? 'selected' : ''}">
+          <li class="${uiAccessor.value ? 'selected' : ''}">
           ${icon ? `<img class="" src="${icon}"/>` : ''}
           <span class="">${title}</span>
           </li>
         `)
         item.elm = htmlToElement(`
-          <option  ${settingsTree.value ? 'selected' : ''} value="${value}"/>${title}</option>
+          <option  ${uiAccessor.value ? 'selected' : ''} value="${value}"/>${title}</option>
         `)
         // The value in select, usualy a unique index related to the items position in select.
         // Does NOT normaly change
@@ -696,12 +699,28 @@ class SettingsUI {
           return new Select(...arguments)
         }
         setting.key = key
-        const [settingsTree ,uiAccessor] = parrentSettingsTree.createBranch({
-          key
-          ,...stArgs
-        })
-        setting.settingsTree = settingsTree
+        const [settingsTree ,uiAccessor] = multiselect
+          ? parrentSettingsTree.createBranch({
+            key
+            ,...stArgs
+          })
+          : parrentSettingsTree.createLeaf({
+            key
+            ,updateUiCallback: (newValue) => {
+              // deselect current option(s)
+              Object.values(setting.select.selectedOptions).map((o) => {
+                o.selected = false
+              })
+              // Select new one
+              setting.options[newValue].elm.selected = true
+              // Update ui
+              $(`#${setting.id}`).selectpicker('refresh')
+              return newValue
+            }
+            ,...stArgs
+          })
 
+        setting.settingsTree = settingsTree
         setting.elm = htmlToElement(`<div class="form-group row">
           <label class="col-lg-3 col-form-label-modal">${title}:</label>
           <div class="col-lg-9">
@@ -716,44 +735,49 @@ class SettingsUI {
         setting.select.id = id
         container.appendChild(setting.elm)
         //
+        // if (multiselect) {
         $(`#${id}`).on('changed.bs.select' ,(e ,clickedIndex ,newValue ,oldValue) => {
           // New value is bool related to the changed option . oldValue is array of previously selected options 'value' attribute
           if (typeof clickedIndex === 'number') {
-            // setting.select.children[clickedIndex].change_callback(newValue,oldValue);
             const optionKey = setting.select.children[clickedIndex].dataset.optionKey
+            if (!multiselect) {
+              uiAccessor.value = setting.select.children[clickedIndex].dataset.optionKey
+              // setting.select.children[clickedIndex].value
+              return
+            }
             uiAccessor.value[optionKey] = newValue
-            // setting.options[optionKey].change_callback(newValue);
             if (newValue) {
               setting.options[optionKey].select_callback(newValue ,oldValue)
             }
             else {
               setting.options[optionKey].deselect_callback(newValue ,oldValue)
             }
-            // onchange(e,setting,clickedIndex,newValue,oldValue);
-            // uiAccessor.value
           }
           else {
+            if (!multiselect) {
+              dbg('WE NEED TO dO SOMETHING HERE')
+              return
+            }
             const n = Object.values(setting.select.selectedOptions).map(o => o.dataset.optionKey)
             /* let o = Object.values(oldValue).map( (o) => {
-              dbg(o);
               return setting.select.children[o].dataset.optionKey;
             } ); */
             const o = oldValue
             // find diffrences between selected indexes
-            n.filter(k => o.indexOf(k) < 0).concat(o.filter(k => n.indexOf(k) < 0)).forEach((changed_key) => {
+            n.filter(k => o.indexOf(k) < 0).concat(o.filter(k => n.indexOf(k) < 0)).forEach((changedKey) => {
               // and then set them to their boolean value.
-              uiAccessor.value[changed_key] = n.indexOf(changed_key) >= 0
+              uiAccessor.value[changedKey] = n.indexOf(changedKey) >= 0
             })
           }
-          dbg(setting.select)
         })
+        // }
         // Contains OptionItem instances
         setting.options = {}
         // Contains OptionItem selected state (getters/setters)
 
-        let lastUsedValue = -1
-        function nextOptionValueToUse() {
-          return ++lastUsedValue
+        let lastUsedIndex = -1
+        function nextOptionIndexToUse() {
+          return ++lastUsedIndex
         }
         setting.addExistingOption = (option) => {
           throwOnBadArg(setting.options[option.key] != null ,'Select.addExistingOption(new Option())' ,'key' ,`a unique key for select group <${setting.key}>` ,option.key)
@@ -763,7 +787,8 @@ class SettingsUI {
           // }
           setting.options[option.key] = option
           setting.select.appendChild(option.elm)
-          lastUsedValue = option.select_value
+          $(`#${id}`).selectpicker('refresh')
+          // lastUsedIndex = option.selectIndex
         }
 
         /**
@@ -778,12 +803,16 @@ class SettingsUI {
         * @param {Function} [obj.onchange] - Callback to call when option select state is changed.
         * @returns {Node} The settings tab node (already attatched to DOM). Add some children to it to build your ui.
         */
+        let childParentTree = settingsTree
+        if (!multiselect) [childParentTree] = new SettingsTree({ key: 'SingleSelectRoot' })
+
         setting.addOption = (args) => {
           setting.addExistingOption(new OptionItem({
             // value: nextOptionValueToUse(),
             // value: args.key,
             selectId: id
-            ,parrentSettingsTree: settingsTree
+            // ,selectIndex: nextOptionIndexToUse()
+            ,parrentSettingsTree: childParentTree
             ,...args
           }))
         }
