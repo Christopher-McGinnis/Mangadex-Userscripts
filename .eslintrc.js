@@ -7,10 +7,13 @@ module.exports = {
   }
   ,'rules': {
     'strict': ['error' ,'global']
+    // Var is disabled, and inner functions are fine in es6+
+    ,'no-inner-declarations': ['off']
     , radix: ["error", "as-needed"]
     ,'max-len': [1 ,100 ,2 ,{ comments: 200 }]
     ,'brace-style': ['error' ,'stroustrup']
     ,'semi': ['error' ,'never']
+    ,'semi-style': [ 'error', 'first']
     ,'comma-style': [
       'error'
       ,'first'
