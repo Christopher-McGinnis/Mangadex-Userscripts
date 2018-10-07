@@ -180,7 +180,7 @@ function getVisibleText(node) {
 
 
 // iill use classes once we get private variables
-function Manga({ id ,title ,description ,image ,isFollowing }) {
+function Manga({ id ,title ,description ,image ,isFollowing ,lastViewedDate }) {
   const manga = this
   if (!(manga instanceof Manga)) {
     return new Manga()
@@ -191,7 +191,7 @@ function Manga({ id ,title ,description ,image ,isFollowing }) {
     ,description: description ? description.trim() : undefined
     ,image
     ,isFollowing
-    ,lastViewedDate: Date.now()
+    ,lastViewedDate: lastViewedDate || 0
   }
   Object.defineProperties(this ,{
     id: {
@@ -299,6 +299,7 @@ function AttemptParseMangaTitlePage(mangaList) {
     ,description
     ,image
     ,isFollowing
+    ,updateViewedTime: true
   })
 }
 function AttemptParseMangaFollowUpdates(mangaList) {
@@ -372,7 +373,7 @@ function MangaList({
     })
     return obj
   }
-  this.push = ({ id ,description ,image ,title ,isFollowing ,...mangaArgs }) => {
+  this.push = ({ id ,description ,image ,title ,isFollowing ,updateViewedTime = false ,...mangaArgs }) => {
     const manga = this.list.followed[id] || this.list.unfollowed[id] || new Manga({
       id ,...mangaArgs
     })
@@ -380,6 +381,7 @@ function MangaList({
     if (image) manga.image = image
     if (title) manga.title = title
     if (isFollowing != null) manga.isFollowing = isFollowing
+    if (updateViewedTime) manga.updateViewedTime()
     if (manga.isFollowing) {
       this.list.followed[manga.id] = manga
       delete (this.list.unfollowed[manga.id])
@@ -395,7 +397,6 @@ function MangaList({
     let matches = Object.values(this.list.followed).concat(showUnfollowed === 0 ? Object.values(this.list.unfollowed) : []).filter((e) => {
       // If this user is already marked as the highest priority match, dont process them anymore.
       const regex_partial_name = new RegExp(`${fuzzy ? '' : '^'}${partial_name}` ,`${case_sensitive ? '' : 'i'}`)
-
       if (e.title.match(regex_partial_name)) {
         return true
       }
@@ -419,6 +420,13 @@ function MangaList({
           return bm
         }
       }
+      {
+        const am = a.lastViewedDate
+        const bm = b.lastViewedDate
+        if (am > bm) return -1
+        if (am < bm) return 1
+      }
+      return 0
     })
     return matches
   }
@@ -719,20 +727,32 @@ function initSettingsDialog({ loaded_settings ,atWhoMethods }) {
     }
   })
   const autocompleteTypes = settingsUi.addMultiselect({
-    title: 'Autocomplete'
+    title: 'Autocompletes'
     ,key: 'autocompleteTypes'
+    ,titleText: 'What all should we will autocomplete?'
+    ,placeholder: 'Autocompletion disabled! Click here to re-enable...'
   })
   autocompleteTypes.addOption({
     key: 'usernames'
     ,title: '@Mentions'
-    ,settingsTreeConfig: { defaultValue: true }
+    ,settingsTreeConfig: {
+      defaultValue: true
+      ,onchange: () => {
+        atWhoMethods.rebuild()
+      }
+    }
   })
   autocompleteTypes.addOption({
     key: 'titles'
     ,title: ':Title'
-    ,settingsTreeConfig: { defaultValue: true }
+    ,settingsTreeConfig: {
+      defaultValue: true
+      ,onchange: () => {
+        atWhoMethods.rebuild()
+      }
+    }
   })
-  /*const userCompletionCharCount = settingsUi.addTextbox({
+  /* const userCompletionCharCount = settingsUi.addTextbox({
     key: 'userCompletionCharCount'
     ,title: 'Minimum username length'
     ,settingsTreeConfig: {
@@ -743,7 +763,7 @@ function initSettingsDialog({ loaded_settings ,atWhoMethods }) {
     ,max: 10
     ,titleText: 'Mnimum number of characters in the Username you must type before autocompletion starts. Default: 0'
     ,type: 'number'
-  })*/
+  }) */
   const showUsersWho = settingsUi.addSelect({
     title: 'Show users who'
     ,key: 'showUsersWho'
@@ -815,7 +835,7 @@ function initSettingsDialog({ loaded_settings ,atWhoMethods }) {
     }
     ,titleText: 'Character(s) you must type in order to trigger Manga Title auto completion. default: colon character <:>'
   })
-  /*const titleCompletionCharCount = settingsUi.addTextbox({
+  /* const titleCompletionCharCount = settingsUi.addTextbox({
     key: 'titleCompletionCharCount'
     ,title: 'Minimum title length'
     ,settingsTreeConfig: {
@@ -826,7 +846,7 @@ function initSettingsDialog({ loaded_settings ,atWhoMethods }) {
     ,max: 10
     ,titleText: 'Mnimum number of characters in the Title you must type before autocompletion starts. Default: 0'
     ,type: 'number'
-  })*/
+  }) */
   const showUnfollowed = settingsUi.addSelect({
     title: 'Unfollowed manga is'
     ,key: 'showUnfollowed'
@@ -887,31 +907,6 @@ function initSettingsDialog({ loaded_settings ,atWhoMethods }) {
 }
 
 
-function autoComplete(partial_name ,render_view) {
-  const r = uhist.autoComplete(partial_name ,{
-    thread_id ,case_sensitive: false ,fuzzy: true ,showUsersWho: settings.showUsersWho
-  })
-  render_view(r)
-}
-
-function autoCompleteManga(partial_name ,render_view) {
-  const r = mangaList.autoComplete(partial_name ,{
-    case_sensitive: false ,fuzzy: true ,showUnfollowed: settings.showUnfollowed
-  })
-  render_view(r)
-}
-
-function formatDisplayItem(item) {
-  return `<li class="dropdown-item px-0 " style=""><div class="d-flex justify-content-between align-items-center px-2" style="height:50px;" title="${item.excerpt}">
-    <div class="h-100">
-    <span class="">${item.did_mention ? '@' : ''}</span>
-    <span class="${item.thread_id === thread_id ? 'far fa-comments' : ''}"></span>
-    <img src="${item.user_img}" class="mh-100 rounded avatar"/>
-    </div>
-    <span class="${item.user_level}" style="color:${item.user_color};">${item.user_name}</span>
-    </div></li>`
-}
-
 function formatMangaItem(item) {
   // When getters/setters are present, the object is assigned to name. For some reason
   const obj = item.name
@@ -933,48 +928,6 @@ function main({ read_posts_history ,mangaTitleHistory ,settings: loaded_settings
   const settings = initSettingsDialog({
     loaded_settings ,atWhoMethods
   })
-  atWhoMethods.rebuild = () => {
-    $('textarea[id="text"]').atwho('destroy')
-    $('textarea[id="text"]').atwho({
-      at: '@'
-      ,displayTpl: formatDisplayItem
-      ,insertTpl: '${atwho-at}${user_name}'
-      ,searchKey: 'user_name'
-      // We don't want to use your filter or sorter. remoteFilter is a better fit for us.
-      ,data: []
-      // data: uhist.history,
-      ,limit: 200
-      ,callbacks: {
-        remoteFilter: autoComplete
-        // NoOp
-        ,sorter: (_ ,i) => i
-
-      }
-    }).atwho({
-      at: settings.titleCompletionChar
-      ,displayTpl: formatMangaItem
-      ,insertTpl: ({ 'atwho-at': atwhoat ,name: item }) => `${
-        settings.autocompleteTitleInto.thumbnail
-          ? `[img]${item.thumbnail}[/img]`
-          : ''}${
-        settings.autocompleteTitleInto.link
-          ? `[url=${item.url}]${item.title}[/url]`
-          : item.title}${
-        settings.autocompleteTitleInto.description && item.description != null
-          ? `Description: [spoiler]${item.description}[/spoiler]`
-          : ''
-      }`
-      ,searchKey: 'title'
-      ,data: []
-      // ,data: [...Object.values(mangaList.list.followed) ,...Object.values(mangaList.list.unfollowed)]
-      ,limit: 200
-      ,callbacks: {
-        remoteFilter: autoCompleteManga
-        // NoOp
-        ,sorter: (_ ,i) => i
-      }
-    })
-  }
 
   // Manga  History
   const mangaList = new MangaList({
@@ -1015,13 +968,86 @@ function main({ read_posts_history ,mangaTitleHistory ,settings: loaded_settings
     setUserValues({ read_posts_history: uhist.history })
 
     // NOTE there can be more than one textarea. but they all use the same id :O
+    function autoComplete(partial_name ,render_view) {
+      const r = uhist.autoComplete(partial_name ,{
+        thread_id ,case_sensitive: false ,fuzzy: true ,showUsersWho: settings.showUsersWho
+      })
+      render_view(r)
+    }
+
+    function autoCompleteManga(partial_name ,render_view) {
+      const r = mangaList.autoComplete(partial_name ,{
+        case_sensitive: false ,fuzzy: true ,showUnfollowed: settings.showUnfollowed
+      })
+      render_view(r)
+    }
+
+    function formatDisplayItem(item) {
+      return `<li class="dropdown-item px-0 " style=""><div class="d-flex justify-content-between align-items-center px-2" style="height:50px;" title="${item.excerpt}">
+        <div class="h-100">
+        <span class="">${item.did_mention ? '@' : ''}</span>
+        <span class="${item.thread_id === thread_id ? 'far fa-comments' : ''}"></span>
+        <img src="${item.user_img}" class="mh-100 rounded avatar"/>
+        </div>
+        <span class="${item.user_level}" style="color:${item.user_color};">${item.user_name}</span>
+        </div></li>`
+    }
+
+    atWhoMethods.rebuild = () => {
+      $('textarea[id="text"]').atwho('destroy')
+      if (settings.autocompleteTypes.usernames) {
+        $('textarea[id="text"]').atwho({
+          at: '@'
+          ,displayTpl: formatDisplayItem
+          ,insertTpl: '${atwho-at}${user_name}'
+          ,searchKey: 'user_name'
+          // We don't want to use your filter or sorter. remoteFilter is a better fit for us.
+          ,data: []
+          // data: uhist.history,
+          ,limit: 200
+          ,callbacks: {
+            remoteFilter: autoComplete
+            // NoOp
+            ,sorter: (_ ,i) => i
+
+          }
+        })
+      }
+      if (settings.autocompleteTypes.titles) {
+        $('textarea[id="text"]').atwho({
+          at: settings.titleCompletionChar
+          ,displayTpl: formatMangaItem
+          ,insertTpl: ({ 'atwho-at': atwhoat ,name: item }) => `${
+            settings.autocompleteTitleInto.thumbnail
+              ? `[img]${item.thumbnail}[/img]`
+              : ''}${
+            settings.autocompleteTitleInto.link
+              ? `[url=${item.url}]${item.title}[/url]`
+              : item.title}${
+            settings.autocompleteTitleInto.description && item.description != null
+              ? `Description: [spoiler]${item.description}[/spoiler]`
+              : ''
+          }`
+          ,searchKey: 'title'
+          ,data: []
+          // ,data: [...Object.values(mangaList.list.followed) ,...Object.values(mangaList.list.unfollowed)]
+          ,limit: 200
+          ,callbacks: {
+            remoteFilter: autoCompleteManga
+            // NoOp
+            ,sorter: (_ ,i) => i
+          }
+        })
+      }
+      $('.atwho-container').addClass('container ')
+      $('.atwho-view').css({ display: 'none' })
+      $('.atwho-view-ul').addClass('pre-scrollable d-inline-flex flex-column')
+    }
 
     atWhoMethods.rebuild()
 
     // HACK make atwho use flex instead of block
-    $('.atwho-container').addClass('container ')
-    $('.atwho-view').css({ display: 'none' })
-    $('.atwho-view-ul').addClass('pre-scrollable d-inline-flex flex-column')
+
 
     // This also works instead of inline flex on ul, but it makes the container visible until atwho is invoked
     // Hide now. atwho changes display between none and whatever it is already set to automaticly
