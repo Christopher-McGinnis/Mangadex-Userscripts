@@ -244,7 +244,7 @@ function Manga({ id ,title ,description ,image ,isFollowing ,lastViewedDate }) {
     }
     ,isFollowing: {
       get() {
-        return (privateObject.isFollowing === true)
+        return privateObject.isFollowing === true
       }
       ,set(val) {
         return privateObject.isFollowing = val
@@ -398,6 +398,7 @@ function MangaList({
     }).reduce((accum ,[k ,o]) => {
       accum[k] = o; return accum
     } ,{})
+    return true
   }
   this.load = (val) => {
     Object.entries(val.followed).forEach(([k ,v]) => {
@@ -409,6 +410,7 @@ function MangaList({
   }
 
   this.savable = () => {
+    cleanupHistory()
     const obj = {
       followed: {} ,unfollowed: {}
     }
@@ -416,7 +418,7 @@ function MangaList({
       obj.followed[k] = v.savable()
     })
     Object.entries(mangaList.list.unfollowed).forEach(([k ,v]) => {
-      obj.followed[k] = v.savable()
+      obj.unfollowed[k] = v.savable()
     })
     return obj
   }
@@ -437,7 +439,6 @@ function MangaList({
       this.list.unfollowed[manga.id] = manga
       delete (this.list.followed[manga.id])
     }
-    cleanupHistory()
   }
 
   this.autoComplete = (partial_name ,{ case_sensitive = false ,fuzzy = true ,showUnfollowed = 0 } = {}) => {
