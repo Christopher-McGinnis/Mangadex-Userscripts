@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     Mangadex Uncommon functions
-// @version  0.0.6
+// @version  0.0.7
 // @description WARNING Should NOT be required by other userscripts. Lets be honest, no one else wants this crap. This is a personal library for personal problems.
 // ==/UserScript==
 /* eslint no-unused-vars: ["off"] */
@@ -118,14 +118,14 @@ function XPath(xpath_str = '') {
     return getOrderedItterByXpath(xp ,node)
   }
   xp.forEachElement = (fn ,node) => {
-    for (let [i ,item] = [xp.getItter()]; (() => {
+    for (let [i ,item] = [xp.getItter(node)]; (() => {
       item = i.iterateNext(); return item
     })();) {
       fn(item)
     }
   }
   xp.forEachOrderedElement = (fn ,node) => {
-    for (let [i ,item] = [xp.getOrderedItter()]; (() => {
+    for (let [i ,item] = [xp.getOrderedItter(node)]; (() => {
       item = i.iterateNext(); return item
     })();) {
       fn(item)
@@ -139,13 +139,32 @@ class XPath2 {
     this.xpath = xpathStr.toString()
   }
 
-  static containsNormalized(attr ,text) {
-    return `contains(concat(' ', normalize-space(${attr}), ' '), ' ${text} ')`
+  static containsNormalizedAttr(attr ,text) {
+    return `contains(concat(' ', normalize-space(${attr}), ' '), '${text}')`
+  }
+
+  static attrHasValue(attr ,text) {
+    return XPath2.containsNormalizedAttr(attr ,` ${text} `)
+  }
+
+  static attrHasValueStartingWith(attr ,text) {
+    return XPath2.containsNormalizedAttr(attr ,` ${text}`)
+  }
+
+  static attrHasValueEndingWith(attr ,text) {
+    return XPath2.containsNormalizedAttr(attr ,`${text} `)
   }
 
   static containsClass(classes) {
     const classArr = (typeof classes === 'string') ? [classes] : classes
-    return classArr.reduce((accum ,aClass) => `${accum.length > 0 ?  `${accum} and ` : accum}${XPath2.containsNormalized('@class' ,aClass)}`, '')
+    return classArr.reduce((accum ,aClass) => `${accum.length > 0 ?  `${accum} and ` : accum}${XPath2.attrHasValue('@class' ,aClass)}` ,'')
+  }
+
+  static contains(obj) {
+    return Object.entries(obj).reduce(([attr ,origValues]) => {
+      const values = (typeof origValues === 'object') ? origValues : [origValues]
+      return values.reduce((accum ,value) => `${accum.length > 0 ?  `${accum} and ` : accum}${XPath2.containsNormalized(attr ,value)}` ,'')
+    })
   }
 }
 
