@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name     Mangadex Autocomplete
-// @description Autocompletes @mention usernames. Maintains a small history of user posts you recently viewed and searches that for matches. Example image shown in additional info
+// @description Autocompletes @mentions and :titles. Maintains a small history of user posts and manga you recently viewed and searches that for matches. Example image shown in additional info
 // @namespace https://github.com/Brandon-Beck
-// @version  0.0.10
+// @version  0.0.11
 // @grant    unsafeWindow
 // @grant    GM.getValue
 // @grant    GM.setValue
