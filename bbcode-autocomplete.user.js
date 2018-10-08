@@ -11,17 +11,20 @@
 // @require  https://cdn.rawgit.com/ichord/Caret.js/341fb20b6126220192b2cd226836cd5d614b3e09/dist/jquery.caret.js
 // @require  https://cdn.rawgit.com/ichord/At.js/1b7a52011ec2571f73385d0c0d81a61003142050/dist/js/jquery.atwho.js
 // @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/a480c30b64fba63fad4e161cdae01e093bce1e4c/common.js
-// @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/a480c30b64fba63fad4e161cdae01e093bce1e4c/uncommon.js
+// @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/21ec54406809722c425c39a0f5b6aad59fb3d88d/uncommon.js
 // @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/a480c30b64fba63fad4e161cdae01e093bce1e4c/settings-ui.js
 // @match    https://mangadex.org/*
 // @author   Christopher McGinnis
 // @icon     https://mangadex.org/images/misc/default_brand.png
 // @license  MIT
 // ==/UserScript==
+/* global XPath ,XPath2 ,getUserValues ,setUserValue ,dbg ,$ */
+/* global SettingsUI ,SettingsUIValidationError */
 
 'use strict'
 
 const MANGADEX_BASE_URI = 'https://mangadex.org'
+const xp = new XPath()
 
 /* *************************************
  * Functions That ought to go in a library
@@ -241,7 +244,7 @@ function Manga({ id ,title ,description ,image ,isFollowing ,lastViewedDate }) {
     }
     ,isFollowing: {
       get() {
-        return privateObject.isFollowing
+        return (privateObject.isFollowing === true)
       }
       ,set(val) {
         return privateObject.isFollowing = val
@@ -280,7 +283,6 @@ function AttemptParseMangaTitlePage(mangaList) {
   if (id == null) return undefined
 
   // Bulild manga entry
-  xp.new(`//*[${XPath2.containsClass('card-header')} and ./span[${XPath2.containsClass('fa-book')}] ]`)
   const titleElm = xp.new(`//*[${XPath2.containsClass('card-header')} and ./span[${XPath2.containsClass('fa-book')}] ]`).getElement()
   const title = titleElm.textContent
   // At the least, we need to know the extention
@@ -301,6 +303,49 @@ function AttemptParseMangaTitlePage(mangaList) {
     ,isFollowing
     ,updateViewedTime: true
   })
+}
+function AttemptParseMangaFollowsPage(mangaList) {
+  // NOTE id was probably suppose to be titles. Expect it to change
+  const entryXpath = `./div[${XPath2.containsClass('row')}]/div[${XPath2.attrHasValueStartingWith('@class' ,'col')}]`
+  const titleXpath = `.//a[${XPath2.containsClass('manga_title')} and starts-with(@href,'/title/')]`
+  const descXpath = `./div[preceding-sibling::ul[${XPath2.containsClass('list-inline')}] and @style]`
+  // const chaptersElm = xp.new("//div[@id='chapters']").getElement()
+  // return if this is not a tile page
+  // if (chaptersElm == null) return undefined
+  // xp.new(`./div[${XPath2.containsClass('row')}]/div[${XPath2.attrHasValueStartingWith('@class' ,'col')}]`)
+  //  .forEachElement((chapterElm) => {
+
+  // generic over follows, search, titles, featured pages.
+  xp.new(`//div/${entryXpath}[${titleXpath} and ${descXpath}]`)
+    .forEachElement((chapterElm) => {
+      // Bulild manga entry
+      try {
+        const titleElm = xp.new(`.//a[${XPath2.containsClass('manga_title')} and starts-with(@href,'/title/')]`).getElement(chapterElm)
+        const title = titleElm.textContent
+        const match = titleElm.getAttribute('href').match(/\/title\/(\d+)\//)
+        if (match == null) return undefined
+        const [,id] = match
+        if (id == null) return undefined
+        const descriptionElm = xp.new(`./div[preceding-sibling::ul[${XPath2.containsClass('list-inline')}] and @style]`).getElement(chapterElm)
+        const description = descriptionElm.textContent
+        let isFollowing
+        if (window.location.href.match(/^https:\/\/mangadex\.org\/follows\//)) {
+          isFollowing = true
+        }
+        mangaList.push({
+          title
+          ,id
+          ,description
+          ,isFollowing
+          ,updateViewedTime: false
+        })
+      }
+      catch (e) {
+        dbg(e)
+        throw e
+      }
+      return undefined
+    })
 }
 function AttemptParseMangaFollowUpdates(mangaList) {
   const isHome = window.location.href.match(/^https:\/\/mangadex\.org(\/[^/]*)?$/) != null
@@ -350,7 +395,9 @@ function MangaList({
     this.list.unfollowed = Object.entries(this.list.unfollowed).sort(([,a] ,[,b]) => a.lastViewedDate > b.lastViewedDate).filter(() => {
       if (this.maxSize > cnt++) return true
       return false
-    })
+    }).reduce((accum ,[k ,o]) => {
+      accum[k] = o; return accum
+    } ,{})
   }
   this.load = (val) => {
     Object.entries(val.followed).forEach(([k ,v]) => {
@@ -369,7 +416,7 @@ function MangaList({
       obj.followed[k] = v.savable()
     })
     Object.entries(mangaList.list.unfollowed).forEach(([k ,v]) => {
-      obj.unfollowed[k] = v.savable()
+      obj.followed[k] = v.savable()
     })
     return obj
   }
@@ -528,7 +575,6 @@ function History({ history: loadedHistory = [] ,historySize = 200 } = {}) {
   return this
 }
 
-const xp = new XPath()
 const posts = xp.new('//tr').with(xp.new().contains('@class' ,'post'))
 // Because Javascript's does not require .sort to be Stable.
 // Currently Chrome alone uses Unstable sort. They are now moving to Stable.
@@ -935,6 +981,7 @@ function main({ read_posts_history ,mangaTitleHistory ,settings: loaded_settings
   })
   AttemptParseMangaTitlePage(mangaList)
   AttemptParseMangaFollowUpdates(mangaList)
+  AttemptParseMangaFollowsPage(mangaList)
   setUserValue('mangaTitleHistory' ,mangaList.savable())
   unsafeWindow.mangaList = mangaList
   // User History
@@ -1020,8 +1067,8 @@ function main({ read_posts_history ,mangaTitleHistory ,settings: loaded_settings
           ,insertTpl: ({ 'atwho-at': atwhoat ,name: item }) => {
             let img = settings.autocompleteTitleInto.thumbnail ? `[img]${item.thumbnail}[/img]` : ''
             const desc = settings.autocompleteTitleInto.description && item.description != null ? ` | Description: [spoiler]${item.description}[/spoiler]` : ''
-            if (settings.autocompleteTitleInto.link) img=`[url=${item.url}]${img}[/url]`
-            img=`\n${img}`
+            if (settings.autocompleteTitleInto.link) img = `[url=${item.url}]${img}[/url]`
+            img = `\n${img}`
             return `${settings.autocompleteTitleInto.link
               ? `[url=${item.url}]${item.title}[/url]${desc}${img}`
               : `${item.title}${desc}${img}`}`
