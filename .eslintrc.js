@@ -9,6 +9,10 @@ module.exports = {
     'strict': ['error' ,'global']
     // Var is disabled, and inner functions are fine in es6+
     ,'no-inner-declarations': ['off']
+    // Time to face it. This is JavaScript.
+    // camelCase is builtin. You don't have to like it, but you do have to use it.
+    // reducing to warning until fully adopted
+    ,camelcase: ['warn']
     , radix: ["error", "as-needed"]
     ,'max-len': [1 ,100 ,2 ,{ comments: 200 }]
     ,'brace-style': ['error' ,'stroustrup']
