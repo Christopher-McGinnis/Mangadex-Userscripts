@@ -2,7 +2,7 @@
 // @name     Mangadex Autocomplete
 // @description Autocompletes @mention usernames. Maintains a small history of user posts you recently viewed and searches that for matches. Example image shown in additional info
 // @namespace https://github.com/Christopher-McGinnis
-// @version  0.0.9
+// @version  0.0.10
 // @grant    unsafeWindow
 // @grant    GM.getValue
 // @grant    GM.setValue
