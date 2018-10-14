@@ -2,7 +2,7 @@
 // @name     Mangadex Autocomplete
 // @description Autocompletes @mentions and :titles. Maintains a small history of user posts and manga you recently viewed and searches that for matches. Example image shown in additional info
 // @namespace https://github.com/Brandon-Beck
-// @version  0.0.11
+// @version  0.0.12
 // @grant    unsafeWindow
 // @grant    GM.getValue
 // @grant    GM.setValue
@@ -12,7 +12,7 @@
 // @require  https://gitcdn.xyz/repo/ichord/At.js/1b7a52011ec2571f73385d0c0d81a61003142050/dist/js/jquery.atwho.js
 // @require  https://gitcdn.xyz/repo/Brandon-Beck/Mangadex-Userscripts/a480c30b64fba63fad4e161cdae01e093bce1e4c/common.js
 // @require  https://gitcdn.xyz/repo/Brandon-Beck/Mangadex-Userscripts/21ec54406809722c425c39a0f5b6aad59fb3d88d/uncommon.js
-// @require  https://gitcdn.xyz/repo/Brandon-Beck/Mangadex-Userscripts/a480c30b64fba63fad4e161cdae01e093bce1e4c/settings-ui.js
+// @require  https://gitcdn.xyz/repo/Brandon-Beck/Mangadex-Userscripts/0d46bb0b3fa43f11ea904945e7baef7c6e2a6a5b/settings-ui.js
 // @match    https://mangadex.org/*
 // @author   Brandon Beck
 // @icon     https://mangadex.org/images/misc/default_brand.png
