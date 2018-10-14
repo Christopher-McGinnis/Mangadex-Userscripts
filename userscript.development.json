@@ -12,19 +12,19 @@
   },
   "libraries": [
     {
-      "gitURI_prefix": "https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts",
+      "gitURI_prefix": "https://gitcdn.xyz/repo/Christopher-McGinnis/Mangadex-Userscripts",
       "filePath": "common.js"
     },
     {
-      "gitURI_prefix": "https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts",
+      "gitURI_prefix": "https://gitcdn.xyz/repo/Christopher-McGinnis/Mangadex-Userscripts",
       "filePath": "uncommon.js"
     },
     {
-      "gitURI_prefix": "https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts",
+      "gitURI_prefix": "https://gitcdn.xyz/repo/Christopher-McGinnis/Mangadex-Userscripts",
       "filePath": "settings-ui.js"
     },
     {
-      "publishURI": "https://cdn.rawgit.com/component/textarea-caret-position/af904838644c60a7c48b21ebcca8a533a5967074/index.js",
+      "publishURI": "https://gitcdn.xyz/repo/component/textarea-caret-position/af904838644c60a7c48b21ebcca8a533a5967074/index.js",
       "filePath": "external_libs/getCaretCoordinates/getCaretCoordinates.js"
     }
   ]

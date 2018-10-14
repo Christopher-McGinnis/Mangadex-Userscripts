@@ -8,11 +8,11 @@
 // @grant    GM.setValue
 // @grant    GM_getValue
 // @grant    GM_setValue
-// @require  https://cdn.rawgit.com/ichord/Caret.js/341fb20b6126220192b2cd226836cd5d614b3e09/dist/jquery.caret.js
-// @require  https://cdn.rawgit.com/ichord/At.js/1b7a52011ec2571f73385d0c0d81a61003142050/dist/js/jquery.atwho.js
-// @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/a480c30b64fba63fad4e161cdae01e093bce1e4c/common.js
-// @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/21ec54406809722c425c39a0f5b6aad59fb3d88d/uncommon.js
-// @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/a480c30b64fba63fad4e161cdae01e093bce1e4c/settings-ui.js
+// @require  https://gitcdn.xyz/repo/ichord/Caret.js/341fb20b6126220192b2cd226836cd5d614b3e09/dist/jquery.caret.js
+// @require  https://gitcdn.xyz/repo/ichord/At.js/1b7a52011ec2571f73385d0c0d81a61003142050/dist/js/jquery.atwho.js
+// @require  https://gitcdn.xyz/repo/Christopher-McGinnis/Mangadex-Userscripts/a480c30b64fba63fad4e161cdae01e093bce1e4c/common.js
+// @require  https://gitcdn.xyz/repo/Christopher-McGinnis/Mangadex-Userscripts/21ec54406809722c425c39a0f5b6aad59fb3d88d/uncommon.js
+// @require  https://gitcdn.xyz/repo/Christopher-McGinnis/Mangadex-Userscripts/a480c30b64fba63fad4e161cdae01e093bce1e4c/settings-ui.js
 // @match    https://mangadex.org/*
 // @author   Christopher McGinnis
 // @icon     https://mangadex.org/images/misc/default_brand.png
@@ -932,7 +932,19 @@ function initSettingsDialog({ loaded_settings ,atWhoMethods }) {
     ,title: 'Description Spoiler' // potentialy way to long to put outside a spoiler
     ,settingsTreeConfig: { defaultValue: false }
   })
-
+  const autocompleteTitleStyle = settingsUi.addMultiselect({
+    title: 'Title style'
+    ,key: 'autocompleteTitleStyle'
+    ,titleText: 'BBCode formating style'
+    ,placeholder: 'Let me format it myself!'
+    // ,branchingSingleselect: true
+    // ,settingsTreeConfig: { defaultValue: 0 }
+  })
+  autocompleteTitleStyle.addOption({
+    key: 'center'
+    ,title: 'Center'
+    ,settingsTreeConfig: { defaultValue: false }
+  })
   const titleHistLimit = settingsUi.addTextbox({
     key: 'max_title_history'
     ,title: 'Unfollowed memory size'
@@ -1066,13 +1078,21 @@ function main({ read_posts_history ,mangaTitleHistory ,settings: loaded_settings
           at: settings.titleCompletionChar
           ,displayTpl: formatMangaItem
           ,insertTpl: ({ 'atwho-at': atwhoat ,name: item }) => {
-            let img = settings.autocompleteTitleInto.thumbnail ? `[img]${item.thumbnail}[/img]` : ''
+            const link = settings.autocompleteTitleInto.link ? {
+              open: `[url=${item.url}]` ,close: '[/url]'
+            } : {
+              open: '' ,close: ''
+            }
+            const alignment = settings.autocompleteTitleStyle.center
+              ? {
+                open: '[center]' ,close: '[/center]'
+              }
+              : {
+                open: '' ,close: ''
+              }
+            const img = settings.autocompleteTitleInto.thumbnail ? `\n${alignment.open}${link.open}[img]${item.thumbnail}[/img]${link.close}${alignment.close}` : ''
             const desc = settings.autocompleteTitleInto.description && item.description != null ? ` | Description: [spoiler]${item.description}[/spoiler]` : ''
-            if (settings.autocompleteTitleInto.link) img = `[url=${item.url}]${img}[/url]`
-            img = `\n${img}`
-            return `${settings.autocompleteTitleInto.link
-              ? `[url=${item.url}]${item.title}[/url]${desc}${img}`
-              : `${item.title}${desc}${img}`}`
+            return `${alignment.open}${link.open}${item.title}${link.close}${alignment.close}${desc}${img}`
           }
           ,searchKey: 'title'
           ,data: []
@@ -1101,7 +1121,7 @@ function main({ read_posts_history ,mangaTitleHistory ,settings: loaded_settings
     // $('.atwho-view-ul').addClass('pre-scrollable ')
 
     // These make atwho dropdown menu use the same color theme as the site
-    // const atwhoStylesheet = addCssLink('https://cdn.rawgit.com/ichord/At.js/1b7a52011ec2571f73385d0c0d81a61003142050/dist/css/jquery.atwho.css')
+    // const atwhoStylesheet = addCssLink('https://gitcdn.xyz/repo/ichord/At.js/1b7a52011ec2571f73385d0c0d81a61003142050/dist/css/jquery.atwho.css')
     const customStylesheet = insertStylesheet('')
     // HACK dropdown-menu breaks atwho autoscroll somehow. lets just copy parts of the theme
     duplicate_cssRule({

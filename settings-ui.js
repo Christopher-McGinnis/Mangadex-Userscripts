@@ -9,8 +9,8 @@
 // @grant    GM_setValue
 // @grant    GM_listValues
 // @grant    GM_listValues
-// @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/ecfc52fda045b5262562cf6a25423603f1ac5a99/common.js
-// @require  https://cdn.rawgit.com/Christopher-McGinnis/Mangadex-Userscripts/ecfc52fda045b5262562cf6a25423603f1ac5a99/uncommon.js
+// @require  https://gitcdn.xyz/repo/Christopher-McGinnis/Mangadex-Userscripts/a480c30b64fba63fad4e161cdae01e093bce1e4c/common.js
+// @require  https://gitcdn.xyz/repo/Christopher-McGinnis/Mangadex-Userscripts/21ec54406809722c425c39a0f5b6aad59fb3d88d/uncommon.js
 // @match    https://mangadex.org/*
 // @author   Christopher McGinnis
 // @icon     https://mangadex.org/images/misc/default_brand.png
