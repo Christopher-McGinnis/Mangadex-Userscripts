@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name     Mangadex Settings
-// @version  0.0.2
+// @version  0.0.3
 // @description Settings UI builder for Mangadex userscripts. Should be required by other userscripts.
 // @grant    unsafeWindow
 // @grant    GM.getValue

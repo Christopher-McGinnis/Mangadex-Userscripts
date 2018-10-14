@@ -2,7 +2,7 @@
 // @name     Mangadex Copy link as BBCode
 // @description Adds a "Copy as BBCode" button next to links. Currently operates on title page links, and any breadcrumbs.
 // @namespace https://github.com/Christopher-McGinnis
-// @version  0.0.2
+// @version  0.0.3
 // @grant    unsafeWindow
 // @grant    GM.setClipboard
 // @grant    GM_setClipboard
