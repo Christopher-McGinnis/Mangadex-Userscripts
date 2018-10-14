@@ -6,8 +6,8 @@
 // @grant    unsafeWindow
 // @grant    GM.setClipboard
 // @grant    GM_setClipboard
-// @require  https://cdn.rawgit.com/Brandon-Beck/Mangadex-Userscripts/15510350de16f4d20b5d7664ee3b66415995c109/common.js
-// @require  https://cdn.rawgit.com/Brandon-Beck/Mangadex-Userscripts/15510350de16f4d20b5d7664ee3b66415995c109/uncommon.js
+// @require  https://gitcdn.xyz/repo/Brandon-Beck/Mangadex-Userscripts/a480c30b64fba63fad4e161cdae01e093bce1e4c/common.js
+// @require  https://gitcdn.xyz/repo/Brandon-Beck/Mangadex-Userscripts/21ec54406809722c425c39a0f5b6aad59fb3d88d/uncommon.js
 // @match    https://mangadex.org/*
 // @license  MIT
 // @author   Brandon Beck
