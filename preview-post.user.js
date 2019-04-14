@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name     Mangadex PreviewPost
+// @name     Mangadex Preview Post
 // @description Preview new forum/comment posts and edits on MangaDex.
 // @namespace https://github.com/Brandon-Beck
-// @version  0.0.4
+// @version  0.0.5
 // @grant    unsafeWindow
 // @grant    GM.getValue
 // @grant    GM.setValue
