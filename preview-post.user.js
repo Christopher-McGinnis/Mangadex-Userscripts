@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name     Mangadex PreviewPost
+// @name     Mangadex Preview Post
 // @description Preview new forum/comment posts and edits on MangaDex.
 // @namespace https://github.com/Christopher-McGinnis
-// @version  0.0.1
+// @version  0.0.2
 // @grant    unsafeWindow
 // @grant    GM.getValue
 // @grant    GM.setValue
