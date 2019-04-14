@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name     Mangadex Preview Post
+// @name     Mangadex PreviewPost
 // @description Preview new forum/comment posts and edits on MangaDex.
 // @namespace https://github.com/Brandon-Beck
-// @version  0.0.3
+// @version  0.0.4
 // @grant    unsafeWindow
 // @grant    GM.getValue
 // @grant    GM.setValue
@@ -20,11 +20,7 @@
 // 
 
 
-/*
-    FIXME:
-    Make own or use better parser/tokenizer.
-    Currently bugs out with nested tags of same type (eg. nested ul/ol/list)
-*/
+
 class BBCode {
     /* Taken from https://github.com/DasRed/js-bbcode-parser
      * Distributed under MIT license
@@ -141,7 +137,10 @@ bbCodeParser.create = BBCode;
 
 
 function makePreview(txt) {
-  return bbCodeParser.parse(txt)
+  let html = bbCodeParser.parse(txt)
+  let tmpl = document.createElement("div")
+  tmpl.innerHTML = html
+  return tmpl
 }
 
 let previewDivTempl = document.createElement("div")
@@ -149,29 +148,59 @@ let previewDivTempl = document.createElement("div")
 function createPreviewCallbacks() {
   let forms = Object.values(document.querySelectorAll(".post_edit_form"))
   forms = forms.concat( Object.values(document.querySelectorAll("#post_reply_form")))
+  forms = forms.concat( Object.values(document.querySelectorAll("#change_profile_form")))
+  
   forms.forEach((forum)=>{
-    let previewDiv = previewDivTempl.cloneNode()
-    forum.parentElement.insertBefore(previewDiv,forum)
     // Try to make it side by side
     //e.parentElement.parentElement.insertBefore(previewDiv,e.parentElement)
     //e.parentElement.classList.add("sticky-top", "pt-5", "col-6")
     let textarea = forum.querySelector("textarea")
-    function refreshPreview() {
-      let preview = makePreview(textarea.value)
-      // Remember scroll position
-      var old_height = $(document).height();  //store document height before modifications
-      var old_scroll = $(window).scrollTop(); //remember the scroll position
-      // Update Preview
-      previewDiv.innerHTML = preview
-      // Scroll back to position
-      $(document).scrollTop(old_scroll + $(document).height() - old_height);
+    let previewDiv = makePreview(textarea.value)
+    forum.parentElement.insertBefore(previewDiv,forum)
+    let curDisplayedVersion = 0
+    let nextVersion = 0
+    function UpdatePreview() {
+      // Create a preview buffer
+      let thisVersion = nextVersion++
+      let newPreview = makePreview(textarea.value)
+      let imgLoadPromises = []
+      Object.values(newPreview.querySelectorAll("img")).forEach((img) => {
+        imgLoadPromises.push(new Promise(resolve => {
+          img.addEventListener('load', resolve)
+          // Errors dont really matter to us
+          img.addEventListener('error', resolve)
+          // Esure we are not already done
+          if (img.complete) {
+            resolve()
+          }
+        }))
+      })
+      // Wait for all images to load or error (size calculations needed) before we swap and rescroll
+      // This is the part that actualy updates the preview
+      Promise.all(imgLoadPromises).then(()=>{
+        // Return if we are older than cur preview
+        if (thisVersion < curDisplayedVersion) {
+          newPreview.remove()
+          return
+        }
+        curDisplayedVersion = thisVersion
+        // Remember scroll position
+        let old_height = $(document).height();  //store document height before modifications
+        let old_scroll = $(window).scrollTop(); //remember the scroll position
+        // Replace the Preview with the buffered content
+        previewDiv.parentElement.insertBefore(newPreview,previewDiv)
+        previewDiv.remove()
+        previewDiv=newPreview
+        // Scroll back to position
+        $(document).scrollTop(old_scroll + $(document).height() - old_height);
+      })
     }
-    previewDiv.innerHTML = makePreview(textarea.value)
+    
     let buttons = Object.values(forum.querySelectorAll("button"))
     buttons.forEach((btn)=>{
-      btn.addEventListener('click',refreshPreview)
+      btn.addEventListener('click', UpdatePreview)
     })
-    textarea.oninput = refreshPreview
+    textarea.oninput = UpdatePreview
   })
 }
 
