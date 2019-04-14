@@ -2,7 +2,7 @@
 // @name     Mangadex Preview Post
 // @description Preview new forum/comment posts and edits on MangaDex.
 // @namespace https://github.com/Christopher-McGinnis
-// @version  0.0.2
+// @version  0.0.3
 // @grant    unsafeWindow
 // @grant    GM.getValue
 // @grant    GM.setValue
@@ -20,7 +20,11 @@
 // 
 
 
-
+/*
+    FIXME:
+    Make own or use better parser/tokenizer.
+    Currently bugs out with nested tags of same type (eg. nested ul/ol/list)
+*/
 class BBCode {
     /* Taken from https://github.com/DasRed/js-bbcode-parser
      * Distributed under MIT license
@@ -124,7 +128,7 @@ const bbCodeParser = new BBCode({
     '\\[list\\](.*?)\\[/list\\]': '<ul>$1</ul>',
     '\\[ol\\](.*?)\\[/ol\\]': '<ol>$1</ol>',
     '\\[ul\\](.*?)\\[/ul\\]': '<ul>$1</ul>',
-    '\\[\\*\\](.*?)\\[/\\*\\]':    '<li>$1</li>'
+    '\\[\\*\\](.*?)<br>':    '<li>$1</li><br>'
 });
 
 // define configuration function for default
