@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name     Mangadex Preview Post
-// @description Preview new forum/comment posts and edits on MangaDex.
+// @description Preview new forum/comment posts and edits on MangaDex. Shows a formatted preview of your post/comment above the edit box.
 // @namespace https://github.com/Brandon-Beck
-// @version  0.0.7
+// @version  0.0.8
 // @grant    unsafeWindow
 // @grant    GM.getValue
 // @grant    GM.setValue
@@ -164,7 +164,7 @@ PrefixTag = "[" tag:PrefixTagList "]" { return {type:tag} }
 
 ListTags = "list" / "ul" / "ol" / "li"
 
-NormalTagList = "list" / "spoiler" / "center" / "code" / "img" /  "sub" / "sup" / "left" / "right" / "ol" / "ul" / "h1" / "h2" / "h3" / "h4" / "h5" / "h6" / "hr" / "b" / "s" / "i" / "u"
+NormalTagList = "list" / "spoiler" / "center" / "code" / "quote" / "img" /  "sub" / "sup" / "left" / "right" / "ol" / "ul" / "h1" / "h2" / "h3" / "h4" / "h5" / "h6" / "hr" / "b" / "s" / "i" / "u"
 DataTagList = "url" 
 PrefixTagList = "*"
 
