@@ -2,7 +2,7 @@
 // @name     Mangadex Preview Post
 // @description Preview new forum/comment posts and edits on MangaDex. Shows a formatted preview of your post/comment above the edit box.
 // @namespace https://github.com/Brandon-Beck
-// @version  0.0.8
+// @version  0.0.9
 // @grant    unsafeWindow
 // @grant    GM.getValue
 // @grant    GM.setValue
@@ -106,8 +106,6 @@ const bbCodeParser = new BBCode({
     '\\[h2\\](.*?)\\[/h2\\]': '<h2>$1</h2>',
     '\\[h3\\](.*?)\\[/h3\\]': '<h3>$1</h3>',
     '\\[h4\\](.*?)\\[/h4\\]': '<h4>$1</h4>',
-    '\\[h5\\](.*?)\\[/h5\\]': '<h5>$1</h5>',
-    '\\[h6\\](.*?)\\[/h6\\]': '<h6>$1</h6>',
   
     '\\[sub\\](.*?)\\[/sub\\]': '<sub>$1</sub>',
     '\\[sup\\](.*?)\\[/sup\\]': '<sup>$1</sup>',
@@ -136,8 +134,71 @@ bbCodeParser.create = BBCode
 
 /* PEG grammer */
 let bbcodePegParser = peg.generate(String.raw`
-start = res:Expression? {return res}
-Expression = res:(Tag / LineBreak / Text )+ {return res}
+start = res:Expressions? {return res}
+Expressions = reses:Expression+ {
+  let astroot = [{type:"root",content:[]}]
+  let stack = [astroot[0]]
+  let astcur = astroot[0]
+  reses.forEach((res) => {
+    let thisast = {}
+    if (res.type == "open") {
+      thisast.type = res.content
+      thisast.content = []
+      astcur.content.push(thisast)
+      astcur=thisast
+      stack.push(thisast)
+    }
+    else if (res.type == "prefix") {
+      // cannot directly nest bullet in bullet (must have a non-prexix container class)
+      if (astcur.type == "*") {
+        stack.pop()
+        astcur=stack[stack.length -1]
+      }
+      thisast.type = res.content
+      thisast.content = []
+      astcur.content.push(thisast)
+      astcur=thisast
+      stack.push(thisast)
+    }
+    else if (res.type == "opendata") {
+      thisast.type = res.content
+      thisast.data = res.attr
+      thisast.content = []
+      astcur.content.push(thisast)
+      astcur=thisast
+      stack.push(thisast)
+    }
+    else if (res.type == "close") {
+      let idx = Object.values(stack).reverse().findIndex((e)=>e.type == res.content)
+      if (idx != -1 ) {
+        idx=idx+1
+        stack.splice(-idx,idx)
+        astcur=stack[stack.length -1]
+      }
+      else {
+        thisast.type="error" 
+        thisast.content="[/" + res.content + "]"
+        astcur.content.push(thisast)
+      }
+    }
+    else if (res.type == "linebreak" ) {
+      // TODO should check if prefix instead if prefix is to be expanded appon
+      if (astcur.type == "*") {
+        stack.pop()
+        astcur=stack[stack.length -1]
+      }
+      // Linebreaks are only added when we are not exiting a prefix
+      else {
+        astcur.content.push(res)
+      }
+    }
+    else {
+      astcur.content.push(res)
+    }
+  })
+  return astroot[0].content
+}
+Expression = res:(OpenTag / OpenDataTag / CloseTag / PrefixTag / LineBreak / Text ) 
 /*head:Term tail:(_ ("+" / "-") _ Term)* {
       return tail.reduce(function(result, element) {
         if (element[1] === "+") { return result + element[3]; }
@@ -158,13 +219,13 @@ OpenCloseTag = open:(OpenTag / OpenDataTag) content:Expression? close:CloseTag?
 } {
     return {type:open.tag, data:open.attr, content}
 }
-PrefixTag = "[" tag:PrefixTagList "]" { return {type:tag} }
+PrefixTag = "[" tag:PrefixTagList "]" { return {type:"prefix", content:tag} }
 
 // PrefixTag = "[" tag:PrefixTagList "]" content:(!("[/" ListTags "]" / LineBreak ) .)* { return {type:tag,unparsed:content.join('')} }
 
 ListTags = "list" / "ul" / "ol" / "li"
 
-NormalTagList = "list" / "spoiler" / "center" / "code" / "quote" / "img" /  "sub" / "sup" / "left" / "right" / "ol" / "ul" / "h1" / "h2" / "h3" / "h4" / "h5" / "h6" / "hr" / "b" / "s" / "i" / "u"
+NormalTagList = "list" / "spoiler" / "center" / "code" / "quote" / "img" /  "sub" / "sup" / "left" / "right" / "ol" / "ul" / "h1" / "h2" / "h3" / "h4" / "hr" / "b" / "s" / "i" / "u"
 DataTagList = "url" 
 PrefixTagList = "*"
 
@@ -180,12 +241,12 @@ Data
   }
   return text[1]
 }
-OpenTag = "[" tag:NormalTagList "]" { return {tag} }
+OpenTag = "[" tag:NormalTagList "]" { return {type:"open", content:tag} }
 AttrTagProxy = "=" attr:Data? {return attr}
-OpenDataTag = "[" tag:DataTagList attr:AttrTagProxy?  "]" { return {tag,attr:attr} }
+OpenDataTag = "[" tag:DataTagList attr:AttrTagProxy?  "]" { return {type:"opendata", content:tag,attr:attr} }
 
 
-CloseTag = "[/" tag:(DataTagList / NormalTagList ) "]" { return {tag} }
+CloseTag = "[/" tag:(DataTagList / NormalTagList / PrefixTagList ) "]" { return {type:"close", content:tag} }
 
 
 Text
@@ -213,9 +274,7 @@ _ "whitespace"
 
 /* main code */
 
-
 function pegAstToHtml(ast) {
-  let in_li = false
   if (ast == null) {
     return ""
   }
@@ -225,21 +284,11 @@ function pegAstToHtml(ast) {
   //dbg(ast)
   //Object.values(ast)
   let res =  ast.reduce((accum, e) => {
-    function try_exit_li() {
-      if (in_li) {
-        in_li=false
-        accum += "</li>"
-        return true
-      }
-      return false
-    }
     if (e.type == "text") {
       accum += e.content
     }
     else if (e.type == "linebreak") {
-      if (! try_exit_li() ) {
-        accum += "<br>"
-      }
+      accum += "<br>"
     }
     else if (e.type.match(/^(u|s|sub|sup|ol|code)$/)) {
       accum += `<${e.type}>${pegAstToHtml(e.content)}</${e.type}>`
@@ -277,9 +326,7 @@ function pegAstToHtml(ast) {
     else if (e.type == "*") {
       // must parse the inside for v2
       //accum += `<li>${pegAstToHtml( bbcodePegParser.parse(e.unparse) )}</li>`
-      try_exit_li()
-      accum += `<li>`
-      in_li=true
+      accum += `<li>${pegAstToHtml(e.content)}</li>`
     }
     else if (e.type == "error") {
       accum += e.content
@@ -292,12 +339,9 @@ function pegAstToHtml(ast) {
     }
     return accum
   },"")
-  if (in_li) {
-    in_li=false
-    res +="</li>"
-  }
   return res
 }
+
 
 function makePreview(txt) {
   //dbg(pegAstToHtml(bbcodePegParser.parse(txt)))
@@ -305,6 +349,14 @@ function makePreview(txt) {
   //let html = bbCodeParser.parse(txt)
   // Slower, but more dynamic
   let html = pegAstToHtml(bbcodePegParser.parse(txt))
+  let tmpl = document.createElement("div")
+  tmpl.innerHTML = html
+  return tmpl
+}
+function fastPreview(txt) {
+  // Faster, but less dynamic
+  // (not much faster either)
+  let html = bbCodeParser.parse(txt)
   let tmpl = document.createElement("div")
   tmpl.innerHTML = html
   return tmpl
@@ -328,12 +380,21 @@ function createPreviewCallbacks() {
     let nextVersion = 0
     let updateTimeout
     let updateTimeoutDelay = 50
+    
+    let maxAcceptableDelay = 500
+    let useFallbackPreview = false
     function UpdatePreview() {
       // Measure load speed. Used for setting update delay dynamicly.
       let startTime = Date.now()
       // Create a preview buffer
       let thisVersion = nextVersion++
-      let newPreview = makePreview(textarea.value)
+      let newPreview
+      if (useFallbackPreview) {
+        newPreview = fastPreview(textarea.value)
+      }
+      else {
+        newPreview = makePreview(textarea.value)
+      }
       let imgLoadPromises = []
       Object.values(newPreview.querySelectorAll("img")).forEach((img) => {
         imgLoadPromises.push(new Promise(resolve => {
@@ -351,9 +412,17 @@ function createPreviewCallbacks() {
       Promise.all(imgLoadPromises).then(()=>{
         let endTime = Date.now()
         let updateLoadDelay = endTime - startTime
-        // average out the times
-        updateTimeoutDelay = (updateTimeoutDelay + updateLoadDelay) / 2
-        dbg(`It took ${updateLoadDelay} milli to update. Changing delay to ${updateTimeoutDelay} `)
+        if (!useFallbackPreview && updateLoadDelay > maxAcceptableDelay) {
+          useFallbackPreview = true
+          dbg(`It took ${updateLoadDelay} milli to update. Max acceptable delay was ${maxAcceptableDelay}! Switching to fallback preview!`)
+          // We intentionally do not update the timout delay when we swap to fallback preview
+        }
+        else {
+          // average out the times
+          updateTimeoutDelay = (updateTimeoutDelay + updateLoadDelay) / 2
+          dbg(`It took ${updateLoadDelay} milli to update. Changing delay to ${updateTimeoutDelay} `)
+        }
+        
         // Return if we are older than cur preview
         if (thisVersion < curDisplayedVersion) {
           newPreview.remove()
