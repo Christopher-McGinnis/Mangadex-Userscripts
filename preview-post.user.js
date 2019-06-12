@@ -2,7 +2,7 @@
 // @name     Mangadex Preview Post
 // @description Preview new forum/comment posts and edits on MangaDex. Shows a formatted preview of your post/comment above the edit box.
 // @namespace https://github.com/Christopher-McGinnis
-// @version  0.0.9
+// @version  0.1.0
 // @grant    unsafeWindow
 // @grant    GM.getValue
 // @grant    GM.setValue
@@ -267,6 +267,153 @@ _ "whitespace"
   = [ \t\n\r]*
 `)
 
+// New version will enable:
+// Partial rebuilds! only update what changed
+// Autoscrolling Edit Preview! Ensure the line you are editing is visible as you change it.
+let bbcodePegParser_v2 = peg.generate(String.raw`
+start = res:Expressions? {return res}
+Expressions = reses:Expression+ {
+  let astroot = [{type:"root",content:[]}]
+  let stack = [astroot[0]]
+  let astcur = astroot[0]
+  reses.forEach((res) => {
+    let thisast = {}
+    if (res.type == "open") {
+      thisast.type = res.type
+      thisast.tag = res.content
+      thisast.content = []
+      thisast.location = location()
+      astcur.content.push(thisast)
+      astcur=thisast
+      stack.push(thisast)
+    }
+    else if (res.type == "prefix") {
+      // cannot directly nest bullet in bullet (must have a non-prexix container class)
+      if (astcur.type == "*") {
+        stack.pop()
+        astcur=stack[stack.length -1]
+      }
+      thisast.type = res.type
+      thisast.tag = res.content
+      thisast.content = []
+      thisast.location = location()
+      astcur.content.push(thisast)
+      astcur=thisast
+      stack.push(thisast)
+    }
+    else if (res.type == "opendata") {
+      thisast.type = res.type
+      thisast.tag = res.content
+      thisast.data = res.attr
+      thisast.content = []
+      thisast.location = location()
+      astcur.content.push(thisast)
+      astcur=thisast
+      stack.push(thisast)
+    }
+    else if (res.type == "close") {
+      let idx = Object.values(stack).reverse().findIndex((e)=>e.type == res.content)
+      if (idx != -1 ) {
+        idx=idx+1
+        // NOTE should we set ast location end?
+        //stack[stack.length -1 -idx ].location.end = location().end
+        stack.splice(-idx,idx)
+        astcur=stack[stack.length -1]
+      }
+      else {
+        thisast.type="error" 
+        thisast.content="[/" + res.content + "]"
+        thisast.location = location()
+        astcur.content.push(thisast)
+      }
+    }
+    else if (res.type == "linebreak" ) {
+      // TODO should check if prefix instead if prefix is to be expanded appon
+      if (astcur.type == "*") {
+        //astcur.location.end = location().end
+        stack.pop()
+        astcur=stack[stack.length -1]
+      }
+      // Linebreaks are only added when we are not exiting a prefix
+      else {
+        astcur.content.push(res)
+      }
+    }
+    else {
+      astcur.content.push(res)
+    }
+  })
+  return astroot[0].content
+}
+Expression = res:(OpenTag / OpenDataTag / CloseTag / PrefixTag / LineBreak / Text ) 
+/*head:Term tail:(_ ("+" / "-") _ Term)* {
+      return tail.reduce(function(result, element) {
+        if (element[1] === "+") { return result + element[3]; }
+        if (element[1] === "-") { return result - element[3]; }
+      }, head);
+    }
+*/
+Tag = tag:(OpenCloseTag / PrefixTag) {return tag}
+OpenCloseTag = open:(OpenTag / OpenDataTag) content:Expression? close:CloseTag?
+  &{
+    let hasClose = close != null
+    if (false && hasClose && open.tag != close.tag) {
+      throw new Error(
+          "Expected [/" + open.tag + "] but [/" + close.tag + "] found."
+      );
+	}
+    return true
+} {
+    return {type:open.tag, data:open.attr, content}
+}
+PrefixTag = "[" tag:PrefixTagList "]" { return {type:"prefix", content:tag} }
+
+// PrefixTag = "[" tag:PrefixTagList "]" content:(!("[/" ListTags "]" / LineBreak ) .)* { return {type:tag,unparsed:content.join('')} }
+
+ListTags = "list" / "ul" / "ol" / "li"
+
+NormalTagList = "list" / "spoiler" / "center" / "code" / "quote" / "img" /  "sub" / "sup" / "left" / "right" / "ol" / "ul" / "h1" / "h2" / "h3" / "h4" / "hr" / "b" / "s" / "i" / "u"
+DataTagList = "url" 
+PrefixTagList = "*"
+
+Data
+  = text:(!"]". Data?) {
+  /*if(text[2] != null) {
+    return {type: "data", content:text[1] + text[2].content }
+  }
+  return {type: "data", content:text[1] }
+  */
+  if(text[2] != null) {
+    return text[1] + text[2]
+  }
+  return text[1]
+}
+OpenTag = "[" tag:NormalTagList "]" { return {type:"open", content:tag, location:location() } }
+AttrTagProxy = "=" attr:Data? {return attr}
+OpenDataTag = "[" tag:DataTagList attr:AttrTagProxy?  "]" { return {type:"opendata", content:tag,attr:attr, location:location()} }
+
+
+CloseTag = "[/" tag:(DataTagList / NormalTagList / PrefixTagList ) "]" { return {type:"close", content:tag, location:location()} }
+
+
+Text
+  = text:(!(Tag / CloseTag / LineBreak). Text?) {
+  if(text[2] != null) {
+    return {type: "text", content:text[1] + text[2].content, location:{start: location().start, end:text[2].location.end}  }
+  }
+  return {type: "text", content:text[1], location:location() }
+}
+LineBreak
+  = [\n] {
+  return {type: "linebreak", location:location() }
+}
+ErrorCatcher
+  = errTxt:. {return {type: "error", content: errTxt, location:location()} }
+
+_ "whitespace"
+  = [ \t\n\r]*
+`)
+
 
 
 
@@ -343,12 +490,91 @@ function pegAstToHtml(ast) {
 }
 
 
+// New steps:
+// PegSimpleAST -> AST_WithHTML
+// AST_WithHTML + cursor_location -> HtmlElement
+// AST_WithHTML + text_change_location_and_range + all_text -> LocalAST_WithHTML_OfChange + local_ast_text_range -> LocalAST_WithHTML -> HtmlElement  
+function pegAstToHtml_v2(ast) {
+  if (ast == null) {
+    return ""
+  }
+  if (typeof(ast) !== "object") {
+    return ast
+  }
+  //dbg(ast)
+  //Object.values(ast)
+  let res =  ast.reduce((accum, e) => {
+    if (e.type == "text") {
+      accum += e.content
+    }
+    else if (e.type == "linebreak") {
+      accum += "<br>"
+    }
+    else if (e.type == "error") {
+      accum += e.content
+    }
+    // Everything after this must have a tag attribute!
+    // not nesting to avoid right shift
+    else if (!(e.type.match(/open|prefix|opendata/))) {
+      throw new Error({msg: `Unknown AST type "${e.type}" recieved!`, child_ast:e, container_ast:ast })
+    }
+    else if (e.tag.match(/^(u|s|sub|sup|ol|code)$/)) {
+      accum += `<${e.tag}>${pegAstToHtml(e.content)}</${e.tag}>`
+    }
+    else if (e.tag.match(/^(list|ul)$/)) {
+      accum += `<ul>${pegAstToHtml(e.content)}</ul>`
+    }
+    else if (e.tag.match(/^h[123456]$/)) {
+      accum += `<${e.tag}>${pegAstToHtml(e.content)}</${e.tag}>`
+    }
+    else if (e.tag.match(/^hr$/)) {
+      accum += `<${e.tag}>${pegAstToHtml(e.content)}`
+    }
+    else if (e.tag.match(/^b$/)) {
+      accum += `<strong>${pegAstToHtml(e.content)}</strong>`
+    }
+    else if (e.tag.match(/^i$/)) {
+      accum += `<em>${pegAstToHtml(e.content)}</em>`
+    }
+    else if (e.tag.match(/^url$/)) {
+      accum += `<a href="${e.data}" target="_blank">${pegAstToHtml(e.content)}</a>`
+    }
+    else if (e.tag.match(/^img$/)) {
+      accum += `<img src="${pegAstToHtml(e.content)}"/>`
+    }
+    else if (e.tag.match(/^quote$/)) {
+      accum += `<div style="width: 100%; display: inline-block; margin: 1em 0;" class="well well-sm">${pegAstToHtml(e.content)}</div>`
+    }
+    else if (e.tag.match(/^spoiler$/)) {
+      accum += `<button type="button" class="btn btn-sm btn-warning btn-spoiler">Spoiler</button><p class="spoiler display-none">${pegAstToHtml(e.content)}</p>`
+    }
+    else if (e.tag.match(/^(center|left|right)$/)) {
+      accum += `<p class="text-center">${pegAstToHtml(e.content)}</p>`
+    }
+    else if (e.tag == "*") {
+      // must parse the inside for v2
+      //accum += `<li>${pegAstToHtml( bbcodePegParser.parse(e.unparse) )}</li>`
+      accum += `<li>${pegAstToHtml(e.content)}</li>`
+    }
+    else if (e.content != null ){
+      accum += pegAstToHtml(e.content)
+    }
+    else {
+      accum += e
+    }
+    return accum
+  },"")
+  return res
+}
+
+
 function makePreview(txt) {
   //dbg(pegAstToHtml(bbcodePegParser.parse(txt)))
   // Faster, but less dynamic
   //let html = bbCodeParser.parse(txt)
   // Slower, but more dynamic
   let html = pegAstToHtml(bbcodePegParser.parse(txt))
+  dbg(JSON.stringify(bbcodePegParser_v2.parse(txt)))
   let tmpl = document.createElement("div")
   tmpl.innerHTML = html
   return tmpl
@@ -367,7 +593,7 @@ let previewDivTempl = document.createElement("div")
 function createPreviewCallbacks() {
   let forms = Object.values(document.querySelectorAll(".post_edit_form"))
   forms = forms.concat( Object.values(document.querySelectorAll("#post_reply_form")))
-  forms = forms.concat( Object.values(document.querySelectorAll("#change_profile_form")))
+  forms = forms.concat( Object.values(document.querySelectorAll("#change_profile_form, #start_thread_form")))
   
   forms.forEach((forum)=>{
     // Try to make it side by side
@@ -420,7 +646,7 @@ function createPreviewCallbacks() {
         else {
           // average out the times
           updateTimeoutDelay = (updateTimeoutDelay + updateLoadDelay) / 2
-          dbg(`It took ${updateLoadDelay} milli to update. Changing delay to ${updateTimeoutDelay} `)
+          //dbg(`It took ${updateLoadDelay} milli to update. Changing delay to ${updateTimeoutDelay} `)
         }
         
         // Return if we are older than cur preview
@@ -441,7 +667,7 @@ function createPreviewCallbacks() {
       })
     }
     function UpdatePreviewProxy() {
-      dbg(`Reseting timeout with delay ${updateTimeoutDelay} `)
+      //dbg(`Reseting timeout with delay ${updateTimeoutDelay} `)
       clearTimeout(updateTimeout)
       updateTimeout = setTimeout(UpdatePreview,updateTimeoutDelay)
     }
