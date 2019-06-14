@@ -97,4 +97,4 @@ fetchPage(1,button,container).then((data)=>{
     button.parentElement.remove()
   }
 })
-)()
+})()
