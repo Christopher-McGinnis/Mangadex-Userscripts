@@ -457,7 +457,7 @@
       if (serialList.length === 1 && serialList[0].title.toLowerCase() === searchterm.toLowerCase()) {
         console.log(`Found Single Exact title match with MD Id '${serialList[0].id}' for Title '${serialList[0].title}'. Adding to list!`)
         setMdFollowStatus(serialList[0].id, targetStatus)
-        return serialList
+        return []
       }
       console.log(`Trying to build iface for '${searchterm}'!`)
       if (true || mangaList.length >= 1 || serialList[0].title.toLowerCase() !== serialList.toLowerCase()) {
@@ -470,8 +470,8 @@
           dom,
         })
       }
-      return serialList
-    })
+      return mangaList
+    }).then(serializeMdTitles)
   }
 
   function removeMatchingTitles(listA, listB) {
@@ -493,25 +493,37 @@
     planbtn.textContent = "Import to Plan To Read"
     const dropbtn = document.createElement('button')
     dropbtn.textContent = "Import to Droped"
-    const btnContainer = document.createElement('div');
-    [followbtn, compbtn, planbtn, dropbtn].forEach(e => e.style.flexGrow = '1')
-    btnContainer.style.display = 'flex'
-    btnContainer.style.flexDirection = 'row'
-    btnContainer.appendChild(followbtn)
-    btnContainer.appendChild(compbtn)
-    btnContainer.appendChild(planbtn)
-    btnContainer.appendChild(dropbtn)
+    const btnContainer = document.createElement('div')
+    const statusContainer = document.createElement('div')
+    const statusText = document.createElement('p')
+    ;[btnContainer,statusContainer].forEach((e)=>{
+      e.style.display = 'flex'
+      e.style.flexDirection = 'row'
+      e.style.alignContent = 'center'
+      e.style.justifyContent = 'center'
+    })
+    ;[followbtn, compbtn, planbtn, dropbtn].forEach((e) => {
+      e.style.flexGrow = '1'
+      btnContainer.appendChild(e)
+    })
+    statusContainer.appendChild(statusText)
 
-    document.body.appendChild(txt)
-    document.body.appendChild(btnContainer)
+    ;[txt,btnContainer,statusContainer].forEach(e=>document.body.appendChild(e))
+    const dbg =(...args)=>{
+      console.log(args)
+      statusText.textContent = args.join(' ')
+    }
     const importPromise = (targetStatus) => {
+      Object.values(btnContainer.children).forEach((e)=>{
+        e.disabled = true
+      })
       let list = JSON.parse(txt.value)
 
       function loopRun(fn) {
-        return fn().then(() => loopRun(fn)).catch(() => {})
+        return fn().then(() => loopRun(fn)).catch(() => {return })
       }
       let mdFilterList = Promise.resolve()
-      console.log(`Importing ${list.length} titles from MU`)
+      dbg(`Importing ${list.length} titles from MU`)
       if (list.length > 2) {
         // Reduce server load by removing follows from list
         let pageIdx = 1
@@ -522,7 +534,7 @@
           }) => {
             const origLength = list.length
             list = removeMatchingTitles(list, follows)
-            console.log(`Fetched MD Follows page ${pageIdx}/${pages}. Found ${origLength - list.length} existing titles. MU titles remaining: ${list.length}`)
+            dbg(`Fetched MD Follows page ${pageIdx}/${pages}. Found ${origLength - list.length} existing titles. MU titles remaining: ${list.length}`)
             const pagesLeft = pages - pageIdx
             if (pagesLeft > 0 && list.length > pagesLeft) {
               pageIdx++
@@ -535,16 +547,26 @@
       }
       let idx = 0
       return mdFilterList.then(() => {
-        console.log(`Searching for ${list.length} titles`)
+        dbg(`Searching for ${list.length} title${list.length!=1?'s':''}`)
+        let interventionNeeded=0
         loopRun(() => {
           if (list[idx] != null) {
-            console.log(`Searching for title ${idx+1}/${list.length}: ${list[idx].title}`)
+            dbg(`${interventionNeeded>0 ? `${interventionNeeded} title${interventionNeeded!=1?'s':''} require intervention. ` : ''}Searching for title ${idx+1}/${list.length}: '${list[idx].title}'`)
             // Small delay to reduce strain on server
-            return EasySelect(list[idx++].title, styles, targetStatus).then(() => {
+            return EasySelect(list[idx++].title, styles, targetStatus).then((searchResults) => {
+              if (searchResults.length > 0) {
+                interventionNeeded++
+              }
+              dbg(`${list[idx] == null ? 'Finished! ' : ''}${interventionNeeded>0 ? `${interventionNeeded} title${interventionNeeded!=1?'s':''} require intervention. ` : ''}${list[idx] != null ? `Preparing for title ${idx+1}/${list.length}: '${list[idx].title}'` : '' }`)
               return new Promise(res => setTimeout(res, 5000))
             })
           }
           throw Error("Out Of Entries")
+        }).then(()=>{
+          txt.value=''
+          Object.values(btnContainer.children).forEach((e)=>{
+            e.disabled = false
+          })
         })
       })
     }
