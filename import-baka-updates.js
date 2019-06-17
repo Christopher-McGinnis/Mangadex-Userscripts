@@ -93,8 +93,8 @@
         selects[0].parentElement.addEventListener("focusout", () => {
           selects[0].parentElement.classList.remove('show')
         })
-      }));
-      [...selects].forEach((e) => {
+      }))
+      ;[...selects].forEach((e) => {
         e.addEventListener('click', () => {
           selects[0].parentElement.classList.remove('show')
           const type = e.id;
@@ -131,13 +131,16 @@
       if (txtBtn == null) {
         txtBtn = dropArrow
       }
-      [dropArrow, btn].filter(e => e != null).forEach(e => e.addEventListener('click', () => {
-        selects[0].parentElement.classList.toggle('show')
-        selects[0].parentElement.addEventListener("focusout", () => {
-          selects[0].parentElement.classList.remove('show')
-        })
-      }));
-      [...selects].forEach((e) => {
+      if (btn != null) {
+        [dropArrow, btn].filter(e => e != null).forEach(e => e.addEventListener('click', () => {
+          selects[0].parentElement.classList.toggle('show')
+          selects[0].parentElement.addEventListener("focusout", () => {
+            selects[0].parentElement.classList.remove('show')
+          })
+        }))
+      }
+
+      ;[...selects].forEach((e) => {
         e.addEventListener('click', () => {
           if (!confirm("Are you sure? This will remove all the 'read chapter' markers.")) {
             return
