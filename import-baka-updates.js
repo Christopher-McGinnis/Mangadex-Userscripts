@@ -383,7 +383,7 @@
       let ourRunId = runId++
       const updateHeight = () => {
         if (ourRunId == runId - 1) {
-          iframe.style.height = `${lastEntry.offsetTop + lastEntry.offsetHeight + 20}px`
+          iframe.style.height = `${lastEntry.offsetTop + lastEntry.offsetHeight + 60}px`
         }
       }
       if (ourRunId == 0) {
