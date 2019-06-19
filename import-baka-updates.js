@@ -482,8 +482,6 @@
   function promptImportMd() {
     let styles = Object.values(document.querySelectorAll("style, link, script"))
     document.body.innerHTML = ''
-    document.body.style.display = 'flex'
-    document.body.style.flexDirection = 'column'
     const txt = document.createElement('input')
     const followbtn = document.createElement('button')
     followbtn.textContent = "Import to Follows"
@@ -496,28 +494,46 @@
     const btnContainer = document.createElement('div')
     const statusContainer = document.createElement('div')
     const statusText = document.createElement('p')
-    ;[btnContainer,statusContainer].forEach((e)=>{
+    const instructionsContainer = document.createElement('div')
+    instructionsContainer.innerHTML=`Run this script on <a href='https://www.mangaupdates.com/mylist.html'>Baka Updates</a> to copy your list, then paste the result above and press Import!`
+    ;[btnContainer].forEach((e)=>{
       e.style.display = 'flex'
       e.style.flexDirection = 'row'
       e.style.alignContent = 'center'
       e.style.justifyContent = 'center'
+      e.style.alignItems = 'center'
+      e.style.flexGrow = '1'
     })
+    ;[document.body,statusContainer].forEach((e)=>{
+      e.style.display = 'flex'
+      e.style.flexDirection = 'column'
+      e.style.alignContent = 'center'
+      e.style.justifyContent = 'center'
+    })
+    statusContainer.style.alignItems = 'center'
     ;[followbtn, compbtn, planbtn, dropbtn].forEach((e) => {
       e.style.flexGrow = '1'
       btnContainer.appendChild(e)
     })
+    statusContainer.appendChild(instructionsContainer)
     statusContainer.appendChild(statusText)
 
     ;[txt,btnContainer,statusContainer].forEach(e=>document.body.appendChild(e))
     const dbg =(...args)=>{
-      console.log(args)
+      instructionsContainer.style.display='none'
+      console.log(args.join(' '))
       statusText.textContent = args.join(' ')
     }
     const importPromise = (targetStatus) => {
       Object.values(btnContainer.children).forEach((e)=>{
         e.disabled = true
       })
-      let list = JSON.parse(txt.value)
+      let list
+      try {
+        list = JSON.parse(txt.value)
+      } catch (e) {
+        return Promise.reject(e)
+      }
 
       function loopRun(fn) {
         return fn().then(() => loopRun(fn)).catch(() => {return })
@@ -570,6 +586,12 @@
         })
       })
     }
+    const importGenerator = (toList)=>()=>{importPromise(toList).catch((e)=>{
+      Object.values(btnContainer.children).forEach((e)=>{
+        e.disabled = false
+      })
+      dbg(e)
+    })}
     const followStatus = {
       reading: 1,
       completed: 2,
@@ -578,18 +600,10 @@
       droped: 5,
       rereading: 6
     }
-    followbtn.onclick = () => {
-      importPromise(followStatus.reading)
-    }
-    compbtn.onclick = () => {
-      importPromise(followStatus.completed)
-    }
-    dropbtn.onclick = () => {
-      importPromise(followStatus.droped)
-    }
-    planbtn.onclick = () => {
-      importPromise(followStatus.plan)
-    }
+    followbtn.onclick = importGenerator(followStatus.reading)
+    compbtn.onclick = importGenerator(followStatus.completed)
+    planbtn.onclick = importGenerator(followStatus.plan)
+    dropbtn.onclick = importGenerator(followStatus.droped)
   }
   if (window.location.href.match(/^https?:\/\/(www\.)?mangadex\.org/)) {
     promptImportMd()
