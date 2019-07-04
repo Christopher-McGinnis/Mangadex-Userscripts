@@ -2,7 +2,7 @@
 // @name     Mangadex Preview Post
 // @description Preview new forum/comment posts and edits on MangaDex. Shows a formatted preview of your post/comment beside the edit box.
 // @namespace https://github.com/Christopher-McGinnis
-// @version  0.2.0
+// @version  0.2.1
 // @grant    unsafeWindow
 // @grant    GM.getValue
 // @grant    GM.setValue
@@ -72,7 +72,7 @@ function getImageObjectURL(url) {
 let bbcodePegParser_v2 = peg.generate(String.raw `
 start = res:Expressions? {return res}
 Expressions = reses:Expression+ {
-  let astroot = [{type:"root",content:[]}]
+  let astroot = [{type:"root",content:[],location:[0,0]}]
   let stack = [astroot[0]]
   let astcur = astroot[0]
   reses.forEach((res) => {
@@ -84,6 +84,7 @@ Expressions = reses:Expression+ {
       // Must update end location when tag closes
       thisast.location = res.location
       astcur.content.push(thisast)
+      astcur.location[1] = res.location[1]
       astcur=thisast
       stack.push(thisast)
     }
@@ -91,7 +92,7 @@ Expressions = reses:Expression+ {
       // cannot directly nest bullet in bullet (must have a non-prexix container class)
       if (astcur.type == "*") {
         // FIXME are we supposed to subtract 1 here?
-        astcur.location = res.location[0] - 1
+        astcur.location = res.location[0] // - 1
         stack.pop()
         astcur=stack[stack.length -1]
       }
@@ -100,6 +101,7 @@ Expressions = reses:Expression+ {
       thisast.content = []
       thisast.location = res.location
       astcur.content.push(thisast)
+      astcur.location[1] = res.location[1]
       astcur=thisast
       stack.push(thisast)
     }
@@ -110,6 +112,7 @@ Expressions = reses:Expression+ {
       thisast.content = []
       thisast.location = res.location
       astcur.content.push(thisast)
+      astcur.location[1] = res.location[1]
       astcur=thisast
       stack.push(thisast)
     }
@@ -122,12 +125,14 @@ Expressions = reses:Expression+ {
           stack[i].location[1] = res.location[1]
         }
         stack.splice(-idx,idx)
+        astcur.location[1] = res.location[1]
         astcur=stack[stack.length -1]
       }
       else {
         thisast.type="error"
         thisast.content="[/" + res.content + "]"
         thisast.location = res.location
+        astcur.location[1] = res.location[1]
         astcur.content.push(thisast)
       }
     }
@@ -135,19 +140,26 @@ Expressions = reses:Expression+ {
       // TODO should check if prefix instead if prefix is to be expanded appon
       if (astcur.tag == "*") {
         // FIXME are we supposed to subtract 1 here?
-        astcur.location[1] = res.location[0] - 1
+        astcur.location[1] = res.location[0] // - 1
         stack.pop()
         astcur=stack[stack.length -1]
       }
       // Linebreaks are only added when we are not exiting a prefix
       else {
+        astcur.location[1] = res.location[1]
         astcur.content.push(res)
       }
     }
     else {
+      astcur.location[1] = res.location[1]
       astcur.content.push(res)
     }
   })
+  // Close all tags (location). Remember we start at 1 bc root is just a container
+  for (let i = 1; i < stack.length; i++) {
+    stack[i].location[1] = astcur.location[1]
+  }
+  //stack.splice(start, end) not needed
   return astroot[0].content
 }
 Expression = res:(OpenTag / OpenDataTag / CloseTag / PrefixTag / LineBreak / Text )
@@ -384,7 +396,7 @@ function pegAstToHtml_v2(ast) {
             }).catch(b => {
                 console.log(`Url '${url}' failed to load with error!`);
                 console.log(b);
-                element.element.src = ERROR_IMG;
+                //element.element.src = ERROR_IMG
             });
             accum.push(element);
         }
@@ -550,9 +562,11 @@ function createPreviewCallbacks() {
                 if (a.type == 'container') {
                     // unhide spoilers
                     // Ensure we are not a Text node and that we are a spoiler
-                    if (!currentSpoiler && a.element.nodeType !== 3 && a.element.classList.contains('display-none')) {
+                    if (!currentSpoiler && a.element.nodeType !== 3
+                        && a.element.classList.contains('spoiler')
+                        && a.element.style.display !== 'block') {
                         currentSpoiler = a.element;
-                        a.element.classList.remove('display-none');
+                        currentSpoiler.style.display = 'block';
                     }
                     const b = searchAst(a.contains, cpos);
                     if (b) {
@@ -567,7 +581,7 @@ function createPreviewCallbacks() {
         function scrollToPos(pos = textarea.selectionStart) {
             // Hide previous spoiler
             if (currentSpoiler) {
-                currentSpoiler.classList.add('display-none');
+                currentSpoiler.style.display = 'none';
                 currentSpoiler = undefined;
             }
             // Get element from ast that starts closest to pos
@@ -606,7 +620,10 @@ function createPreviewCallbacks() {
         }
         textarea.addEventListener('selectionchange', () => {
             // Only autoscroll if our ast is in sync with the preview.
+            console.log(astHtml[astHtml.length - 1]);
+            console.log(astHtml[astHtml.length - 1].location);
             if (curDisplayedVersion === nextVersion - 1
+                && astHtml[astHtml.length - 1] != null
                 && astHtml[astHtml.length - 1].location[1] === textarea.value.length) {
                 scrollToPos();
             }
