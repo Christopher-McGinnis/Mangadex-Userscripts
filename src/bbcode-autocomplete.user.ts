@@ -70,7 +70,9 @@ function insertIntoStylesheet({ stylesheet ,selector ,css_text }) {
         stylesheet.addRule(selector ,css_text)
     }
 }
-function findCSS_Rules({ classID ,exactProperties = [] ,matchProperties = [] ,ignoredStylesheets = [] }) {
+function findCSS_Rules({ classID ,exactProperties = [] ,matchProperties = [] ,ignoredStylesheets = [] }: {
+  classID: string, exactProperties: {[index: string]: any}, matchProperties: {[index: string]: any}, ignoredStylesheets: StyleSheet[]
+}) {
     let resultRule = {}
     let resultCssText = ''
     let exactCssText = ''
@@ -124,6 +126,13 @@ function duplicate_cssRule({
     ,matchProperties
     ,ignoredStylesheets
     ,targetStylesheet: insertInto
+}:{
+  origSelector: string
+  ,newSelector: string
+  ,exactProperties: {[index:string]: any}
+  ,matchProperties: {[index:string]: any}
+  ,ignoredStylesheets: StyleSheet[]
+  ,targetStylesheet: StyleSheet
 }) {
     // if(findCSS_Rule(new_selector)) return true;  // Must have already done this one
 
