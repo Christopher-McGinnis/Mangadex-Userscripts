@@ -2,7 +2,7 @@
 // @name     Mangadex Preview Post
 // @description Preview new forum/comment posts and edits on MangaDex. Shows a formatted preview of your post/comment beside the edit box.
 // @namespace https://github.com/Christopher-McGinnis
-// @version  0.2.1
+// @version  0.2.2
 // @grant    unsafeWindow
 // @grant    GM.getValue
 // @grant    GM.setValue
