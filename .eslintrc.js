@@ -1,5 +1,17 @@
 module.exports = {
-  'extends': 'airbnb-base'
+  'extends': [
+    'airbnb-base'
+    // Despite what the documentation claims, this does not seem necessary and
+    // actualy causes headachs by duplicating rules.
+    //  ,'plugin:@typescript-eslint/recommended'
+  ]
+  ,'parser': '@typescript-eslint/parser'
+  // This also seems to be unnecessary, despite documentation's claims.
+  // Just running the npm install command for typescrtipt-eslint and plugin
+  // was enough for me
+  //,'plugins': [
+  //  '@typescript-eslint'
+  //]
   ,'parserOptions': {
     ecmaVersion: 2018
     ,sourceType: 'script'

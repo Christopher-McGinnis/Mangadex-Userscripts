@@ -60,7 +60,7 @@ function copyTextToClipboard(text) {
     navigator.clipboard.writeText(text).then(() => {
       dbg('Async: Copying to clipboard was successful!')
     } ,(err) => {
-      dbg('Async: Could not copy text: ' ,err)
+      dbg(`Async: Could not copy text: ${err.toString()}`)
     })
   }
   else {
@@ -70,7 +70,6 @@ function copyTextToClipboard(text) {
 /** ************************************************
  * XPath
  */
-
 function getSnapshotByXpath(path ,node = document) {
   return document.evaluate(path.toString() ,node ,null ,XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE ,null)
 }
@@ -86,7 +85,6 @@ function getOrderedItterByXpath(path ,node = document) {
 function getElementByXpath(path ,node = document) {
   return document.evaluate(path.toString() ,node ,null ,XPathResult.FIRST_ORDERED_NODE_TYPE ,null).singleNodeValue
 }
-
 // Gets all values for provided keys via GM_getValue, defaulting to the provided default values.
 // keys = {SomeGM_Key: SomeDefaultValue, AnotherGM_Key: AnotherDefaultValue}
 // fn: function toRunAfterAllGM_getValues_prommisesHaveFinished({
@@ -112,11 +110,11 @@ function getUserValue(key ,defaultValue) {
 function getUserValues(keys) {
   const prommises = []
   Object.entries(keys).forEach(([key ,defaultValue]) => {
-    prommises.push(
-      getUserValue(key ,defaultValue).then((v) => {
-        const obj = {}; obj[key] = v; return obj
-      }) ,
-    )
+    prommises.push(getUserValue(key ,defaultValue).then((v) => {
+      const obj = {}
+      obj[key] = v
+      return obj
+    }))
   })
   return Promise.all(prommises).then((itter) => {
     const new_obj = {}
@@ -126,7 +124,6 @@ function getUserValues(keys) {
     return new_obj
   })
 }
-
 function setUserValue(key ,value) {
   return new Promise((resolve ,reject) => {
     if (typeof GM === 'object' && typeof GM.setValue === 'function') {
@@ -148,7 +145,6 @@ function setUserValues(objs) {
   })
   return Promise.all(prommises)
 }
-
 function createToolTip({ title ,text }) {
   const tooltip_elm = htmlToElement(`<div>${title}<br><span>${text}</span></div>`)
   const tooltip_text = tooltip_elm.children[1]
@@ -158,7 +154,7 @@ function createToolTip({ title ,text }) {
   tooltip_elm.style.color = 'rgb(215,215,215)'
   tooltip_elm.style.left = '0%'
   tooltip_elm.style.position = 'absolute'
-  tooltip_elm.style.zIndex = 10
+  tooltip_elm.style.zIndex = '10'
   tooltip_elm.style.textAlign = 'center'
   document.body.appendChild(tooltip_elm)
   return {

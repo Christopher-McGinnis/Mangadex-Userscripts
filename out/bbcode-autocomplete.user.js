@@ -18,6 +18,7 @@
 // @icon     https://mangadex.org/images/misc/default_brand.png
 // @license  MIT
 // ==/UserScript==
+// FIXME: Move away from dead atwho. Considing https://github.com/zurb/tribute
 /* global XPath ,XPath2 ,getUserValues ,setUserValue ,dbg ,$ */
 /* global SettingsUI ,SettingsUIValidationError */
 
@@ -25,7 +26,6 @@
 
 const MANGADEX_BASE_URI = 'https://mangadex.org'
 const xp = new XPath()
-
 /* *************************************
  * Functions That ought to go in a library
  */
@@ -57,7 +57,6 @@ function addCssLink(css_url) {
     return link.sheet
   }
 }
-
 function insertIntoStylesheet({ stylesheet ,selector ,css_text }) {
   if (stylesheet.insertRule) {
     css_text = `${selector} {${css_text}}`
@@ -74,7 +73,7 @@ function findCSS_Rules({ classID ,exactProperties = [] ,matchProperties = [] ,ig
   let matchCssText = ''
   let result_stylesheet
   for (let i = 0; i < document.styleSheets.length; i++) {
-  // Object.keys(document.styleSheets).forEach((i) => {
+    // Object.keys(document.styleSheets).forEach((i) => {
     try {
       const stylesheet = document.styleSheets[i]
       if (ignoredStylesheets.indexOf(stylesheet) >= 0) continue
@@ -82,7 +81,7 @@ function findCSS_Rules({ classID ,exactProperties = [] ,matchProperties = [] ,ig
       if (style_rules) {
         result_stylesheet = stylesheet
         // for (let r = 0; r < style_rules.length; r++) {
-        Object.keys(style_rules).forEach((r) => { // eslint-disable-line no-loop-func
+        Object.keys(style_rules).forEach((r) => {
           if (style_rules[r].selectorText && style_rules[r].selectorText === classID) {
             resultRule = style_rules[r]
             Object.values(style_rules[r].style).forEach((key) => {
@@ -106,24 +105,15 @@ function findCSS_Rules({ classID ,exactProperties = [] ,matchProperties = [] ,ig
       if (e.name !== 'SecurityError') throw e
       // continue // on as normal
     }
-  // })
+    // })
   }
   // let css_text = Object.enresultRule.reduce( (accum='',[k,v]) => { accum+=v  } )
   return {
     stylesheet: result_stylesheet ,rule: resultRule ,matchCssText ,exactCssText ,resultCssText
   }
 }
-
-function duplicate_cssRule({
-  origSelector
-  ,newSelector
-  ,exactProperties
-  ,matchProperties
-  ,ignoredStylesheets
-  ,targetStylesheet: insertInto
-}) {
+function duplicate_cssRule({ origSelector ,newSelector ,exactProperties ,matchProperties ,ignoredStylesheets ,targetStylesheet: insertInto }) {
   // if(findCSS_Rule(new_selector)) return true;  // Must have already done this one
-
   const { stylesheet: origStylesheet ,rule ,matchCssText ,exactCssText ,resultCssText } = findCSS_Rules({
     classID: origSelector ,exactProperties ,matchProperties ,ignoredStylesheets
   })
@@ -140,7 +130,6 @@ function duplicate_cssRule({
   }
   return true
 }
-
 function stableSort(arr ,cmp = (a ,b) => {
   if (a < b) return -1
   if (a > b) return 1
@@ -158,8 +147,6 @@ function stableSort(arr ,cmp = (a ,b) => {
   }
   return arr
 }
-
-
 /* *************************************
  * Our crap
  */
@@ -167,11 +154,9 @@ function mangadexStyleURIComponent(str) {
   // replace all non-alpha-numeric characters with dashing dashes
   return str.replace(/[^a-zA-Z0-9]/g ,'-')
 }
-
 function clipText(text ,max_length) {
   return (text.length > max_length) ? `${text.substr(0 ,max_length - 1)}&hellip;` : text
 }
-
 function getVisibleText(node) {
   if (node.nodeType === Node.TEXT_NODE) return node.textContent
   const style = getComputedStyle(node)
@@ -180,8 +165,6 @@ function getVisibleText(node) {
   for (let i = 0; i < node.childNodes.length; i++) text += getVisibleText(node.childNodes[i])
   return text
 }
-
-
 // iill use classes once we get private variables
 function Manga({ id ,title ,description ,image ,isFollowing ,lastViewedDate }) {
   const manga = this
@@ -270,7 +253,6 @@ function Manga({ id ,title ,description ,image ,isFollowing ,lastViewedDate }) {
   this.savable = () => privateObject
   return this
 }
-
 function AttemptParseMangaTitlePage(mangaList) {
   let id
   try {
@@ -281,7 +263,6 @@ function AttemptParseMangaTitlePage(mangaList) {
   }
   // return if this is not a tile page
   if (id == null) return undefined
-
   // Bulild manga entry
   const titleElm = xp.new(`//*[${XPath2.containsClass('card-header')} and ./span[${XPath2.containsClass('fa-book')}] ]`).getElement()
   const title = titleElm.textContent
@@ -314,7 +295,6 @@ function AttemptParseMangaFollowsPage(mangaList) {
   // if (chaptersElm == null) return undefined
   // xp.new(`./div[${XPath2.containsClass('row')}]/div[${XPath2.attrHasValueStartingWith('@class' ,'col')}]`)
   //  .forEachElement((chapterElm) => {
-
   // generic over follows, search, titles, featured pages.
   xp.new(`//div/${entryXpath}[${titleXpath} and ${descXpath}]`)
     .forEachElement((chapterElm) => {
@@ -351,19 +331,14 @@ function AttemptParseMangaFollowUpdates(mangaList) {
   const isHome = window.location.href.match(/^https:\/\/mangadex\.org(\/[^/]*)?$/) != null
   // return if this is not on home page
   if (!isHome) return undefined
-
   const entries = xp.new(`//div[@id='follows_update']/div[${XPath2.containsClass('row')}]/div`)
-
   entries.forEachElement((entry) => {
     const titleElm = xp.new(`.//a[${XPath2.containsClass('manga_title')} and starts-with(@href,'/title/')]`).getElement(entry)
     const [,id] = titleElm.getAttribute('href').match(/\/title\/(\d+)\//)
-
     if (id == null) return undefined
-
     const title = titleElm.textContent
     // NOTE No point getting images for thumbnails ATM. we can generate those links
     const isFollowing = true
-
     mangaList.push({
       title
       ,id
@@ -372,13 +347,10 @@ function AttemptParseMangaFollowUpdates(mangaList) {
   })
   // Bulild manga entry
 }
-
-
 function MangaList({
   list: loadableList = {
     followed: {} ,unfollowed: {}
-  }
-  ,titleHistLimit = 200
+  } ,titleHistLimit = 200
 }) {
   const mangaList = this
   if (!(mangaList instanceof MangaList)) {
@@ -388,7 +360,6 @@ function MangaList({
   mangaList.list = {
     followed: {} ,unfollowed: {}
   }
-
   const cleanupHistory = () => {
     if (Object.keys(this.list.unfollowed).length <= this.maxSize) return false
     let cnt = 0
@@ -396,7 +367,8 @@ function MangaList({
       if (this.maxSize > cnt++) return true
       return false
     }).reduce((accum ,[k ,o]) => {
-      accum[k] = o; return accum
+      accum[k] = o
+      return accum
     } ,{})
     return true
   }
@@ -408,7 +380,6 @@ function MangaList({
       this.list.unfollowed[k] = new Manga(v)
     })
   }
-
   this.savable = () => {
     cleanupHistory()
     const obj = {
@@ -440,7 +411,6 @@ function MangaList({
       delete (this.list.followed[manga.id])
     }
   }
-
   this.autoComplete = (partial_name ,{ case_sensitive = false ,fuzzy = true ,showUnfollowed = 0 } = {}) => {
     let matches = Object.values(this.list.followed).concat(showUnfollowed === 0 ? Object.values(this.list.unfollowed) : []).filter((e) => {
       // If this user is already marked as the highest priority match, dont process them anymore.
@@ -478,12 +448,9 @@ function MangaList({
     })
     return matches
   }
-
-
   this.load(loadableList)
   return this
 }
-
 function History({ history: loadedHistory = [] ,historySize = 200 } = {}) {
   const uhist = this
   if (!(uhist instanceof History)) {
@@ -492,7 +459,6 @@ function History({ history: loadedHistory = [] ,historySize = 200 } = {}) {
   function clipText(text ,max_length) {
     return (text.length > max_length) ? `${text.substr(0 ,max_length - 1)}&hellip;` : text
   }
-
   function getVisibleText(node) {
     if (node.nodeType === Node.TEXT_NODE) return node.textContent
     const style = getComputedStyle(node)
@@ -509,7 +475,6 @@ function History({ history: loadedHistory = [] ,historySize = 200 } = {}) {
   }
   this.max_size = historySize
   this.history = loadedHistory
-
   this.push = (item) => {
     function array_move(arr ,old_index ,new_index) {
       arr.splice(new_index ,0 ,arr.splice(old_index ,1)[0])
@@ -527,7 +492,6 @@ function History({ history: loadedHistory = [] ,historySize = 200 } = {}) {
     if (exists) {
       return false
     }
-
     this.history.unshift(item)
     cleanupHistory()
   }
@@ -575,12 +539,10 @@ function History({ history: loadedHistory = [] ,historySize = 200 } = {}) {
   }
   return this
 }
-
 const posts = xp.new('//tr').with(xp.new().contains('@class' ,'post'))
 // Because Javascript's does not require .sort to be Stable.
 // Currently Chrome alone uses Unstable sort. They are now moving to Stable.
 // This returns the same results for all browsers,
-
 // userid = Your user ID
 function User({ name ,id ,img }) {
   const user = this
@@ -624,14 +586,11 @@ function Thread({ id ,title ,manga_id }) {
   thread.manga_id = manga_id
   return thread
 }
-
-
 function UserHistory({ read_posts_history = [] ,user_id ,username ,historySize = 200 } = {}) {
   const uhist = this
   if (!(uhist instanceof UserHistory)) {
     return new UserHistory()
   }
-
   const cleanupHistory = () => {
     while (this.history.length > this.max_size) {
       // delete(this.history.entries().next().value[0]);
@@ -642,15 +601,11 @@ function UserHistory({ read_posts_history = [] ,user_id ,username ,historySize =
   this.username = '' // get from userid
   this.max_size = parseInt(historySize)
   this.history = read_posts_history
-
   this.push = (post) => {
     const post_id = parseInt(post.id.replace(/^post_/ ,''))
-
     // this.history.delete(post_id);
     // this.history.set(post_id,{user_id:user_id,user_img:user_img,excerpt:excerpt});
-
     // this.history.filter((e)=> { e.thread_id === thread_id } );
-
     function array_move(arr ,old_index ,new_index) {
       arr.splice(new_index ,0 ,arr.splice(old_index ,1)[0])
       return arr
@@ -667,7 +622,12 @@ function UserHistory({ read_posts_history = [] ,user_id ,username ,historySize =
     if (exists) {
       return false
     }
-    let time; let thread; let thread_id; let user; let user_name; let user_level
+    let time
+    let thread
+    let thread_id
+    let user
+    let user_name
+    let user_level
     let user_color
     let user_img
     let postContents
@@ -693,7 +653,6 @@ function UserHistory({ read_posts_history = [] ,user_id ,username ,historySize =
       // an error occured
       return undefined
     }
-
     // cleanText. Hide spoilers and other invisible crap
     const cleanText = getVisibleText(postContents)
     const excerpt = clipText(cleanText ,100)
@@ -715,7 +674,6 @@ function UserHistory({ read_posts_history = [] ,user_id ,username ,historySize =
     let matches = this.history.filter((e) => {
       // If this user is already marked as the highest priority match, dont process them anymore.
       const regex_partial_name = new RegExp(`${fuzzy ? '' : '^'}${partial_name}` ,`${case_sensitive ? '' : 'i'}`)
-
       if (e.user_name.match(regex_partial_name)) {
         if (showUsersWho === 2) return true
         if (showUsersWho === 1 && e.did_mention) return true
@@ -759,13 +717,11 @@ function UserHistory({ read_posts_history = [] ,user_id ,username ,historySize =
   }
   return this
 }
-
 function getCurrentUserID() {
   xp.new('id("navbarSupportedContent")').with(xp.new().contains('@class' ,'navbarSupportedContent'))
   const current_user_id = xp.new('id("navbarSupportedContent")//a[contains(@href,"/user/")]').getElement().href.match(/\/user\/(\d+)\//)[1]
   return parseInt(current_user_id)
 }
-
 function initSettingsDialog({ loaded_settings ,atWhoMethods }) {
   const settingsUi = new SettingsUI({
     groupName: 'Auto-Complete'
@@ -813,9 +769,9 @@ function initSettingsDialog({ loaded_settings ,atWhoMethods }) {
   }) */
   const showUsersWho = settingsUi.addSelect({
     title: 'Show users who'
-    ,key: 'showUsersWho'
-    // ,placeholder: 'Are in this thread'
+    ,key: 'showUsersWho' // ,placeholder: 'Are in this thread'
     // ,branchingSingleselect: true
+
     ,settingsTreeConfig: { defaultValue: 0 }
   })
   showUsersWho.addOption({
@@ -846,10 +802,9 @@ function initSettingsDialog({ loaded_settings ,atWhoMethods }) {
   function newNumberCorrector(min ,max) {
     return (textVal) => {
       const val = parseInt(textVal)
-      if (
-        textVal == null
-        || (typeof textVal === 'string' && (textVal.length === 0 || textVal.match(/[^0-9]/)))
-        || typeof val !== 'number') {
+      if (textVal == null
+                || (typeof textVal === 'string' && (textVal.length === 0 || textVal.match(/[^0-9]/)))
+                || typeof val !== 'number') {
         return undefined
       }
       if (val < min) return min
@@ -896,9 +851,9 @@ function initSettingsDialog({ loaded_settings ,atWhoMethods }) {
   }) */
   const showUnfollowed = settingsUi.addSelect({
     title: 'Unfollowed manga is'
-    ,key: 'showUnfollowed'
-    // ,placeholder: 'Are in this thread'
+    ,key: 'showUnfollowed' // ,placeholder: 'Are in this thread'
     // ,branchingSingleselect: true
+
     ,settingsTreeConfig: { defaultValue: 0 }
   })
   showUnfollowed.addOption({
@@ -964,8 +919,6 @@ function initSettingsDialog({ loaded_settings ,atWhoMethods }) {
   const settings = settingsUi.settingsTree.value
   return settings
 }
-
-
 function formatMangaItem(item) {
   // When getters/setters are present, the object is assigned to name. For some reason
   const obj = item.name
@@ -980,14 +933,11 @@ function formatMangaItem(item) {
     <span class="manga_title d-inline-block text-truncate" style="">${obj.title}</span>
     </div></li>`
 }
-
-
 function main({ read_posts_history ,mangaTitleHistory ,settings: loaded_settings }) {
   const atWhoMethods = { rebuild: () => undefined }
   const settings = initSettingsDialog({
     loaded_settings ,atWhoMethods
   })
-
   // Manga  History
   const mangaList = new MangaList({
     list: mangaTitleHistory ,titleHistLimit: settings.max_title_history
@@ -1001,14 +951,13 @@ function main({ read_posts_history ,mangaTitleHistory ,settings: loaded_settings
   const user_id = getCurrentUserID()
   const uhist = new UserHistory({
     read_posts_history
-    ,user_id
-    // NOTE History size changes will only take effect once a new post is seen.
+    ,user_id // NOTE History size changes will only take effect once a new post is seen.
+
     ,historySize: settings.max_post_history
   })
   unsafeWindow.uhist = uhist
   unsafeWindow.settings = settings
   // Add current page's posts to history.
-
   let thread = xp.new(posts).append('//td/span/a').with(xp.new('preceding-sibling::span').with(xp.new().contains('@class' ,'fa-clock'))).getElement()
   if (thread) {
     thread = thread.href
@@ -1026,7 +975,6 @@ function main({ read_posts_history ,mangaTitleHistory ,settings: loaded_settings
       }
     }
     setUserValues({ read_posts_history: uhist.history })
-
     // NOTE there can be more than one textarea. but they all use the same id :O
     function autoComplete(partial_name ,render_view) {
       const r = uhist.autoComplete(partial_name ,{
@@ -1034,14 +982,12 @@ function main({ read_posts_history ,mangaTitleHistory ,settings: loaded_settings
       })
       render_view(r)
     }
-
     function autoCompleteManga(partial_name ,render_view) {
       const r = mangaList.autoComplete(partial_name ,{
         case_sensitive: false ,fuzzy: true ,showUnfollowed: settings.showUnfollowed
       })
       render_view(r)
     }
-
     function formatDisplayItem(item) {
       return `<li class="dropdown-item px-0 " style=""><div class="d-flex justify-content-between align-items-center px-2" style="height:50px;" title="${item.excerpt}">
         <div class="h-100">
@@ -1052,7 +998,6 @@ function main({ read_posts_history ,mangaTitleHistory ,settings: loaded_settings
         <span class="${item.user_level}" style="color:${item.user_color};">${item.user_name}</span>
         </div></li>`
     }
-
     atWhoMethods.rebuild = () => {
       $('textarea[id="text"]').atwho('destroy')
       if (settings.autocompleteTypes.usernames) {
@@ -1060,16 +1005,15 @@ function main({ read_posts_history ,mangaTitleHistory ,settings: loaded_settings
           at: '@'
           ,displayTpl: formatDisplayItem
           ,insertTpl: '${atwho-at}${user_name}'
-          ,searchKey: 'user_name'
-          // We don't want to use your filter or sorter. remoteFilter is a better fit for us.
-          ,data: []
-          // data: uhist.history,
+          ,searchKey: 'user_name' // We don't want to use your filter or sorter. remoteFilter is a better fit for us.
+
+          ,data: [] // data: uhist.history,
+
           ,limit: 200
           ,callbacks: {
-            remoteFilter: autoComplete
-            // NoOp
-            ,sorter: (_ ,i) => i
+            remoteFilter: autoComplete // NoOp
 
+            ,sorter: (_ ,i) => i
           }
         })
       }
@@ -1095,12 +1039,12 @@ function main({ read_posts_history ,mangaTitleHistory ,settings: loaded_settings
             return `${alignment.open}${link.open}${item.title}${link.close}${alignment.close}${desc}${img}`
           }
           ,searchKey: 'title'
-          ,data: []
-          // ,data: [...Object.values(mangaList.list.followed) ,...Object.values(mangaList.list.unfollowed)]
+          ,data: [] // ,data: [...Object.values(mangaList.list.followed) ,...Object.values(mangaList.list.unfollowed)]
+
           ,limit: 200
           ,callbacks: {
-            remoteFilter: autoCompleteManga
-            // NoOp
+            remoteFilter: autoCompleteManga // NoOp
+
             ,sorter: (_ ,i) => i
           }
         })
@@ -1109,17 +1053,12 @@ function main({ read_posts_history ,mangaTitleHistory ,settings: loaded_settings
       $('.atwho-view').css({ display: 'none' })
       $('.atwho-view-ul').addClass('pre-scrollable d-inline-flex flex-column')
     }
-
     atWhoMethods.rebuild()
-
     // HACK make atwho use flex instead of block
-
-
     // This also works instead of inline flex on ul, but it makes the container visible until atwho is invoked
     // Hide now. atwho changes display between none and whatever it is already set to automaticly
     // $('.atwho-view').css({display:'flex'})
     // $('.atwho-view-ul').addClass('pre-scrollable ')
-
     // These make atwho dropdown menu use the same color theme as the site
     // const atwhoStylesheet = addCssLink('https://gitcdn.xyz/repo/ichord/At.js/1b7a52011ec2571f73385d0c0d81a61003142050/dist/css/jquery.atwho.css')
     const customStylesheet = insertStylesheet('')
@@ -1127,23 +1066,23 @@ function main({ read_posts_history ,mangaTitleHistory ,settings: loaded_settings
     duplicate_cssRule({
       origSelector: '.dropdown-menu'
       ,newSelector: '.atwho-view-ul'
-      ,matchProperties: ['background' ,'color' ,'border' ,'margin' ,'padding']
-      // ,ignoredStylesheets: [atwhoStylesheet]
+      ,matchProperties: ['background' ,'color' ,'border' ,'margin' ,'padding'] // ,ignoredStylesheets: [atwhoStylesheet]
+
       ,targetStylesheet: customStylesheet
     })
     duplicate_cssRule({
       origSelector: '.dropdown-menu.show'
       ,newSelector: '.atwho-view-ul'
-      ,matchProperties: ['background' ,'color' ,'border' ,'margin' ,'padding']
-      // ,ignoredStylesheets: [atwhoStylesheet]
+      ,matchProperties: ['background' ,'color' ,'border' ,'margin' ,'padding'] // ,ignoredStylesheets: [atwhoStylesheet]
+
       ,targetStylesheet: customStylesheet
     })
     // make the selected atwho user be highlighted using the same color theme as the site.
     duplicate_cssRule({
       origSelector: '.dropdown-item:hover, .dropdown-item:focus'
       ,newSelector: '.atwho-view .cur'
-      ,matchProperties: ['background' ,'color']
-      // ,ignoredStylesheets: [atwhoStylesheet]
+      ,matchProperties: ['background' ,'color'] // ,ignoredStylesheets: [atwhoStylesheet]
+
       ,targetStylesheet: customStylesheet
     })
     // For debugging
@@ -1158,4 +1097,3 @@ getUserValues({
   }
   ,settings: {}
 }).then(main)
-// },1000)
