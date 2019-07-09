@@ -82,7 +82,7 @@ interface BBCodeTagAst extends BBCodeAstBase {
     | 'spoiler'
     | 'quote' | 'code'
     | 'left' | 'right' | 'center'
-    | 'i' | 's' | 'u' | 'b'
+    | 'i' | 's' | 'u' | 'b' | 'h'
     | 'sub' | 'sup'
     | 'hr'
     | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' ;
@@ -241,7 +241,7 @@ PrefixTag = "[" tag:PrefixTagList "]" { return {type:"prefix", content:tag, loca
 
 ListTags = "list" / "ul" / "ol" / "li"
 
-NormalTagList = "list" / "spoiler" / "center" / "code" / "quote" / "img" /  "sub" / "sup" / "left" / "right" / "ol" / "ul" / "h1" / "h2" / "h3" / "h4" / "hr" / "b" / "s" / "i" / "u"
+NormalTagList = "list" / "spoiler" / "center" / "code" / "quote" / "img" /  "sub" / "sup" / "left" / "right" / "ol" / "ul" / "h1" / "h2" / "h3" / "h4" / "hr" / "h" / "b" / "s" / "i" / "u"
 DataTagList = "url"
 PrefixTagList = "*"
 
@@ -416,6 +416,19 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
         else if (e.tag === 'i') {
             const element: AST_HTML_ELEMENT = {
                 element: document.createElement('em')
+                ,location: e.location
+                ,type: 'container'
+                ,contains: []
+            }
+            accum.push(element)
+            element.contains = pegAstToHtml_v2(e.content)
+            element.contains.forEach((child_ast_element) => {
+                element.element.appendChild(child_ast_element.element)
+            })
+        }
+        else if (e.tag === 'h') {
+            const element: AST_HTML_ELEMENT = {
+                element: document.createElement('mark')
                 ,location: e.location
                 ,type: 'container'
                 ,contains: []
