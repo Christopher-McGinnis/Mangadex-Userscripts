@@ -131,10 +131,10 @@ declare module 'pegjs' {
     /** Returns the generated source code as a `string`. It will throw an exception if the grammar is invalid. The exception will contain `message` property with more details about the error. */
     export function generate(grammar: string ,options: OutputFormatGlobals): string;
     /** Returns the generated source code as a `string`. It will throw an exception if the grammar is invalid. The exception will contain `message` property with more details about the error. */
-    export function generate(grammar: string ,options: OutputFormatBare): string
-    ;export namespace parser {
-    type SyntaxError = PegjsError;
-    var SyntaxError: any
+    export function generate(grammar: string ,options: OutputFormatBare): string;
+    export namespace parser {
+      type SyntaxError = PegjsError;
+      var SyntaxError: any;
     }
 // export as namespace PEG;
 }
