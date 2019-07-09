@@ -45,74 +45,74 @@ bb_templ.appendChild(document.createTextNode('[bb]'))
 let tooltipTimer
 
 function autohide_tooltip(time) {
-  clearTimeout(tooltipTimer)
-  tooltipTimer = setTimeout(() => {
-    tooltip_elm.style.display = 'none'
-  }, time)
+    clearTimeout(tooltipTimer)
+    tooltipTimer = setTimeout(() => {
+        tooltip_elm.style.display = 'none'
+    } ,time)
 }
 
-function bbcode_link(href, title) {
-  return `[url=${href}]${title}[/url]`
+function bbcode_link(href ,title) {
+    return `[url=${href}]${title}[/url]`
 }
-function bbcode_onclick(bb_elm, href, title) {
-  dbg('Clicked')
-  const bbcd = bbcode_link(href, title)
-  dbg(bbcd)
-  copyTextToClipboard(bbcd)
-  bb_elm.appendChild(tooltip_elm)
-  tooltip_elm.style.display = 'block'
-  tooltip_text.textContent = bbcd
-  autohide_tooltip(2000)
+function bbcode_onclick(bb_elm ,href ,title) {
+    dbg('Clicked')
+    const bbcd = bbcode_link(href ,title)
+    dbg(bbcd)
+    copyTextToClipboard(bbcd)
+    bb_elm.appendChild(tooltip_elm)
+    tooltip_elm.style.display = 'block'
+    tooltip_text.textContent = bbcd
+    autohide_tooltip(2000)
 }
 
 
 function append_bbcode_button(elm) {
-  const bb_elm = bb_templ.cloneNode(true)
-  dbg('appending')
-  elm.parentNode.appendChild(bb_elm)
-  bb_elm.onclick = function () {
-    bbcode_onclick(bb_elm, elm.href, elm.title)
-  }
-}
-
-function apply_to_xpath_snapshots(xpath_snapshots, fn) {
-  for (let i = 0; i < xpath_snapshots.snapshotLength; i++) {
-    const item = xpath_snapshots.snapshotItem(i)
-    fn(item)
-  }
-}
-
-function main() {
-  dbg('Running MAIN')
-  const page_titles = getSnapshotByXpath("//h6[contains(@class,'card-header') and ./span[contains(@class,'fa-book')] ]")
-  const manga_titles = getSnapshotByXpath("//a[contains(@class,'manga_title')]")
-  const breadcrumb_links = getSnapshotByXpath("//li[contains(@class,'breadcrumb-item')]/a")
-  apply_to_xpath_snapshots(manga_titles, append_bbcode_button)
-  apply_to_xpath_snapshots(breadcrumb_links, (elm) => {
     const bb_elm = bb_templ.cloneNode(true)
     dbg('appending')
     elm.parentNode.appendChild(bb_elm)
     bb_elm.onclick = function () {
-      bbcode_onclick(bb_elm, elm.href, elm.textContent)
+        bbcode_onclick(bb_elm ,elm.href ,elm.title)
     }
-  })
-  apply_to_xpath_snapshots(page_titles, (elm) => {
-    let title = ''
-    elm.childNodes.forEach((e) => {
-      if (e.nodeName === '#text') {
-        title += e.textContent
-      }
+}
+
+function apply_to_xpath_snapshots(xpath_snapshots ,fn) {
+    for (let i = 0; i < xpath_snapshots.snapshotLength; i++) {
+        const item = xpath_snapshots.snapshotItem(i)
+        fn(item)
+    }
+}
+
+function main() {
+    dbg('Running MAIN')
+    const page_titles = getSnapshotByXpath("//h6[contains(@class,'card-header') and ./span[contains(@class,'fa-book')] ]")
+    const manga_titles = getSnapshotByXpath("//a[contains(@class,'manga_title')]")
+    const breadcrumb_links = getSnapshotByXpath("//li[contains(@class,'breadcrumb-item')]/a")
+    apply_to_xpath_snapshots(manga_titles ,append_bbcode_button)
+    apply_to_xpath_snapshots(breadcrumb_links ,(elm) => {
+        const bb_elm = bb_templ.cloneNode(true)
+        dbg('appending')
+        elm.parentNode.appendChild(bb_elm)
+        bb_elm.onclick = function () {
+            bbcode_onclick(bb_elm ,elm.href ,elm.textContent)
+        }
     })
-    title = title.trim()
-    if (title) {
-      const bb_elm = bb_templ.cloneNode(true)
-      dbg('appending')
-      bb_elm.onclick = function () {
-        bbcode_onclick(bb_elm, location.href, title)
-      }
-      elm.appendChild(bb_elm)
-    }
-  })
+    apply_to_xpath_snapshots(page_titles ,(elm) => {
+        let title = ''
+        elm.childNodes.forEach((e) => {
+            if (e.nodeName === '#text') {
+                title += e.textContent
+            }
+        })
+        title = title.trim()
+        if (title) {
+            const bb_elm = bb_templ.cloneNode(true)
+            dbg('appending')
+            bb_elm.onclick = function () {
+                bbcode_onclick(bb_elm ,location.href ,title)
+            }
+            elm.appendChild(bb_elm)
+        }
+    })
 }
 dbg('RUNNING')
 waitForElementByXpath({ xpath: "//a[contains(@class,'navbar-brand')]" }).then(main)

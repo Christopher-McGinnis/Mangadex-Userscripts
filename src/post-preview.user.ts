@@ -18,13 +18,21 @@
 // @icon     https://mangadex.org/images/misc/default_brand.png
 // @license  MIT
 // ==/UserScript==
+
+'use strict'
+
 // @ts-ignore
 const ERROR_IMG = 'https://i.pinimg.com/originals/e3/04/73/e3047319a8ae7192cb462141c30953a8.gif'
 // @ts-ignore
 const LOADING_IMG = 'https://i.redd.it/ounq1mw5kdxy.gif'
-const imageBlobs = {}
+declare var peg: { generate: typeof import('pegjs').generate }
+declare interface Window {
+    unsafeWindow?: Window;
+}
+
+const imageBlobs: {[index: string]: Promise<Blob>} = {}
 // @ts-ignore
-function getImageBlob(url) {
+function getImageBlob(url: string): Promise<Blob> {
     if (!imageBlobs[url]) {
         imageBlobs[url] = new Promise((ret ,err) => {
             GM_xmlhttpRequest({
@@ -33,7 +41,7 @@ function getImageBlob(url) {
                 ,responseType: 'blob'
                 ,onerror: err
                 ,ontimeout: err
-                ,onload: (response) => {
+                ,onload: (response: { status: number; response: Blob | PromiseLike<Blob> | undefined }) => {
                     if ((response.status == 200 || response.status == 304) && response.response) {
                         imageBlobs[url] = Promise.resolve(response.response)
                         return ret(imageBlobs[url])
@@ -45,30 +53,75 @@ function getImageBlob(url) {
     }
     return imageBlobs[url]
     /* return fetch(url).then(d=>{
-      if (d.ok) {
-        imageBlobs[url] = d.blob()
-        return imageBlobs[url]
-      }
-      return Promise.reject(d.statusText)
-    }) */
+    if (d.ok) {
+      imageBlobs[url] = d.blob()
+      return imageBlobs[url]
+    }
+    return Promise.reject(d.statusText)
+  }) */
 }
-function getImageObjectURL(url) {
+function getImageObjectURL(url: string): Promise<string> {
     return getImageBlob(url).then(b =>
-        /* For converting them into data-uris. Not too useful.
-        const a = new FileReader()
-        a.onload = (e) => {
-          console.log(a.result)
-        }
-        a.readAsDataURL(b)
-        */
+    /* For converting them into data-uris. Not too useful.
+    const a = new FileReader()
+    a.onload = (e) => {
+      console.log(a.result)
+    }
+    a.readAsDataURL(b)
+    */
         URL.createObjectURL(b))
 }
+
+
+interface BBCodeAstBase {
+    location: [number ,number];
+}
+interface BBCodeTagAst extends BBCodeAstBase {
+    tag:
+    'ol' | 'ul' | 'list'
+    | 'spoiler'
+    | 'quote' | 'code'
+    | 'left' | 'right' | 'center'
+    | 'i' | 's' | 'u' | 'b'
+    | 'sub' | 'sup'
+    | 'hr'
+    | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' ;
+    type: 'open' | 'root';
+    content: BBCodeAst[];
+}
+interface BBCodeImageAst extends BBCodeAstBase {
+    tag: 'img';
+    type: 'open';
+    content: string;
+}
+interface BBCodePrefixAst extends BBCodeAstBase {
+    tag: '*';
+    type: 'prefix';
+    content: BBCodeAst[];
+}
+interface BBCodeLineBreakAst extends BBCodeAstBase {
+    type: 'linebreak';
+}
+interface BBCodeDataAst extends BBCodeAstBase {
+    tag: 'url';
+    type: 'opendata';
+    data?: string;
+    content: BBCodeAst[];
+}
+
+interface BBCodeTextAst extends BBCodeAstBase {
+    type: 'text' | 'error';
+    content: string;
+}
+type BBCodeAst = BBCodeTagAst | BBCodeImageAst | BBCodeDataAst | BBCodeLineBreakAst | BBCodeTextAst | BBCodePrefixAst
+
 /* PEG grammer */
+
 // New version will enable:
 // Partial rebuilds! only update what changed
 // Autoscrolling Edit Preview! Ensure the line you are editing is visible as you change it.
 // FIXME Img is text only. not recursive
-const bbcodePegParser_v2 = peg.generate(String.raw`
+const bbcodePegParser_v2 = peg.generate<BBCodeAst[]>(String.raw`
 start = res:Expressions? {return res}
 Expressions = reses:Expression+ {
   let astroot = [{type:"root",content:[],location:[0,0]}]
@@ -235,32 +288,56 @@ ErrorCatcher
 _ "whitespace"
   = [ \t\n\r]*
 `)
+
+
+/* main code */
+
+interface AST_HTML_ELEMENT_BASE {
+    location: [number ,number];
+}
+interface AST_HTML_ELEMENT_CONTAINER extends AST_HTML_ELEMENT_BASE {
+    type: 'container';
+    element: HTMLElement | Text;
+    contains: AST_HTML_ELEMENT[];
+}
+interface AST_HTML_ELEMENT_IMAGE extends AST_HTML_ELEMENT_BASE {
+    type: 'image';
+    element: HTMLImageElement;
+    imagePromise: Promise<string>;
+}
+interface AST_HTML_ELEMENT_TEXT extends AST_HTML_ELEMENT_BASE {
+    type: 'text';
+    element: Text;
+}
+type AST_HTML_ELEMENT = AST_HTML_ELEMENT_CONTAINER | AST_HTML_ELEMENT_IMAGE | AST_HTML_ELEMENT_TEXT
+
 // New steps:
 // PegSimpleAST -> AST_WithHTML
 // AST_WithHTML + cursor_location -> HtmlElement
 // AST_WithHTML + text_change_location_and_range + all_text -> LocalAST_WithHTML_OfChange + local_ast_text_range -> LocalAST_WithHTML -> HtmlElement
-function pegAstToHtml_v2(ast) {
+function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[] {
     if (ast == null) {
         return []
     }
     if (typeof (ast) !== 'object') {
-        // This should never happen
+    // This should never happen
         return []
     }
-    function pushIt(a ,ast ,element) {
+    function pushIt(a: AST_HTML_ELEMENT[] ,ast: BBCodeAst ,element: Text) {
         a.push({
             type: 'text'
             ,element
             ,location: ast.location
         })
     }
-    const res = ast.reduce((accum ,e) => {
+
+    const res = ast.reduce((accum: AST_HTML_ELEMENT[] ,e) => {
         if (e.type == 'text') {
             pushIt(accum ,e ,document.createTextNode(e.content))
         }
         else if (e.type == 'linebreak') {
             // pushIt(accum, e, document.createElement('br'), 'container')
-            const element = {
+            const element: AST_HTML_ELEMENT = {
                 element: document.createElement('br')
                 ,location: e.location
                 ,type: 'container'
@@ -280,10 +357,11 @@ function pegAstToHtml_v2(ast) {
             })
         }
         else if (e.tag === 'u' || e.tag == 's' || e.tag == 'sub'
-            || e.tag == 'sup' || e.tag == 'ol' || e.tag == 'code'
-            || e.tag == 'h1' || e.tag == 'h2' || e.tag == 'h3'
-            || e.tag == 'h4' || e.tag == 'h5' || e.tag == 'h6') {
-            const element = {
+      || e.tag == 'sup' || e.tag == 'ol' || e.tag == 'code'
+      || e.tag == 'h1' || e.tag == 'h2' || e.tag == 'h3'
+      || e.tag == 'h4' || e.tag == 'h5' || e.tag == 'h6'
+        ) {
+            const element: AST_HTML_ELEMENT = {
                 element: document.createElement(e.tag)
                 ,location: e.location
                 ,type: 'container'
@@ -296,7 +374,7 @@ function pegAstToHtml_v2(ast) {
             })
         }
         else if (e.tag === 'list' || e.tag === 'ul') {
-            const element = {
+            const element: AST_HTML_ELEMENT = {
                 element: document.createElement('ul')
                 ,location: e.location
                 ,type: 'container'
@@ -309,7 +387,7 @@ function pegAstToHtml_v2(ast) {
             })
         }
         else if (e.tag === 'hr') {
-            const element = {
+            const element: AST_HTML_ELEMENT = {
                 element: document.createElement(e.tag)
                 ,location: e.location
                 ,type: 'container'
@@ -323,7 +401,7 @@ function pegAstToHtml_v2(ast) {
             })
         }
         else if (e.tag === 'b') {
-            const element = {
+            const element: AST_HTML_ELEMENT = {
                 element: document.createElement('strong')
                 ,location: e.location
                 ,type: 'container'
@@ -336,7 +414,7 @@ function pegAstToHtml_v2(ast) {
             })
         }
         else if (e.tag === 'i') {
-            const element = {
+            const element: AST_HTML_ELEMENT = {
                 element: document.createElement('em')
                 ,location: e.location
                 ,type: 'container'
@@ -350,7 +428,7 @@ function pegAstToHtml_v2(ast) {
         }
         else if (e.tag === 'url') {
             // accum += `<a href="${e.data}" target="_blank">${pegAstToHtml(e.content)}</a>`
-            const element = {
+            const element: AST_HTML_ELEMENT = {
                 element: document.createElement('a')
                 ,location: e.location
                 ,type: 'container'
@@ -358,7 +436,7 @@ function pegAstToHtml_v2(ast) {
             }
             accum.push(element)
             if (e.data) {
-                element.element.href = e.data
+                (element.element as HTMLAnchorElement).href = e.data
             }
             element.contains = pegAstToHtml_v2(e.content)
             element.contains.forEach((child_ast_element) => {
@@ -367,18 +445,18 @@ function pegAstToHtml_v2(ast) {
         }
         else if (e.tag === 'img') {
             // accum += `<img src="${pegAstToHtml(e.content)}"/>`
-            let promise = Promise.reject()
+            let promise: Promise<string> = Promise.reject()
             // FIXME should Only pass url via image when parsing
-            let url
+            let url: string
             if (e.content) {
                 // @ts-ignore
-                const urltest = e.content[0]
+                const urltest = (e.content as BBCodeAst[])[0]
                 if (urltest && urltest.type === 'text') {
                     url = urltest.content
                     promise = getImageObjectURL(url)
                 }
             }
-            const element = {
+            const element: AST_HTML_ELEMENT = {
                 element: document.createElement(e.tag)
                 ,location: e.location
                 ,type: 'image'
@@ -402,17 +480,17 @@ function pegAstToHtml_v2(ast) {
         }
         else if (e.tag === 'quote') {
             // accum += `<div style="width: 100%; display: inline-block; margin: 1em 0;" class="well well-sm">${pegAstToHtml(e.content)}</div>`
-            const element = {
+            const element: AST_HTML_ELEMENT = {
                 element: document.createElement('div')
                 ,location: e.location
                 ,type: 'container'
                 ,contains: []
             }
             accum.push(element)
-            element.element.style.width = '100%'
-            element.element.style.display = 'inline-block'
-            element.element.style.margin = '1em 0'
-            element.element.classList.add('well' ,'well-sm')
+            ;(element.element as HTMLDivElement).style.width = '100%'
+            ;(element.element as HTMLDivElement).style.display = 'inline-block'
+            ;(element.element as HTMLDivElement).style.margin = '1em 0'
+            ;(element.element as HTMLDivElement).classList.add('well' ,'well-sm')
             element.contains = pegAstToHtml_v2(e.content)
             element.contains.forEach((child_ast_element) => {
                 element.element.appendChild(child_ast_element.element)
@@ -421,43 +499,43 @@ function pegAstToHtml_v2(ast) {
         else if (e.tag === 'spoiler') {
             // FIXME: Spoiler buttons are nested, however, spoiler divs are TopLevel only!
             // accum += `<button type="button" class="btn btn-sm btn-warning btn-spoiler">Spoiler</button><p class="spoiler display-none">${pegAstToHtml(e.content)}</p>`
-            const button = {
+            const button: AST_HTML_ELEMENT = {
                 element: document.createElement('button')
                 ,location: e.location
                 ,type: 'container'
                 ,contains: []
             }
             button.element.textContent = 'Spoiler'
-            button.element.classList.add('btn' ,'btn-sm' ,'btn-warning' ,'btn-spoiler')
+            ;(button.element as HTMLButtonElement).classList.add('btn' ,'btn-sm' ,'btn-warning' ,'btn-spoiler')
             accum.push(button)
-            const element = {
+            const element: AST_HTML_ELEMENT = {
                 element: document.createElement('p')
                 ,location: e.location
                 ,type: 'container'
                 ,contains: []
             }
             accum.push(element)
-            element.element.classList.add('spoiler' ,'display-none')
+            ;(element.element as HTMLDivElement).classList.add('spoiler' ,'display-none')
             element.contains = pegAstToHtml_v2(e.content)
             element.contains.forEach((child_ast_element) => {
                 element.element.appendChild(child_ast_element.element)
             })
             /* In a perfect world. it would work like this... but md is a bit broken
-            ;(button.element as HTMLButtonElement).addEventListener('click',()=>{
-              ;(element.element as HTMLDivElement).classList.toggle('display-none')
-            })
-            Code to do this is afer makepreview, to ensure buggieness is preserved */
+      ;(button.element as HTMLButtonElement).addEventListener('click',()=>{
+        ;(element.element as HTMLDivElement).classList.toggle('display-none')
+      })
+      Code to do this is afer makepreview, to ensure buggieness is preserved */
         }
         else if (e.tag === 'center' || e.tag === 'left' || e.tag === 'right') {
             // accum += `<p class="text-center">${pegAstToHtml(e.content)}</p>`
-            const element = {
+            const element: AST_HTML_ELEMENT = {
                 element: document.createElement('p')
                 ,location: e.location
                 ,type: 'container'
                 ,contains: []
             }
             accum.push(element)
-            element.element.classList.add(`text-${e.tag}`)
+            ;(element.element as HTMLDivElement).classList.add(`text-${e.tag}`)
             element.contains = pegAstToHtml_v2(e.content)
             element.contains.forEach((child_ast_element) => {
                 element.element.appendChild(child_ast_element.element)
@@ -467,7 +545,7 @@ function pegAstToHtml_v2(ast) {
             // must parse the inside for v2
             // accum += `<li>${pegAstToHtml( bbcodePegParser.parse(e.unparse) )}</li>`
             // accum += `<li>${pegAstToHtml(e.content)}</li>`
-            const element = {
+            const element: AST_HTML_ELEMENT = {
                 element: document.createElement('li')
                 ,location: e.location
                 ,type: 'container'
@@ -486,18 +564,21 @@ function pegAstToHtml_v2(ast) {
             })
         }
         else {
-            // FIXME: Does this every happed
-            accum.push({
-                type: 'text'
-                ,element: document.createTextNode(e.content)
-                ,location: e.location
-            })
+            // FIXME: Does this even happed
+            throw Error(`Recieved unknown and unhandeled ast entry '${JSON.stringify(e)}'`)
+            /* accum.push({
+        type: 'text'
+        ,element: document.createTextNode(e.content)
+        ,location: e.location
+      }) */
         }
         return accum
     } ,[])
     return res
 }
-function makePreview(txt) {
+
+
+function makePreview(txt: string): [HTMLDivElement ,AST_HTML_ELEMENT[]] {
     // dbg(pegAstToHtml(bbcodePegParser.parse(txt)))
     // Faster, but less dynamic
     // let html = bbCodeParser.parse(txt)
@@ -511,27 +592,30 @@ function makePreview(txt) {
     // tmpl.innerHTML = html
     return [previewDiv ,astHtml]
 }
-function createPreviewInterface(forum) {
-    const container = forum.parentElement
+
+function createPreviewInterface(forum: HTMLElement) {
+    const container = forum.parentElement!
     const previewDiv = document.createElement('div')
     previewDiv.style.flexGrow = '1'
     container.style.alignItems = 'flex-start'
     container.classList.add('d-flex' ,'')
     container.insertBefore(previewDiv ,forum)
 }
+
 function createPreviewCallbacks() {
-    const nav = document.querySelector('nav.navbar.fixed-top')
+    const nav = document.querySelector('nav.navbar.fixed-top') as HTMLElement
     // @ts-ignore
     const navHeight = nav ? nav.getBoxQuads()[0].p4.y : 0
     // let image_buffers: Map<string, Blob>
     let forms = Object.values(document.querySelectorAll('.post_edit_form'))
     forms = forms.concat(Object.values(document.querySelectorAll('#post_reply_form')))
     forms = forms.concat(Object.values(document.querySelectorAll('#change_profile_form, #start_thread_form')))
+
     forms.forEach((forum) => {
-        // Try to make it side by side
-        // e.parentElement.parentElement.insertBefore(previewDiv,e.parentElement)
-        // e.parentElement.classList.add("sticky-top", "pt-5", "col-6")
-        const textarea = forum.querySelector('textarea')
+    // Try to make it side by side
+    // e.parentElement.parentElement.insertBefore(previewDiv,e.parentElement)
+    // e.parentElement.classList.add("sticky-top", "pt-5", "col-6")
+        const textarea = (forum.querySelector('textarea') as HTMLTextAreaElement)
         if (!textarea) {
             // FIXME throw errors. Kind of want to short circit this one though
             return Error('Failed to find text area for forum')
@@ -539,23 +623,25 @@ function createPreviewCallbacks() {
         // Setup variables
         let curDisplayedVersion = 0
         let nextVersion = 1
-        let updateTimeout
+        let updateTimeout: number
         let updateTimeoutDelay = 500
+
         const maxAcceptableDelay = 10000
         const useFallbackPreview = false
         // Prepare form
-        forum.parentElement.style.alignItems = 'flex-start'
-        forum.parentElement.classList.add('d-flex')
-        forum.parentElement.style.flexDirection = 'row-reverse'
-        forum.style.position = 'sticky'
-        forum.style.top = '0px'
-        forum.style.paddingTop = `${navHeight}px`
-        forum.style.marginTop = `-${navHeight}px`
+        forum.parentElement!.style.alignItems = 'flex-start'
+        forum.parentElement!.classList.add('d-flex')
+        ;(forum.parentElement as HTMLElement).style.flexDirection = 'row-reverse'
+        ;(forum as HTMLElement).style.position = 'sticky'
+        ;(forum as HTMLElement).style.top = '0px'
+        // Padding keeps us from hitting the navbar. Margin lines us back up with the preview
+        ;(forum as HTMLElement).style.paddingTop = `${navHeight}px`
+        ;(forum as HTMLElement).style.marginTop = `-${navHeight}px`
         textarea.style.resize = 'both'
         let [previewDiv ,astHtml] = makePreview(textarea.value)
         console.log(astHtml)
-        let currentSpoiler
-        function searchAst(ast ,cpos) {
+        let currentSpoiler: undefined | HTMLParagraphElement
+        function searchAst(ast: AST_HTML_ELEMENT[] ,cpos: number): undefined | Text | HTMLElement {
             // slice bc reverse is in place
             const a = ast.slice().reverse().find(e => e.location[0] <= cpos && cpos <= e.location[1])
             if (a) {
@@ -563,9 +649,10 @@ function createPreviewCallbacks() {
                     // unhide spoilers
                     // Ensure we are not a Text node and that we are a spoiler
                     if (!currentSpoiler && a.element.nodeType !== 3
-                        && a.element.classList.contains('spoiler')
-                        && a.element.style.display !== 'block') {
-                        currentSpoiler = a.element
+            && (a.element as HTMLParagraphElement).classList.contains('spoiler')
+            && (a.element as HTMLParagraphElement).style.display !== 'block'
+                    ) {
+                        currentSpoiler = a.element as HTMLParagraphElement
                         currentSpoiler.style.display = 'block'
                     }
                     const b = searchAst(a.contains ,cpos)
@@ -578,7 +665,7 @@ function createPreviewCallbacks() {
             return undefined
         }
         // Auto scroll into view
-        function scrollToPos(pos = textarea.selectionStart) {
+        function scrollToPos(pos = textarea!.selectionStart) {
             // Hide previous spoiler
             if (currentSpoiler) {
                 currentSpoiler.style.display = 'none'
@@ -594,10 +681,10 @@ function createPreviewCallbacks() {
                 // SAFE for (text)nodes?, not safe for elements with nested content
                 if (elm.nodeType === 3) {
                     // @ts-ignore
-                    const { y } = elm.getBoxQuads()[0].p1
+                    const { y } = (elm as Text).getBoxQuads()[0].p1
                     // FIXME. Must be a better way to scroll (especialy in case of nested scroll frames)
                     // Scroll to top
-                    document.scrollingElement.scrollBy(0 ,y)
+                    document.scrollingElement!.scrollBy(0 ,y)
                 }
                 else {
                     // FIXME. Must be a better way to scroll (especialy in case of nested scroll frames)
@@ -605,17 +692,16 @@ function createPreviewCallbacks() {
                     // const y: number = (elm as HTMLElement).offsetTop
                     // document.scrollingElement!.scrollTo({top:y})
                     // Scroll to top
-
-                    elm.scrollIntoView()
+                    (elm as HTMLElement).scrollIntoView()
                 }
                 // Scroll out of nav
-                document.scrollingElement.scrollBy(0 ,-navHeight)
+                document.scrollingElement!.scrollBy(0 ,-navHeight)
                 // Add this line to scroll to center
                 // document.scrollingElement!.scrollBy(0,-(window.innerHeight-navHeight)/2)
                 // Finally, ensure we keep the textarea in view
-                const bound = forum.getBoundingClientRect()
+                const bound = (forum as HTMLFormElement).getBoundingClientRect()
                 // document.scrollingElement!.scrollBy(0,bound.bottom - bound.height)
-                document.scrollingElement.scrollBy(0 ,bound.top)
+                document.scrollingElement!.scrollBy(0 ,bound.top)
             }
         }
         textarea.addEventListener('selectionchange' ,() => {
@@ -623,8 +709,9 @@ function createPreviewCallbacks() {
             console.log(astHtml[astHtml.length - 1])
             console.log(astHtml[astHtml.length - 1].location)
             if (curDisplayedVersion === nextVersion - 1
-                && astHtml[astHtml.length - 1] != null
-                && astHtml[astHtml.length - 1].location[1] === textarea.value.length) {
+        && astHtml[astHtml.length - 1] != null
+        && astHtml[astHtml.length - 1].location[1] === textarea.value.length
+            ) {
                 scrollToPos()
             }
         })
@@ -637,15 +724,16 @@ function createPreviewCallbacks() {
             const startTime = Date.now()
             // Create a preview buffer
             const thisVersion = nextVersion++
-            const [newPreview ,newAstHtml] = makePreview(textarea.value)
+            const [newPreview ,newAstHtml] = makePreview(textarea!.value)
+
             // Setup spoilers the same way md does
             $(newPreview).find('.btn-spoiler').click(function () {
                 // @ts-ignore
-                $(this).next('.spoiler').toggle()
+                $(this as HTMLButtonElement).next('.spoiler').toggle()
             })
             // previewDiv, astHtml
-            const imgLoadPromises = []
-            Object.values(newPreview.querySelectorAll('img')).forEach((img) => {
+            const imgLoadPromises: Promise<any>[] = []
+            Object.values(newPreview.querySelectorAll('img')).forEach((img: HTMLImageElement) => {
                 imgLoadPromises.push(new Promise((resolve) => {
                     img.addEventListener('load' ,resolve)
                     // Errors dont really matter to us
@@ -672,6 +760,7 @@ function createPreviewCallbacks() {
                     updateTimeoutDelay = (updateTimeoutDelay + updateLoadDelay) / 2
                     // dbg(`It took ${updateLoadDelay} milli to update. Changing delay to ${updateTimeoutDelay} `)
                 }
+
                 // Return if we are older than cur preview
                 if (thisVersion < curDisplayedVersion) {
                     newPreview.remove()
@@ -679,7 +768,7 @@ function createPreviewCallbacks() {
                 }
                 curDisplayedVersion = thisVersion
                 // Replace the Preview with the buffered content
-                previewDiv.parentElement.insertBefore(newPreview ,previewDiv)
+                previewDiv.parentElement!.insertBefore(newPreview ,previewDiv)
                 previewDiv.remove()
                 previewDiv = newPreview
                 astHtml = newAstHtml
@@ -693,6 +782,7 @@ function createPreviewCallbacks() {
             // @ts-ignore
             updateTimeout = setTimeout(UpdatePreview ,updateTimeoutDelay)
         }
+
         const buttons = Object.values(forum.querySelectorAll('button'))
         buttons.forEach((btn) => {
             btn.addEventListener('click' ,UpdatePreviewProxy)
@@ -700,4 +790,5 @@ function createPreviewCallbacks() {
         textarea.oninput = UpdatePreviewProxy
     })
 }
+
 createPreviewCallbacks()

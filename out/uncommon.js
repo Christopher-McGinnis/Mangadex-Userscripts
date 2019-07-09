@@ -41,8 +41,6 @@ const keycodes = {
   ,'openbracket': 219 ,'backslash': 220
   ,'closebraket': 221 ,'singlequote': 222
 }
-
-
 function dbg(x) {
   // unsafeWindow used soly for debugging in firefox via Web Console.
   if (typeof unsafeWindow === 'object') {
@@ -52,25 +50,22 @@ function dbg(x) {
     console.log(x)
   }
 }
-
 /** ************************************************
  * XPath
  */
-
 // NOTE: I do not promot the use of this xpath builder. It is used soly to make ways I commonly use xpaths easier.
 // syntax will change. Do NOT depend on this. Do NOT use this. Do NOT think this is a good idea.
 // TODO: small AST?
 function XPath(xpath_str = '') {
   const xp = this
   if (!(xp instanceof XPath)) {
-	    return new XPath(xpath_str)
+    return new XPath(xpath_str)
   }
   xp.xpath = xpath_str
   function toStr(o) {
     if (o instanceof XPath) {
       return o.toString()
     }
-
     return o
   }
   xp.new = function (xpath_str) {
@@ -119,21 +114,22 @@ function XPath(xpath_str = '') {
   }
   xp.forEachElement = (fn ,node) => {
     for (let [i ,item] = [xp.getItter(node)]; (() => {
-      item = i.iterateNext(); return item
+      item = i.iterateNext()
+      return item
     })();) {
       fn(item)
     }
   }
   xp.forEachOrderedElement = (fn ,node) => {
     for (let [i ,item] = [xp.getOrderedItter(node)]; (() => {
-      item = i.iterateNext(); return item
+      item = i.iterateNext()
+      return item
     })();) {
       fn(item)
     }
   }
   return xp
 }
-
 class XPath2 {
   constructor(xpathStr) {
     this.xpath = xpathStr.toString()
@@ -157,22 +153,19 @@ class XPath2 {
 
   static containsClass(classes) {
     const classArr = (typeof classes === 'string') ? [classes] : classes
-    return classArr.reduce((accum ,aClass) => `${accum.length > 0 ?  `${accum} and ` : accum}${XPath2.attrHasValue('@class' ,aClass)}` ,'')
+    return classArr.reduce((accum ,aClass) => `${accum.length > 0 ? `${accum} and ` : accum}${XPath2.attrHasValue('@class' ,aClass)}` ,'')
   }
 
   static contains(obj) {
     return Object.entries(obj).reduce(([attr ,origValues]) => {
       const values = (typeof origValues === 'object') ? origValues : [origValues]
-      return values.reduce((accum ,value) => `${accum.length > 0 ?  `${accum} and ` : accum}${XPath2.containsNormalized(attr ,value)}` ,'')
+      return values.reduce((accum ,value) => `${accum.length > 0 ? `${accum} and ` : accum}${XPath2.containsNormalized(attr ,value)}` ,'')
     })
   }
 }
-
-
 /** **************************************************************************
  *  Potentialy Usefull functions. Waiting till follows standard, or stablized.
  */
-
 function throwMissingParam(name ,param ,example) {
   throw new Error(`Function <${name}> is missing required parameter: <${param}>${example ? ` eg. <${param}: ${example}>` : ''}`)
 }
@@ -181,16 +174,14 @@ function throwMissingArg(name ,arg_name ,example) {
 }
 function throwOnBadParam(condition ,name ,param ,example ,bad_value) {
   if (condition) {
-    throw new Error(`Function <${name}> has illegal value for required parameter: <${param}>${example ? ` exected: <${example}>` : ''}${bad_value ? ` got: <${bad_value}>`  : ''}`)
+    throw new Error(`Function <${name}> has illegal value for required parameter: <${param}>${example ? ` exected: <${example}>` : ''}${bad_value ? ` got: <${bad_value}>` : ''}`)
   }
 }
 function throwOnBadArg(condition ,name ,arg_name ,example ,bad_value) {
   if (condition) {
-    throw new Error(`Function <${name}> has illegal value for required argument: <${arg_name}>${example ? ` exected: <${example}>` : ''}${bad_value ? ` got: <${bad_value}>`  : ''}`)
+    throw new Error(`Function <${name}> has illegal value for required argument: <${arg_name}>${example ? ` exected: <${example}>` : ''}${bad_value ? ` got: <${bad_value}>` : ''}`)
   }
 }
-
-
 /**
 A promise I promise you dont have to write.
 @param {Function} callback - Function we will call until passes filter
@@ -200,13 +191,7 @@ A promise I promise you dont have to write.
 @param {String} [name] - Name to use for debugging
 @returns {Promise} Resolves when callback's return value passes the filter. Rejects when runs out of tries.
 */
-function callUntilAccepted({
-  callback = throwMissingParam('callUntilAccepted' ,'callback' ,'Function')
-  ,filter = throwMissingParam('callUntilAccepted' ,'filter' ,'(ret) => { return ret === true; }')
-  ,tries = throwMissingParam('callUntilAccepted' ,'tries' ,'20')
-  ,delay = throwMissingParam('callUntilAccepted' ,'delay' ,'1000')
-  ,name
-}) {
+function callUntilAccepted({ callback = throwMissingParam('callUntilAccepted' ,'callback' ,'Function') ,filter = throwMissingParam('callUntilAccepted' ,'filter' ,'(ret) => { return ret === true; }') ,tries = throwMissingParam('callUntilAccepted' ,'tries' ,'20') ,delay = throwMissingParam('callUntilAccepted' ,'delay' ,'1000') ,name }) {
   return new Promise((resolve ,reject) => {
     function checkLoop(tries) {
       const tries_left = tries - 1
@@ -277,11 +262,7 @@ Checks the page for {xpath} every {delay} milliseconds up to {tries} times.
 @param {String} [name] - Name to use for debugging
 @returns {Promise} Resolves when xpath elemant is found. Rejects when runs out of tries.
 */
-function waitForElementByXpath({
-  xpath = throwMissingParam('checkLoop' ,'xpath' ,'"String"')
-  ,tries = 50
-  ,delay = 100
-}) {
+function waitForElementByXpath({ xpath = throwMissingParam('checkLoop' ,'xpath' ,'"String"') ,tries = 50 ,delay = 100 }) {
   return callUntilDefined({
     callback: () => getElementByXpath(xpath)
     ,tries
