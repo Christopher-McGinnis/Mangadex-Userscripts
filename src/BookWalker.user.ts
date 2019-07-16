@@ -1,13 +1,21 @@
 // ==UserScript==
-// @name BookWalker Cover Page Extractor
+// @name BookWalker Cover Page Extractor V2
+// @namespace https://github.com/Brandon-Beck
 // @description Click on preview image for this page or another volume. Automatically copies the cover image url to clipboard (and prints it in the terminal)
 // @include    /^(?:https?:\/\/)?bookwalker\.jp\/de[a-zA-Z0-9]+-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]+(\/.*)?/
-// @namespace FireFish5000
-// @version  0.1.18
+// @include    /^(?:https?:\/\/)?bookwalker\.jp\/series\/\d+(\/.*)?/
+// @include    /^(?:https?:\/\/)?mangadex\.org\/title\/\d+(\/.*)?/
+// @version  0.1.19
 // @grant unsafeWindow
 // @grant GM_xmlhttpRequest
 // @require https://gitcdn.xyz/repo/nodeca/pica/5.0.0/dist/pica.min.js
 // ==/UserScript==
+
+// TODO: MD Sanity Check. Ensure BW link is to a Manga (as opposed to an LN)
+
+
+'use strict'
+
 /*
 declare interface pica {
   (): {
@@ -15,964 +23,673 @@ declare interface pica {
   }
 }
 */
+export {}
 
-declare interface Window {
-    unsafeWindow?: Window
-    ;GM_xmlhttpRequest: Function
-    ;BookWalkerCoverDetails?: any
-    ;BookWalkerPrintCoverUrls?: any
-    ;deduceCoverImageFromElement?: any
-    ;getSelection(): Selection;
-    // ,pica?: pica
-}
-declare interface Document {
-    getSelection(): Selection;
-    // ,pica?: pica
-}
-
-
-declare let GM_xmlhttpRequest: any
-
-interface SerialData {
-    ready?: boolean
-    ;id?: string
-    ;rid?: number
-    ;url?: string
-    ;volumeTitle?: string
-    ;promise?: Promise<any>
-    ;preview?: string
-    ;previewWidth?: number
-    ;previewHeight?: number
-    ;fetchLocked?: boolean
-    ;fetchLockedId?: number
-    ;triesLeft?: number
-    ;blob?: Blob
-    ;diff?: number
-    ;promiseLock?: boolean
-    ;retPromise?: Function
-    ;errPromise?: Function;
-}
-
-interface ImageSourceInfo {
-    url?: string
-    ;blob?: Blob
-    ;img?: HTMLImageElement;
-}
-
-if (window.location.href.match(/^(?:https?:\/\/)?bookwalker\.jp\/de[a-zA-Z0-9]+-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]+/) == null) {
-    alert('Sorry, BookWalker Cover Extractor only works on Volume Detail Pages.')
-}
-const serializedCovers = {}
-const volumeCovers = []
 const ERROR_IMG = 'https://i.postimg.cc/4NbKcsP6/404.gif'
 const LOADING_IMG = 'https://i.redd.it/ounq1mw5kdxy.gif'
 
-function copyToClipboard(a): void {
-    const b = document.createElement('textarea')
-    const c = document.getSelection()
-    b.textContent = a
-    document.body.appendChild(b)
-    c.removeAllRanges()
-    b.select()
-    document.execCommand('copy')
-    c.removeAllRanges()
-    document.body.removeChild(b)
-    console.log(`Copied cover art '${a}'`)
+/*
+  Utilities
+*/
+function copyToClipboard(a: string): void {
+  const b = document.createElement('textarea')
+  const c = document.getSelection()
+  b.textContent = a
+  document.body.appendChild(b)
+  if (c) c.removeAllRanges()
+  b.select()
+  document.execCommand('copy')
+  if (c) c.removeAllRanges()
+  document.body.removeChild(b)
+  console.log(`Copied '${a}'`)
 }
 
 function isUserscript(): boolean {
-    if (window.unsafeWindow == null) {
-        return false
-    }
-    return true
+  if (window.unsafeWindow == null) {
+    return false
+  }
+  return true
 }
 
-function isValidAspectRatio(coverData: {width: number ;height: number} ,serialData: SerialData): boolean {
-    // Reject failed images
-    if (coverData.width == 0 || coverData.height == 0) {
-        console.log('0 size image')
-        return false
+// Ignore CORS
+function fetchNoCORS(url: string) {
+  return new Promise((ret ,err) => {
+    GM_xmlhttpRequest({
+      method: 'GET'
+      ,url
+      ,onerror: err
+      ,ontimeout: err
+      ,onload: (response) => {
+        if (response.status >= 200 && response.status <= 299) {
+          return ret(response)
+        }
+        return err(response.statusText)
+      }
+    })
+  })
+}
+function fetchDomNoCORS(url: string) {
+  return fetchNoCORS(url).then((r) => {
+    if (r.status >= 200 && r.status <= 299) {
+      const parser = new DOMParser()
+      const htmlDocument = parser.parseFromString(r.responseText ,'text/html')
+      return Promise.resolve(htmlDocument.documentElement)
     }
-    /* Was Just a sanity check. No longer needed
-  let previewAspect = serialData.previewWidth / serialData.previewHeight
-  let coverAspect = coverData.width / coverData.height
-  let aspectDiff = previewAspect / coverAspect
-  // Accept perfect scales
-  if ( aspectDiff == 1 ) {
-    return true
+    return Promise.reject(Error(r.statusText))
+  })
+}
+function fetchDom(url: string) {
+  return fetchDomNoCORS(url)
+  /* return fetch(url).then((r) => {
+    if (r.ok) {
+      return r.text().then((html) => {
+        const doctype = document.implementation.createDocumentType('html' ,'' ,'')
+        const dom = document.implementation.createDocument('' ,'html' ,doctype)
+        dom.documentElement.innerHTML = html
+        return dom.documentElement
+      })
+    }
+    return Promise.reject(r.statusText)
+  }) */
+}
+
+// Image Utilities
+async function isValidAspectRatio(serialData: SerialDataCover): Promise<boolean> {
+  // Reject failed images
+  const cover = await serialData.cover
+  const preview = await serialData.preview
+  if (cover.naturalWidth === 0 || cover.naturalHeight === 0) {
+    console.log('0 size image')
+    return false
   }
 
-  if ( aspectDiff > 1.5 || aspectDiff < 0.5 ) {
-    console.log(`Rejecting aspect ${previewAspect} / ${coverAspect} = ${aspectDiff}`)
+  const widthDelta = preview.naturalWidth / cover.naturalWidth
+  const convertW = cover.naturalWidth * widthDelta
+  const convertH = cover.naturalHeight * widthDelta
+  if (preview.naturalHeight > convertH + 1 || preview.naturalHeight < convertH - 1) {
+    console.log(`Rejecting height preview: ${preview.naturalHeight} cover: ${cover.naturalHeight} = conv: ${convertH}`)
     return false
-  } */
-    const widthDelta = serialData.previewWidth / coverData.width
-    const convertW = coverData.width * widthDelta
-    const convertH = coverData.height * widthDelta
-    if (serialData.previewHeight > convertH + 1 || serialData.previewHeight < convertH - 1) {
-        console.log(`Rejecting height preview: ${serialData.previewHeight} cover: ${coverData.height} = conv: ${convertH}`)
-        return false
+  }
+  return true
+}
+// Ignore CORS
+function getImageBlobIgnoreCORS(url: string): Promise<Blob> {
+  return new Promise((ret ,err) => {
+    GM_xmlhttpRequest({
+      method: 'GET'
+      ,url
+      ,responseType: 'blob'
+      ,onerror: err
+      ,ontimeout: err
+      ,onload: (response) => {
+        if (response.status >= 200 && response.status <= 299) {
+          return ret(response.response)
+        }
+        return err(response)
+      }
+    })
+  })
+}
+
+
+/*
+  Bookwalker Utilities
+*/
+
+function getCoverUrlFromRID(rid: number): string {
+  return `https://c.bookwalker.jp/coverImage_${rid}.jpg`
+}
+
+/*
+  Bookwalker Functions
+*/
+
+// FIXME: I believe there are better ways to do this, but I am new to type-fu
+const enum SerialDataLevel {
+  BASE
+  ,COVER_REQ
+  ,COVER
+}
+
+interface SerialDataBase {
+  id: string
+  rid: number
+  preview: Promise<HTMLImageElement>
+  previewBlob?: Blob
+  title: string
+  serialLevel: SerialDataLevel
+  // CoverReq
+  maxTries?: number
+  // Cover
+  fetchLocked?: boolean
+  fetchLockedId?: number
+  triesLeft?: number
+  cover?: Promise<HTMLImageElement>
+  ready?: boolean
+  coverPromise: Promise<HTMLImageElement>
+  coverResolver?: Function
+  coverRejector?: Function
+}
+interface SerialDataBasic extends SerialDataBase {
+  serialLevel: SerialDataLevel.BASE
+}
+interface SerialDataCoverReq extends SerialDataBase {
+  serialLevel: SerialDataLevel.COVER_REQ
+  maxTries: number
+}
+interface SerialDataCover extends SerialDataBase {
+  serialLevel: SerialDataLevel.COVER
+  cover: Promise<HTMLImageElement>
+  ready: boolean
+  fetchLocked: boolean
+  fetchLockedId: number
+  maxTries: number
+  triesLeft: number
+  blob?: Blob
+}
+type SerialData = SerialDataBasic | SerialDataCoverReq | SerialDataCover;
+
+
+function getVolumePageFromSeriesPage(doc: HTMLElement) {
+  const volumePage: HTMLAnchorElement | null = doc.querySelector('.overview-synopsis-hdg > a')
+  if (volumePage) {
+    return fetchDom(volumePage.href)
+  }
+  return Promise.reject(Error('No volume pages found'))
+}
+function getCoverImgElmsFromVolumePage(doc: HTMLElement) {
+  const volumeContainerElms = doc.querySelectorAll('.detail-section.series .cmnShelf-list')
+  console.log(volumeContainerElms)
+  const imgs: HTMLImageElement[] = []
+  volumeContainerElms.forEach((list) => {
+    list.querySelectorAll('.cmnShelf-item').forEach((e) => {
+      const img: HTMLImageElement | null = e.querySelector('.cmnShelf-image > img')
+      if (img) {
+        imgs.push(img)
+      }
+    })
+  })
+  return imgs
+}
+function getIdFromImg(img: HTMLImageElement): string {
+  return img.src.split('/')[3]
+}
+async function toImgPromiseIgnoreCORS(uri: string | Blob | Promise<Blob> | HTMLImageElement): Promise<HTMLImageElement> {
+  const img = document.createElement('img')
+  img.crossOrigin = 'anonymous'
+  let src: string
+  if (uri instanceof Blob) {
+    src = URL.createObjectURL(uri)
+  }
+  else if (uri instanceof Promise) {
+    src = URL.createObjectURL(await uri)
+  }
+  else if (typeof (uri) === 'string') {
+    src = uri
+  }
+  else if (typeof (uri) === 'object' && uri.tagName === 'IMG') {
+    // FIXME double fetch
+    src = uri.src
+  }
+  else {
+    return Promise.reject(Error(`Invalid URI '${uri}'`))
+  }
+
+  return new Promise((ret ,err) => {
+    img.onload = () => {
+      URL.revokeObjectURL(src)
+      ret(img)
     }
-    return true
+    img.onerror = (e) => {
+      URL.revokeObjectURL(src)
+      // console.error(e)
+      err(e)
+    }
+    img.src = src
+  })
+}
+function toImgPromise(uri: string | Blob | HTMLImageElement): Promise<HTMLImageElement> {
+  let img = document.createElement('img')
+  img.crossOrigin = 'anonymous'
+  let src: string
+  if (uri instanceof Blob) {
+    src = URL.createObjectURL(uri)
+  }
+  else if (typeof (uri) === 'string') {
+    src = uri
+  }
+  else if (typeof (uri) === 'object' && uri.tagName === 'IMG') {
+    img = uri
+    src = uri.src
+  }
+  else {
+    return Promise.reject(`Invalid URI '${uri}'`)
+  }
+
+  return new Promise((ret ,err) => {
+    img.onload = () => {
+      URL.revokeObjectURL(src)
+      return ret(img)
+    }
+    img.onerror = (e) => {
+      URL.revokeObjectURL(src)
+      // console.error(e)
+      return err(e)
+    }
+    if (img.complete) {
+      return ret(img)
+    }
+    if (img.src !== src) img.src = src
+  })
 }
 
-function canvasToBlob(canvas): Promise<Blob> {
-    return new Promise((ret ,err) => {
-        canvas.toBlob(blob => ret(blob))
+function getCoverFromRid(rid: number): Promise<{img: Promise<HTMLImageElement> ,blob?: Blob}> {
+  const url = getCoverUrlFromRID(rid)
+  return getImageBlobIgnoreCORS(url)
+    .then(b => ({
+      img: toImgPromiseIgnoreCORS(b) ,blob: b
+    }))
+}
+
+function getRidFromId(id: string): number {
+  return parseInt(id.toString().split('').reverse().join(''))
+}
+
+function serializeImg(img: HTMLImageElement): SerialDataBasic {
+  const id = getIdFromImg(img)
+  const previewBlob = getImageBlobIgnoreCORS(img.src)
+  const serialData: SerialDataBasic = {
+    id
+    ,serialLevel: SerialDataLevel.BASE
+    ,preview: toImgPromiseIgnoreCORS(previewBlob)
+    ,previewBlob
+    ,rid: getRidFromId(id)
+    ,title: img.alt
+  }
+  // FIXME: definitly not the right go about this.
+  // new Promise((upperRes) => {
+  serialData.coverPromise = new Promise((res ,rej) => {
+    serialData.coverResolver = res
+    serialData.coverRejector = rej
+    // return upperRes()
+  })
+  // }).then()
+  console.log(serialData)
+  return serialData
+}
+function getSerialDataFromSeriesPage(doc: HTMLElement): Promise<SerialDataBasic[]> {
+  console.log('volume')
+  return getVolumePageFromSeriesPage(doc)
+    .then((doc) => {
+      console.log('img')
+      return getCoverImgElmsFromVolumePage(doc)
+    })
+    .then((imgs) => {
+      console.log('serial')
+      return imgs.map((img) => {
+        const serial = serializeImg(img)
+        console.error(serial)
+        return serial
+      })
     })
 }
+function getSerialDataFromBookwalker(url: string ,doc: HTMLElement): Promise<SerialDataBasic[]> {
+  if (url.match(/^(?:https?:\/\/)?bookwalker\.jp\/series\/\d+(\/.*)?/)) {
+    return getSerialDataFromSeriesPage(doc)
+  }
+  if (url.match(/^(?:https?:\/\/)?bookwalker\.jp\/de[a-zA-Z0-9]+-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]+(\/.*)?/)) {
+    return Promise.resolve(getCoverImgElmsFromVolumePage(doc).map(img => serializeImg(img)))
+  }
 
-// FIXME: Only calculate pixels we use
-/**
- * Hermite resize - fast image resize/resample using Hermite filter. 1 cpu version!
- *
- * @param {HtmlElement} canvas
- * @param {int} width
- * @param {int} height
- * @param {boolean} resize_canvas_bool if true, canvas will be resized. Optional.
- */
-function resample_single(uri: string ,width: number ,height: number ,resize_canvas_bool: boolean): Promise<Blob> {
-    const imgPromise = toImgPromise(uri)
-    const canvas = document.createElement('canvas')
-    return imgPromise.then((orig_img) => {
-        canvas.width = orig_img.naturalWidth
-        canvas.height = orig_img.naturalHeight
-        const ctx = canvas.getContext('2d')
-        ctx.drawImage(orig_img ,0 ,0)
-
-
-        const width_source = orig_img.naturalWidth
-        const height_source = orig_img.naturalHeight
-        width = Math.round(width)
-        height = Math.round(height)
-
-        const ratio_w = width_source / width
-        const ratio_h = height_source / height
-        const ratio_w_half = Math.ceil(ratio_w / 2)
-        const ratio_h_half = Math.ceil(ratio_h / 2)
-
-        // let ctx = canvas.getContext("2d");
-        const img = ctx.getImageData(0 ,0 ,width_source ,height_source)
-        const img2 = ctx.createImageData(width ,height)
-        const { data } = img
-        const data2 = img2.data
-        console.log('RESIZING')
-        for (let j = 0; j < height; j++) {
-            for (let i = 0; i < width; i++) {
-                const x2 = (i + j * width) * 4
-                let weight = 0
-                let weights = 0
-                let weights_alpha = 0
-                let gx_r = 0
-                let gx_g = 0
-                let gx_b = 0
-                let gx_a = 0
-                const center_y = (j + 0.5) * ratio_h
-                const yy_start = Math.floor(j * ratio_h)
-                const yy_stop = Math.ceil((j + 1) * ratio_h)
-                for (let yy = yy_start; yy < yy_stop; yy++) {
-                    const dy = Math.abs(center_y - (yy + 0.5)) / ratio_h_half
-                    const center_x = (i + 0.5) * ratio_w
-                    const w0 = dy * dy // pre-calc part of w
-                    const xx_start = Math.floor(i * ratio_w)
-                    const xx_stop = Math.ceil((i + 1) * ratio_w)
-                    for (let xx = xx_start; xx < xx_stop; xx++) {
-                        const dx = Math.abs(center_x - (xx + 0.5)) / ratio_w_half
-                        const w = Math.sqrt(w0 + dx * dx)
-                        if (w >= 1) {
-                            // pixel too far
-                            continue
-                        }
-                        // hermite filter
-                        weight = 2 * w * w * w - 3 * w * w + 1
-                        const pos_x = 4 * (xx + yy * width_source)
-                        // alpha
-                        gx_a += weight * data[pos_x + 3]
-                        weights_alpha += weight
-                        // colors
-                        if (data[pos_x + 3] < 255) weight = weight * data[pos_x + 3] / 250
-                        gx_r += weight * data[pos_x]
-                        gx_g += weight * data[pos_x + 1]
-                        gx_b += weight * data[pos_x + 2]
-                        weights += weight
-                    }
-                }
-                data2[x2] = gx_r / weights
-                data2[x2 + 1] = gx_g / weights
-                data2[x2 + 2] = gx_b / weights
-                data2[x2 + 3] = gx_a / weights_alpha
-            }
-        }
-        console.log('RESIZE DONE')
-        // clear and resize canvas
-        if (resize_canvas_bool === true) {
-            canvas.width = width
-            canvas.height = height
-        }
-        else {
-            ctx.clearRect(0 ,0 ,width_source ,height_source)
-        }
-
-        // draw
-        ctx.putImageData(img2 ,0 ,0)
-        return canvasToBlob(canvas)
-
-    // return canvas.toDataURL("image/png")
-    })
+  return Promise.reject(Error(`Bookwalker URL expected. Got '${url}'`))
 }
 
+function fetchCoverImageFromSerialData(serialDataOrig: SerialData): Promise<SerialDataCover> {
+  let serialData: SerialDataCover
+  if (serialDataOrig.serialLevel === SerialDataLevel.COVER) {
+    if (serialDataOrig.fetchLocked === true) {
+      return Promise.reject(Error('fetchLocked'))
+    }
+    serialData = serialDataOrig
+  }
+  else {
+    serialDataOrig.ready = false
+    serialDataOrig.fetchLocked = true
+    serialDataOrig.fetchLockedId = 0
+    if (serialDataOrig.serialLevel === SerialDataLevel.BASE) {
+      serialDataOrig.maxTries = 10
+    }
+    serialDataOrig.triesLeft = serialDataOrig.maxTries
+    serialData = serialDataOrig as SerialDataBase as SerialDataCover
+    serialData.serialLevel = SerialDataLevel.COVER
+  }
+  serialData.fetchLocked = true
+  serialData.fetchLockedId++
+  const ourLock = serialData.fetchLockedId
+  // Add 1 to rid. We will premptivly subtract one in out loop
+  if (!serialData.ready) {
+    serialData.rid++
+  }
+  serialData.ready = false
 
-// Image comparison
-// Must bypass cross origin request.
-// Only possible via userscript
-function getRequest(data): Promise<Response> {
-    return new Promise((ret ,err) => {
-        GM_xmlhttpRequest({
-            onerror: err
-            ,ontimeout: err
-            ,onload: (response: Response) => {
-                ret(response)
-            }
-            ,...data
+  // FIXME Work with CORS/Non-Userscript mode
+  function loopRun(fn: Function): Promise<SerialDataCover> {
+    return fn()
+      .catch((e: Error) => {
+        // FIXME type errors
+        if (e.message !== 'Out of Tries') return loopRun(fn)
+        return Promise.reject(e)
+      })
+  }
+  return loopRun(() => {
+    if (serialData.triesLeft <= 0) {
+      serialData.fetchLocked = false
+      return Promise.reject(Error('Out of Tries'))
+    }
+    serialData.triesLeft--
+    serialData.rid--
+    return getCoverFromRid(serialData.rid)
+      .then(async ({ img ,blob }) => {
+        serialData.cover = img
+        if (!await isValidAspectRatio(serialData)) {
+          return Promise.reject(Error('Invalid Aspect Ratio'))
+          // return Promise.reject(Error('Invalid Aspect Ratio'))
+        }
+        if (blob) serialData.blob = blob
+        img.then(() => {
+          if (serialData.coverResolver) serialData.coverResolver(img)
+          else return Promise.reject(Error('Cover Resolver failed to initialize before images were found!'))
         })
-    })
-}
-
-function getImageBlob(url): Promise<Blob> {
-    return new Promise((ret ,err) => {
-        GM_xmlhttpRequest({
-            method: 'GET'
-            ,url
-            ,responseType: 'blob'
-            ,onerror: err
-            ,ontimeout: err
-            ,onload: (response) => {
-                if (response.status == 200) {
-                    return ret(response.response)
-                }
-                return err(response)
-            }
+        // this should never happen. else isValidAspect would fail
+        img.catch(() => {
+          if (serialData.coverRejector) serialData.coverRejector(img)
+          else return Promise.reject(Error('Cover Rejector failed to initialize and an attempt to use it was made!'))
         })
+        serialData.ready = true
+        serialData.fetchLocked = false
+        return serialData
+      })
+  })
+}
+
+/* ***************************
+  MD functions
+*/
+
+type MD_LanguageFlags = 'jp' | 'en' | string;
+
+interface MD_SeriesDetailsJson {
+    manga: {
+        artist: string;
+        author: string;
+        cover_url: string;
+        description: string;
+        lang_flag: MD_LanguageFlags;
+        links: {
+            [index: string]: string;
+        };
+    };
+}
+function getSerieseDetailsFromMD(mangadexId: number): Promise<MD_SeriesDetailsJson> {
+  return fetch(`https://mangadex.org/api/manga/${mangadexId}`)
+    .then((r) => {
+      if (r.ok) {
+        return r.json().then(j => j)
+      }
+      return Promise.reject(r.statusText)
     })
 }
-function toImgPromise(uri: string | Blob): Promise<HTMLImageElement> {
-    const img = document.createElement('img')
-    img.crossOrigin = 'Anonymous'
-    let src
-    if (uri instanceof Blob) {
-        src = URL.createObjectURL(uri)
-    }
-    else if (typeof (uri) === 'string') {
-        src = uri
-    }
-    else {
-        return Promise.reject(`Invalid URI '${uri}'`)
-    }
-
-    return new Promise((ret ,err) => {
-        img.onload = () => {
-            URL.revokeObjectURL(src)
-            ret(img)
-        }
-        img.onerror = (e) => {
-            URL.revokeObjectURL(src)
-            // console.error(e)
-            err(e)
-        }
-        img.src = src
+function getTitleIdFromMD() {
+  const m = window.location.href.match(/^https?:\/\/(?:www\.)?mangadex\.org\/title\/(\d+)(?:\/.*)?$/)
+  if (m) {
+    return parseInt(m[1])
+  }
+  throw Error('No MD Title ID Found')
+}
+function getBW_CoversFromMD() {
+  const id = getTitleIdFromMD()
+  getSerieseDetailsFromMD(id)
+    .then((e) => {
+      const { bw } = e.manga.links
+      if (bw) {
+        return `https://bookwalker.jp/${bw}`
+      }
+      return Promise.reject(Error('Bookwalker Url Not Found!'))
     })
-}
-
-function getImageData(url): Promise<ImageData> {
-    const img = document.createElement('img')
-    const canvas = document.createElement('canvas')
-    img.crossOrigin = 'Anonymous'
-    return new Promise((ret ,err) => {
-        img.onload = () => {
-            canvas.width = img.width
-            canvas.height = img.height
-            const ctx = canvas.getContext('2d')
-            ctx.drawImage(img ,0 ,0)
-            ret(ctx.getImageData(0 ,0 ,img.width ,img.height))
-            URL.revokeObjectURL(img.src)
+    .then(bw => fetchDom(bw)
+      .then(dom => getSerialDataFromBookwalker(bw ,dom)))
+    .then((serialData) => {
+      createInterface(serialData)
+      function loopRun(fn: Function) {
+        return fn().then(() => loopRun(fn)).catch(() => { })
+      }
+      let idx = 0
+      loopRun(() => {
+        if (serialData[idx]) {
+          return fetchCoverImageFromSerialData(serialData[idx]).then(() => idx++)
         }
-        img.onerror = err
-        if (url instanceof Blob) {
-            img.src = URL.createObjectURL(url)
-        }
-        else {
-            getImageBlob(url).then((blob) => {
-                img.src = URL.createObjectURL(blob)
-            }).catch(err)
-        }
-    })
-}
-
-interface comparisonType {
-    match: 'all' | 'middle' | 'corners'
-    ;regionRange: [number ,number]
-    ;maxAcceptableDiff: number
-    ;minRegionsReject: number
-    ;regionsRequired: number;
-}
-
-function imageCompare(firstImage ,secondImage ,comparison: comparisonType): Promise<number> {
-    console.log('Compare Checking Img1')
-    return new Promise((ret ,err) => getImageData(firstImage).then((img1) => {
-        console.log('Compare Checking Img 2')
-  		return getImageData(secondImage).then((img2) => {
-  			if (img1.width !== img2.width || img1.height != img2.height) {
-  				return err(NaN)
-  			}
-
-  			let diff = 0
-            function updateDiff(i) {
-                diff += Math.abs(img1.data[4 * i + 0] - img2.data[4 * i + 0]) / 255
-  				diff += Math.abs(img1.data[4 * i + 1] - img2.data[4 * i + 1]) / 255
-  				diff += Math.abs(img1.data[4 * i + 2] - img2.data[4 * i + 2]) / 255
-            }
-            const pixelCount = img1.data.length / 4
-            // if (comparison.match == "all") {
-            let regionSize = pixelCount / comparison.regionsRequired
-            let { regionsRequired } = comparison
-            if (regionsRequired == null) {
-                regionsRequired = pixelCount
-            }
-            if (regionSize < 1) {
-                regionSize = pixelCount
-            }
-            const regionCount = Math.floor(pixelCount / regionSize)
-            if (regionCount < regionsRequired) {
-                regionsRequired = regionCount
-            }
-            console.log('Compare Checking Pixel Array')
-            let c_diff
-            for (let i = 0; i < regionCount; i++) {
-    				updateDiff(Math.floor(i * regionSize))
-                if (i >= regionsRequired) {
-                    c_diff = diff / (i * 3)
-                    if (c_diff > comparison.maxAcceptableDiff) {
-                        console.log('Compare Done Checking Bad')
-                        return err(c_diff)
-                    }
-                }
-                else if (i >= regionCount - 1) {
-                    c_diff = diff / (i * 3)
-                    console.log('Compare Done Checking Good')
-                    return ret(c_diff)
-                }
-    			}
-            // }
-            return err('Comparison Code Failed to return within loop. ')
-  			// ret(diff / (img1.width * img1.height * 3));
-  		})
-  	}))
-}
-
-function ridAsCoverUrl(rid): string {
-    return `https://c.bookwalker.jp/coverImage_${rid}.jpg`
-}
-
-// Must bypass cross origin request. Could be done with userscript
-function tryFetchImageRequest(rid): Promise<ImageSourceInfo> {
-    const url = ridAsCoverUrl(rid)
-    const p = getImageBlob(url)
-    return p.then((blob) => {
-        console.log(`RID '${rid}' URL '${url}' Blob Promise '${p}' Blob '${blob}'`)
-        return {
-            url ,blob
-        }
+        return Promise.reject(Error('Out of Idxs'))
+      })
     })
 }
 
 
-function tryFetchImage(serialData: SerialData ,maxTries?: number): Promise<SerialData> {
-    if (serialData.fetchLocked === true) {
-        return new Promise((ret ,err) => {
-            err('fetchLocked')
-        })
-    }
-    if (serialData.fetchLockedId == null) {
-        serialData.fetchLockedId = 0
-    }
-    serialData.fetchLocked = true
-    serialData.fetchLockedId++
-    const ourLock = serialData.fetchLockedId
-    if (serialData.triesLeft == null) {
-        serialData.triesLeft = maxTries
-    }
-    else {
-        maxTries = serialData.triesLeft
-    }
-
-    if (!serialData.rid) {
-        throw Error('SerialData.rid must be defined here')
-    }
-    if (!serialData.triesLeft) {
-        throw Error('SerialData.triesLeft must be defined here')
-    }
-
-    let { rid } = serialData
-    if (serialData.ready) {
-        serialData.ready = false
-        rid--
-    }
-
-    const promise: Promise<SerialData> = new Promise((ret ,err) => {
-        function retryLoop(rid: number) {
-            function errCheck(errRet) {
-                if (serialData.triesLeft! <= 0) {
-                    serialData.fetchLocked = false
-                    serialData.rid = rid
-                    return err(errRet)
-                }
-                return retryLoop(rid - 1)
-            }
-
-            let p
-            if (isUserscript()) {
-                p = tryFetchImageRequest(rid)
-            }
-            else {
-                p = tryFetchImageViaElement(rid)
-            }
-            serialData.triesLeft!--
-
-            p.then((resData) => {
-                // Ensure we are still the active loader
-                // if (serialData.ready == false && ourLock == serialData.fetchLockedId) {
-                // }
-                const checks = []
-
-                // Ensure Valid Aspect Ratio
-                if (resData.img && !isValidAspectRatio({
-                    width: resData.img.naturalWidth ,height: resData.img.naturalHeight
-                } ,serialData)) {
-                    checks.push(Promise.reject('Invalid Aspect Ratio'))
-                }
-
-                let imgDiffPerc = 0
-                // Try ensure same image.
-                if (resData.blob != null) {
-                    serialData.blob = resData.blob
-                    const blobUrl = URL.createObjectURL(resData.blob)
-                    console.log(`LOOKING AT BLOB: ${resData}`)
-                    checks.push(toImgPromise(resData.blob).then((img) => {
-                        if (!isValidAspectRatio({
-                            width: img.naturalWidth ,height: img.naturalHeight
-                        } ,serialData)) {
-                            console.log(`Reject 2 w: ${img.naturalWidth} h: ${img.naturalHeight}, pw: '${serialData.previewWidth}' ph: '${serialData.previewHeight}'`)
-                            return Promise.reject('Invalid Aspect Ratio')
-                        }
-                        // return resample_single(blobUrl, serialData.previewWidth, serialData.previewHeight, true).then((resizedBlob) => {
-                        // /* Should be Faster, but... doesn't work atm
-                        const canvasResizer = document.createElement('canvas')
-                        const imgResizer = document.createElement('img')
-                        imgResizer.src = blobUrl
-                        canvasResizer.width = serialData.previewWidth
-                        canvasResizer.height = serialData.previewHeight
-                        return window.pica().resize(imgResizer ,canvasResizer ,{ quality: 3 }).then(canvasResizer => canvasToBlob(canvasResizer)).then(resizedBlob => // */
-                            imageCompare(resizedBlob ,serialData.preview ,{
-                                match: 'all'
-                                ,regionsRequired: null
-                                ,minRegionsReject: 50000
-                                ,maxAcceptableDiff: 0.10
-                                ,regionRange: [1 ,1]
-                            }).then((diffPerc) => {
-                                imgDiffPerc = diffPerc
-                            }))
-                    }).then((ret) => {
-                        URL.revokeObjectURL(blobUrl)
-                        return ret
-                    }).catch((errRet) => {
-                        URL.revokeObjectURL(blobUrl)
-                        console.log('Reject 3')
-                        console.log(errRet)
-                        return Promise.reject(errRet)
-                    }))
-                }
-
-                Promise.all(checks).then(() => {
-                    // serialData.blob = resData.blob
-
-                    serialData.diff = imgDiffPerc
-
-                    serialData.ready = true
-                    serialData.url = ridAsCoverUrl(rid)
-                    serialData.rid = rid
-                    serialData.fetchLocked = false
-
-                    return ret(serialData)
-                }).catch(errCheck)
-            }).catch(errCheck)
-        }
-
-        retryLoop(rid)
-    })
-    serialData.promise = promise
-    return promise
-}
-
-function tryFetchImageViaElement(rid): Promise<ImageSourceInfo> {
-    const url = ridAsCoverUrl(rid)
-    const img = document.createElement('img')
-
-    return new Promise((ret ,err) => {
-        img.addEventListener('load' ,() => {
-            ret({
-                img ,url
-            })
-        })
-        img.addEventListener('error' ,() => {
-            err()
-        })
-        img.src = url
-    })
-}
-
+// interface
 
 function createSingleInterface(serialData: SerialData): HTMLDivElement {
-    const cont = document.createElement('div')
-    const info = document.createElement('div')
-    const title = document.createElement('h4')
-    const preview = document.createElement('img')
-    const coverCont = document.createElement('div')
-    const cover = document.createElement('img')
-    const copy = document.createElement('button')
-    const next = document.createElement('button')
-    const controls = document.createElement('div')
-    controls.appendChild(copy)
-    controls.appendChild(next)
-    controls.style.position = 'relative'
-    controls.style.display = 'flex'
-    copy.style.flexGrow = '1'
-    next.style.flexGrow = '1'
-    coverCont.style.position = 'relative'
+  const cont = document.createElement('div')
+  const info = document.createElement('div')
+  const title = document.createElement('h4')
+  const coverCont = document.createElement('div')
+  const cover = document.createElement('img')
+  const copy = document.createElement('button')
+  const next = document.createElement('button')
+  const controls = document.createElement('div')
+  controls.appendChild(copy)
+  controls.appendChild(next)
+  controls.style.position = 'relative'
+  controls.style.display = 'flex'
+  copy.style.flexGrow = '1'
+  next.style.flexGrow = '1'
+  coverCont.style.position = 'relative'
 
-    info.appendChild(title)
-    const coverDisplayWidth = 200
-    controls.style.width = `${coverDisplayWidth}px`
-    coverCont.style.width = `${coverDisplayWidth}px`
-    const aspectDelta = serialData.previewWidth / coverDisplayWidth
-    const expectedHeight = serialData.previewHeight * aspectDelta
-    // coverCont.style.maxHeight=`${Math.ceil(expectedHeight)}px`
-    // coverCont.style.minHeight=`${Math.ceil(expectedHeight)}px`
-    coverCont.style.height = `${Math.ceil(expectedHeight)}px`
-    // coverCont.style.minHeight=`${Math.floor(expectedHeight)}px`
+  info.appendChild(title)
+  const coverDisplayWidth = 200
+  controls.style.width = `${coverDisplayWidth}px`
+  coverCont.style.width = `${coverDisplayWidth}px`
+
+  coverCont.appendChild(cover)
+  let preview: HTMLImageElement | undefined
+  serialData.preview.then((serialPreview) => {
+    preview = serialPreview
     preview.width = Math.ceil(coverDisplayWidth / 4)
     preview.style.left = '5px' // `${-coverDisplayWidth}px`
     preview.style.position = 'absolute'
     preview.style.bottom = '5px' // `${(Math.ceil(expectedHeight/4)) - expectedHeight}px`
-    // preview.style.zIndex=1
-    coverCont.appendChild(cover)
-    coverCont.appendChild(preview)
-    coverCont.style.display = 'flex'
-    cover.style.alignSelf = 'center'
-    cover.style.outlineWidth = '5px'
-    cover.style.outlineStyle = 'none'
     preview.style.outlineWidth = '5px'
     preview.style.outlineStyle = 'none'
-    info.style.display = 'flex'
-    info.style.minHeight = '3em'
-    info.style.alignItems = 'center'
+    const aspectDelta = preview.naturalWidth / coverDisplayWidth
+    const expectedHeight = preview.naturalHeight * aspectDelta
+    // coverCont.style.maxHeight=`${Math.ceil(expectedHeight)}px`
+    // coverCont.style.minHeight=`${Math.ceil(expectedHeight)}px`
+    coverCont.style.height = `${Math.ceil(expectedHeight)}px`
+    coverCont.appendChild(preview)
+  })
+  // preview.style.zIndex=1
 
-    cont.style.marginLeft = '5px'
-    cont.appendChild(info)
-    cont.appendChild(coverCont)
-    cont.appendChild(controls)
-    cont.style.display = 'flex'
-    cont.style.flexDirection = 'column'
-    cont.style.width = `${coverDisplayWidth}px`
+  coverCont.style.display = 'flex'
+  cover.style.alignSelf = 'center'
+  cover.style.outlineWidth = '5px'
+  cover.style.outlineStyle = 'none'
+  cover.style.width = '100%'
+  info.style.display = 'flex'
+  info.style.minHeight = '3em'
+  info.style.alignItems = 'center'
 
-    next.innerText = 'Next'
-    copy.innerText = 'Copy'
-    let copyTimeout1
-    let copyTimeout2
-    function tryCopy() {
-        if (!copy.disabled) {
-            cover.style.outlineStyle = 'double'
-            preview.style.outlineStyle = 'double'
-            cover.style.outlineColor = 'yellow'
-            preview.style.outlineColor = 'yellow'
-            cover.style.zIndex = '1'
-            copyToClipboard(serialData.url)
-            copy.innerText = 'Coppied!'
-            clearTimeout(copyTimeout1)
-            clearTimeout(copyTimeout2)
-            copyTimeout1 = setTimeout(() => {
-                copy.innerText = 'Copy'
-            } ,2000)
-        }
-        else {
-            cover.style.outlineStyle = 'solid'
-            preview.style.outlineStyle = 'solid'
-            cover.style.outlineColor = 'red'
-            preview.style.outlineColor = 'red'
-            copy.innerText = 'Cannot Copy!'
-        }
-        copyTimeout2 = setTimeout(() => {
-            cover.style.outlineStyle = 'none'
-            preview.style.outlineStyle = 'none'
-            cover.style.zIndex = '0'
-        } ,500)
-    }
-    copy.onclick = () => {
-        tryCopy()
-    }
-    cover.onclick = () => {
-        tryCopy()
-    }
-    let lastBlobUri
-    cover.onload = revokeLastUri
-    cover.onerror = revokeLastUri
+  cont.style.marginLeft = '5px'
+  cont.appendChild(info)
+  cont.appendChild(coverCont)
+  cont.appendChild(controls)
+  cont.style.display = 'flex'
+  cont.style.flexDirection = 'column'
+  cont.style.width = `${coverDisplayWidth}px`
 
-    function revokeLastUri() {
-        if (lastBlobUri != null) {
-            lastBlobUri
-            URL.revokeObjectURL(lastBlobUri)
-            lastBlobUri = null
-        }
-    }
-    function updateCover(serialData) {
-        let { url } = serialData
-        revokeLastUri()
-        if (serialData.blob) {
-            url = URL.createObjectURL(serialData.blob)
-            lastBlobUri = url
-        }
-        cover.src = url
-    }
-
-    function enable() {
-        next.disabled = false
-        copy.disabled = false
-        next.innerText = 'Wrong Image?'
+  next.innerText = 'Next'
+  copy.innerText = 'Copy'
+  let copyTimeout1: NodeJS.Timeout
+  let copyTimeout2: NodeJS.Timeout
+  function tryCopy() {
+    if (!copy.disabled) {
+      cover.style.outlineStyle = 'double'
+      cover.style.outlineColor = 'yellow'
+      if (preview) {
+        preview.style.outlineStyle = 'double'
+        preview.style.outlineColor = 'yellow'
+      }
+      cover.style.zIndex = '1'
+      copyToClipboard(getCoverUrlFromRID(serialData.rid))
+      copy.innerText = 'Coppied!'
+      clearTimeout(copyTimeout1)
+      clearTimeout(copyTimeout2)
+      copyTimeout1 = setTimeout(() => {
         copy.innerText = 'Copy'
-    }
-    function loading() {
-        cover.src = LOADING_IMG
-        next.disabled = true
-        copy.disabled = true
-        next.innerText = 'Looking for Image'
-    }
-    function fail() {
-        cover.src = ERROR_IMG
-        next.disabled = false
-        copy.disabled = true
-        next.innerText = 'Not Found! Retry?'
-        serialData.rid = idToRid(serialData.id)
-        serialData.triesLeft = null
-    }
-
-    preview.src = serialData.preview
-    loading()
-
-    title.innerText = serialData.volumeTitle
-    serialData.promise.then((/* same serialData Object */) => {
-        updateCover(serialData)
-        title.innerText = serialData.volumeTitle
-        enable()
-    }).catch(fail)
-
-    next.onclick = () => {
-        loading()
-        tryFetchImage(serialData).then((/* same serialData Object */) => {
-            enable()
-            updateCover(serialData)
-        }).catch(fail)
-    }
-    return cont
-}
-function createInterface(): HTMLDivElement {
-    const faces = volumeCovers.map(e => createSingleInterface(e))
-    const cont = document.createElement('div')
-    const copyAll = document.createElement('button')
-    copyAll.style.display = 'flex'
-    copyAll.style.flexGrow = '1'
-    copyAll.style.flexDirection = 'column'
-    copyAll.style.width = '100%'
-    copyAll.style.outlineStyle = 'none'
-    copyAll.style.outlineWidth = '5px'
-    copyAll.style.outlineColor = 'yellow'
-    copyAll.innerText = 'Copy All Covers'
-    copyAll.style.fontSize = '3em'
-    let copyTimeout1
-    function tryCopy() {
-        if (!copyAll.disabled) {
-            copyAll.style.outlineStyle = 'double'
-            copyAll.style.zIndex = '1'
-            copyAll.innerText = 'Coppied All Covers!'
-            const urls = volumeCovers.reduce((a ,e) => {
-                if (e.ready) {
-                    return `${a}\n${e.url}`.trim()
-                }
-                return a
-            } ,'')
-            copyToClipboard(urls)
-            clearTimeout(copyTimeout1)
-            copyTimeout1 = setTimeout(() => {
-                copyAll.style.outlineStyle = 'none'
-                copyAll.innerText = 'Copy All Covers'
-                copyAll.style.zIndex = '0'
-            } ,2000)
-        }
-    }
-
-    cont.style.marginLeft = '200px'
-    cont.style.display = 'flex'
-    cont.style.flexWrap = 'wrap'
-    copyAll.onclick = tryCopy
-    cont.appendChild(copyAll)
-    faces.forEach((e) => {
-        cont.appendChild(e)
-    })
-    document.body.appendChild(cont)
-    return cont
-}
-function idToRid(id): number {
-    return parseInt(id.toString().split('').reverse().join(''))
-}
-function prepareSerialForElement(e ,volumeTitle): SerialData {
-    const img = e.querySelector('img')
-    const id = img.src.split('/')[3]
-    const rid = idToRid(id)
-    let serialData = serializedCovers[id]
-    if (serialData == null) {
-        serialData = {}
-        serializedCovers[id] = serialData
-    }
-    if (serialData.volumeTitle == null && volumeTitle != null) {
-        volumeCovers.push(serialData)
-        serialData.volumeTitle = volumeTitle
-    }
-    if (serialData.promise != null) {
-        return serialData
-    }
-
-    serialData.promise = new Promise((ret ,err) => {
-        serialData.retPromise = ret
-        serialData.errPromise = err
-    })
-
-    serialData.ready = false
-    serialData.id = id
-    serialData.preview = img.src
-    serialData.rid = rid
-    serialData.previewWidth = img.naturalWidth
-    serialData.previewHeight = img.naturalHeight
-    serialData.promiseLock = false
-    return serialData
-}
-
-function deduceCoverImageFromElement(e: HTMLImageElement ,volumeTitle): Promise<SerialData> {
-    const img = e.querySelector('img')
-    const id = img.src.split('/')[3]
-    const rid = parseInt(id.toString().split('').reverse().join(''))
-    const serialData = prepareSerialForElement(e ,volumeTitle)
-    if (serialData.promiseLock == true) {
-        return serialData.promise
-    }
-    serialData.promiseLock = true
-    const realPromise = tryFetchImage(serializedCovers[id])
-    realPromise.then((e) => {
-        serialData.retPromise(e)
-    })
-    realPromise.catch((e) => {
-        serialData.errPromise(e)
-    })
-    return serialData.promise
-}
-
-function BookWalkerPrintCoverUrls() {
-    console.log(volumeCovers.reduce((a ,e) => {
-        if (e.ready) {
-            return `${a}\n${e.url}`.trim()
-        }
-        return a
-    } ,''))
-}
-
-function waitForQueryElement(selector ,maxTime = null): Promise<HTMLElement> {
-    return new Promise(((resolve ,reject) => {
-        const element = document.querySelector(selector)
-        let timeout
-        if (maxTime != null) {
-            timeout = setTimeout(() => {
-                reject('Timeout')
-            } ,maxTime)
-        }
-        if (element) {
-            clearTimeout(timeout)
-            resolve(element)
-            return
-        }
-
-        const observer = new MutationObserver(((mutations) => {
-            mutations.forEach((mutation) => {
-                const nodes = Array.from(mutation.addedNodes) as HTMLElement[]
-                for (const node of nodes) {
-                    if (node.querySelector) {
-                        const e = node.querySelector(selector)
-                        if (e) {
-                            observer.disconnect()
-                            clearTimeout(timeout)
-                            resolve(e)
-                            return
-                        }
-                    }
-                }
-            })
-        }))
-
-        observer.observe(document.documentElement ,{
-            childList: true ,subtree: true
-        })
-    }))
-}
-
-// FIXME! Wait for them to exist.
-// FIXME! Create easier/more obvious ways to copy to clipboard (something onscreen)
-// FIXME! Add 'Copied Image' Popup text
-// FIXME! Compare images (preview vs cover) % match, somehow. Generaly, the correct image is within revid -10 range,
-// however, occasionaly another image exists between the reversed id and the desired cover.
-
-waitForQueryElement('.detail-section.series .cmnShelf-list .cmnShelf-item').then(() => {
-    console.log("You can get detailed cover infromation via the 'BookWalkerCoverDetails' variable")
-    console.log("You can get the all extracted cover urls by calling 'BookWalkerPrintCoverUrls()'")
-    /* **************** *
-   * Define Variables *
-   * **************** */
-    const mainCover = {}
-    const sections = {}
-    if (!isUserscript()) {
-        window.BookWalkerCoverDetails = volumeCovers
-        window.BookWalkerPrintCoverUrls = BookWalkerPrintCoverUrls
-        window.deduceCoverImageFromElement = deduceCoverImageFromElement
+      } ,2000)
     }
     else {
-        unsafeWindow.BookWalkerCoverDetails = volumeCovers
-        unsafeWindow.BookWalkerPrintCoverUrls = BookWalkerPrintCoverUrls
-        // unsafeWindow.deduceCoverImageFromId=deduceCoverImageFromId
-        unsafeWindow.deduceCoverImageFromElement = deduceCoverImageFromElement
-    }
-    const notifyVariable = () => {
-        console.log('Found BookWalkerCovers:')
-        BookWalkerPrintCoverUrls()
-        console.log("You can get detailed cover infromation via the 'BookWalkerCoverDetails' variable")
-        console.log("You can get all extracted cover urls by calling 'BookWalkerPrintCoverUrls()'")
-    // createInterface()
-    }
-
-    let notifyTimeout
-    const resetNotify = () => {
-        clearTimeout(notifyTimeout)
-        notifyTimeout = setTimeout(notifyVariable ,7000)
-    }
-
-    /* *************** *
-   * Find Main Cover *
-   * *************** */
-    /*
-  document.querySelectorAll(".main-cover").forEach((e)=>{
-    let sectionTitle="MAIN"
-    let volumeTitle = "MAIN VOLUME"
-    //let serialData={}
-    //serialData.volumeTitle = volumeTitle
-    deduceCoverImageFromElement(e).then((serialData)=>{
-      resetNotify()
-      mainCover.volumeTitle = volumeTitle
-      mainCover.url = serialData.url
-      console.log(`Found '${sectionTitle}' cover art canidate '${serialData.url}' for preview '${e.querySelector("img").src}'`)
-      e.onclick=()=> {
-        console.log(`Copied cover art '${serialData.url}'`)
-        copyToClipboard(serialData.url);
+      cover.style.outlineStyle = 'solid'
+      if (preview) {
+        preview.style.outlineStyle = 'solid'
+        preview.style.outlineColor = 'red'
       }
-    })
-  }) */
 
-    /* ****************** *
-   * Find Volume Covers *
-   * ****************** */
+      cover.style.outlineColor = 'red'
+      copy.innerText = 'Cannot Copy!'
+    }
+    copyTimeout2 = setTimeout(() => {
+      cover.style.outlineStyle = 'none'
+      if (preview) {
+        preview.style.outlineStyle = 'none'
+      }
+      cover.style.zIndex = '0'
+    } ,500)
+  }
+  copy.onclick = () => {
+    tryCopy()
+  }
+  cover.onclick = () => {
+    tryCopy()
+  }
+  let lastBlobUri: string | undefined
 
-    const volumeContainerElms = document.querySelectorAll('.detail-section.series .cmnShelf-list')
-    let volumeContainerElmsIdx = 0
-    volumeContainerElms.forEach((list) => {
-        const sectionTitle = 'Volumes'
-        const section = []
-        sections[sectionTitle] = section
-        list.querySelectorAll('.cmnShelf-item').forEach((e) => {
-            const volumeTitle = e.querySelector('.cmnShelf-head').textContent
-            prepareSerialForElement(e ,volumeTitle)
-        })
-    })
-    function nextVolumeContainer() {
-        return new Promise((ret ,err) => {
-            const list = volumeContainerElms[volumeContainerElmsIdx]
-            volumeContainerElmsIdx++
-            if (list == null) {
-                err()
-                return
-            }
-            const sectionTitle = 'Volumes'
-            const section = []
-            sections[sectionTitle] = section
-            const volumeElms = list.querySelectorAll('.cmnShelf-item') as NodeListOf<HTMLImageElement>
-            let volumeElmsIdx = 0
-            function nextVolume() {
-                return new Promise((ret ,err) => {
-                    const e = volumeElms[volumeElmsIdx]
-                    volumeElmsIdx++
-                    if (e == null) {
-                        err()
-                        return
-                    }
-                    const volumeTitle = e.querySelector('.cmnShelf-head').textContent
-                    deduceCoverImageFromElement(e ,volumeTitle).then((serialData) => {
-                        resetNotify()
-                        console.log(`Found '${sectionTitle}' '${volumeTitle}' cover art canidate '${serialData.url}' for preview '${e.querySelector('img').src}'`)
-                        section.push({
-                            volumeTitle ,url: serialData.url
-                        })
-                        e.onclick = () => {
-                            console.log(`Copied cover art '${serialData.url}'`)
-                            copyToClipboard(serialData.url)
-                        }
-                        ret()
-                    }).catch(() => {
-                        // We don't care! Returning anyways~!
-                        ret()
-                    })
-                })
-            }
+  function revokeLastUri() {
+    if (lastBlobUri !== undefined) {
+      URL.revokeObjectURL(lastBlobUri)
+      lastBlobUri = undefined
+    }
+  }
+  cover.onload = revokeLastUri
+  cover.onerror = revokeLastUri
 
-            function nvLoop() {
-                const nv = nextVolume()
-                nv.then(() => {
-                    nvLoop()
-                }).catch(() => {
-                    ret()
-                })
-            }
-            nvLoop()
-        })
+  function updateCover(serialData: SerialDataCover) {
+    let url = getCoverUrlFromRID(serialData.rid)
+    revokeLastUri()
+    if (serialData.blob) {
+      url = URL.createObjectURL(serialData.blob)
+      lastBlobUri = url
     }
-    function getAllStuff() {
-        return new Promise((ret ,err) => {
-            function nvContLoop() {
-                const nv = nextVolumeContainer()
-                nv.then(() => {
-                    nvContLoop()
-                }).catch(() => {
-                    ret()
-                })
-            }
-            nvContLoop()
-        })
+    cover.src = url
+  }
+
+  function enable() {
+    next.disabled = false
+    copy.disabled = false
+    next.innerText = 'Wrong Image?'
+    copy.innerText = 'Copy'
+  }
+  function loading() {
+    cover.src = LOADING_IMG
+    next.disabled = true
+    copy.disabled = true
+    next.innerText = 'Looking for Image'
+  }
+  function fail() {
+    cover.src = ERROR_IMG
+    next.disabled = false
+    copy.disabled = true
+    next.innerText = 'Not Found! Retry?'
+    serialData.rid = getRidFromId(serialData.id)
+    serialData.triesLeft = serialData.maxTries
+    serialData.ready = false
+  }
+
+  loading()
+
+  title.innerText = serialData.title
+  serialData.coverPromise.then((/* same serialData Object */) => {
+    updateCover(serialData as SerialDataCover)
+    title.innerText = serialData.title
+    enable()
+  }).catch(fail)
+
+  next.onclick = () => {
+    loading()
+    fetchCoverImageFromSerialData(serialData).then((/* same serialData Object */) => {
+      enable()
+      updateCover(serialData as SerialDataCover)
+    }).catch(fail)
+  }
+  return cont
+}
+
+function createInterface(serialData: SerialData[]): HTMLDivElement {
+  const faces = serialData.map(e => createSingleInterface(e))
+  const cont = document.createElement('div')
+  const copyAll = document.createElement('button')
+  copyAll.style.display = 'flex'
+  copyAll.style.flexGrow = '1'
+  copyAll.style.flexDirection = 'column'
+  copyAll.style.width = '100%'
+  copyAll.style.outlineStyle = 'none'
+  copyAll.style.outlineWidth = '5px'
+  copyAll.style.outlineColor = 'yellow'
+  copyAll.innerText = 'Copy All Covers'
+  copyAll.style.fontSize = '3em'
+  let copyTimeout1: NodeJS.Timeout
+  function tryCopy() {
+    if (!copyAll.disabled) {
+      copyAll.style.outlineStyle = 'double'
+      copyAll.style.zIndex = '1'
+      copyAll.innerText = 'Coppied All Covers!'
+      const urls = serialData.reduce((a ,e) => {
+        if (e.ready) {
+          return `${a}\n${getCoverUrlFromRID(e.rid)}`.trim()
+        }
+        return a
+      } ,'')
+      copyToClipboard(urls)
+      clearTimeout(copyTimeout1)
+      copyTimeout1 = setTimeout(() => {
+        copyAll.style.outlineStyle = 'none'
+        copyAll.innerText = 'Copy All Covers'
+        copyAll.style.zIndex = '0'
+      } ,2000)
     }
-    getAllStuff()// .then(doSomething?)
-    const iface = createInterface()
-    if (!isUserscript()) {
-    // We are a bookmarklet, or the user ran us in the console. Regardless, they WANT to see us!
-        iface.scrollIntoView()
-    }
-})
+  }
+
+  cont.style.marginLeft = '200px'
+  cont.style.display = 'flex'
+  cont.style.flexWrap = 'wrap'
+  copyAll.onclick = tryCopy
+  cont.appendChild(copyAll)
+  faces.forEach((e) => {
+    cont.appendChild(e)
+  })
+  document.body.appendChild(cont)
+  return cont
+}
+
+// Do it
+
+if (window.location.href.match(/^(?:https?:\/\/)?mangadex\.org\/title\/\d+\/[^\/]+\/covers(\/.*)?/)) {
+  getBW_CoversFromMD()
+}
