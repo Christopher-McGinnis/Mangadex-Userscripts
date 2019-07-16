@@ -1,23 +1,22 @@
 module.exports = {
   'extends': [
     'airbnb-base'
-    // Despite what the documentation claims, this does not seem necessary and
-    // actualy causes headachs by duplicating rules.
-    //  ,'plugin:@typescript-eslint/recommended'
+    // Unnecessary and causes headachs by duplicating rules.
+    // ,'plugin:@typescript-eslint/recommended'
   ]
   ,'parser': '@typescript-eslint/parser'
-  // This also seems to be unnecessary, despite documentation's claims.
-  // Just running the npm install command for typescrtipt-eslint and plugin
-  // was enough for me
-  //,'plugins': [
-  //  '@typescript-eslint'
-  //]
+  ,'plugins': [
+    '@typescript-eslint'
+  ]
   ,'parserOptions': {
-    ecmaVersion: 2018
+    "project": "./tsconfig.json"
+    ,"tsconfigRootDir": "./"
+    ,ecmaVersion: 2018
     ,sourceType: 'script'
     ,ecmaFeatures: { impliedStrict: false }
   }
   ,'rules': {
+    // Javascript
     'strict': ['error' ,'global']
     // Var is disabled, and inner functions are fine in es6+
     ,'no-inner-declarations': ['off']
@@ -95,6 +94,11 @@ module.exports = {
       }
     ]
     ,'array-element-newline': ['error' ,{ multiline: true }]
+    /*
+     Typescript Override. Disables some rules defined above
+    */
+    //,'semi': 'off'
+    //,'@typescript-eslint/semi': ['error']
   }
   ,'env': {
     browser: true
