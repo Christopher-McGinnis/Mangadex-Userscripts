@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name BookWalker Cover Page Extractor V2
+// @name BookWalker Cover Page Extractor
 // @namespace https://github.com/Christopher-McGinnis
 // @description Click on preview image for this page or another volume. Automatically copies the cover image url to clipboard (and prints it in the terminal)
 // @include    /^(?:https?:\/\/)?bookwalker\.jp\/de[a-zA-Z0-9]+-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]+(\/.*)?/
