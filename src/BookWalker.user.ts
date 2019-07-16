@@ -8,9 +8,9 @@
 // @version  0.1.19
 // @grant unsafeWindow
 // @grant GM_xmlhttpRequest
-// @require https://gitcdn.xyz/repo/nodeca/pica/5.0.0/dist/pica.min.js
 // ==/UserScript==
 
+// @require https://gitcdn.xyz/repo/nodeca/pica/5.0.0/dist/pica.min.js
 // TODO: MD Sanity Check. Ensure BW link is to a Manga (as opposed to an LN)
 
 
