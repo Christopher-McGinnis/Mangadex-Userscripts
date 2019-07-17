@@ -158,6 +158,7 @@ interface SerialDataBase {
   previewBlob?: Blob
   title: string
   serialLevel: SerialDataLevel
+  mangadexId?: number
   // CoverReq
   maxTries?: number
   // Cover
@@ -446,19 +447,34 @@ function getTitleIdFromMD() {
   }
   throw Error('No MD Title ID Found')
 }
+function filterBwLink(url: string) {
+  const series = url.match(/^((?:https?:\/\/)?bookwalker\.jp\/series\/\d+)(\/.*)?/)
+  if (series) return series[1]
+  const volume = url.match(/^((?:https?:\/\/)?bookwalker\.jp\/de[a-zA-Z0-9]+-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]+)(\/.*)?/)
+  if (volume) return volume[1]
+  return undefined
+}
 function getBW_CoversFromMD() {
   const id = getTitleIdFromMD()
   getSerieseDetailsFromMD(id)
     .then((e) => {
       const { bw } = e.manga.links
       if (bw) {
-        return `https://bookwalker.jp/${bw}`
+        const usableBw = filterBwLink(`https://bookwalker.jp/${bw}`)
+        if (usableBw) return Promise.resolve(usableBw)
+        return Promise.reject(Error(`Unusable Bookwalker Url Recieved! '${bw}'`))
       }
       return Promise.reject(Error('Bookwalker Url Not Found!'))
     })
     .then(bw => fetchDom(bw)
       .then(dom => getSerialDataFromBookwalker(bw ,dom)))
-    .then((serialData) => {
+    .then((serialData: SerialDataBasic[]) => {
+      serialData.forEach((e) => {
+        e.mangadexId = id
+      })
+      return serialData
+    })
+    .then((serialData: SerialDataBasic[]) => {
       createInterface(serialData)
       function loopRun(fn: Function) {
         return fn().then(() => loopRun(fn)).catch(() => { })
@@ -472,9 +488,97 @@ function getBW_CoversFromMD() {
       })
     })
 }
+function listUploadBtn(mangadexId: number ,volume: string ,blob: Blob ,filename: string) {
+  const enum UploadType {
+    BLOB
+    ,FILE
+  }
+  const uploadType = UploadType.BLOB
 
+  const form = document.querySelector('#manga_cover_upload_form')
+  if (!form) {
+    throw Error('No Cover Upload Form Found')
+  }
 
-// interface
+  const fileNameField = form.querySelector("input[name='old_file']") as HTMLInputElement
+  if (!fileNameField) {
+    throw Error('No Cover File Name Field Found')
+  }
+  fileNameField.value = filename
+
+  const volumeNameField = form.querySelector("input[name='volume']") as HTMLInputElement
+  if (!volumeNameField) {
+    throw Error('No Cover Volume Field Found')
+  }
+  if (volume !== '') volumeNameField.value = volume
+
+  const uploadBtn = form.querySelector('#upload_cover_button') as HTMLInputElement
+  if (!uploadBtn) {
+    throw Error('No Submit Button Found')
+  }
+  const fileField = form.querySelector("input[type='file']") as HTMLInputElement
+  if (!fileField) {
+    throw Error('No Cover File Field Found')
+  }
+  const dt = new DataTransfer() // specs compliant (as of March 2018 only Chrome)
+  dt.items.add(new File([blob] ,filename))
+  fileField.files = dt.files
+
+  /*
+  uploadBtn.type = 'button'
+  uploadBtn.onclick = () => {
+    if (uploadType === UploadType.BLOB) {
+      blobPost(mangadexId ,volumeNameField.value ,blob ,filename)
+    }
+    uploadBtn.onclick = null
+    fileField.onclick = null
+  }
+
+  fileField.onclick = () => {
+    uploadType = UploadType.FILE
+    uploadBtn.type = 'submit'
+    uploadBtn.onclick = null
+    fileField.onclick = null
+  }
+*/
+  const showDiagBtn = document.querySelector('a[data-target="#manga_cover_upload_modal"]') as HTMLButtonElement
+  if (showDiagBtn) showDiagBtn.click()
+  return undefined
+}
+function blobPost(mangadexId: number ,volume: string ,blob: Blob ,filename: string) {
+  if (!['image/png' ,'image/jpeg' ,'image/gif'].includes(blob.type)) {
+    throw Error(`Unsupported Image Format '${blob.type}'`)
+  }
+  if (volume.trim() === '') {
+    throw Error(`Invalid Volume Number '${volume}'`)
+  }
+  const formData = new FormData()
+  formData.append('volume' ,volume)
+  formData.append('old_file' ,filename)
+  formData.append('file' ,blob ,filename)
+  console.log('FETCH BASE')
+  console.log(formData)
+  // unsafeWindow.formData = formData
+  // return undefined
+  fetch(`https://mangadex.org/ajax/actions.ajax.php?function=manga_cover_upload&id=${mangadexId}` ,{
+    credentials: 'include'
+    ,headers: {
+      // 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.14; rv:70.0) Gecko/20100101 Firefox/70.0'
+      // ,'Accept': '*/*'
+      // ,'Accept-Language': 'en-US,en;q=0.5'
+      'cache-control': 'no-cache'
+      ,'X-Requested-With': 'XMLHttpRequest'
+      // ,'Content-Type': 'multipart/form-data; boundary=---------------------------157450823414663905041102867756'
+    }
+    ,referrer: `https://mangadex.org/title/${mangadexId}/ijiranaide-nagatoro-san/covers/`
+    ,body: formData
+    ,method: 'POST'
+    ,mode: 'cors'
+  })
+}
+/*
+  Interface
+*/
 
 function createSingleInterface(serialData: SerialData): HTMLDivElement {
   const cont = document.createElement('div')
@@ -536,8 +640,28 @@ function createSingleInterface(serialData: SerialData): HTMLDivElement {
 
   next.innerText = 'Next'
   copy.innerText = 'Copy'
+  const uploadBtn = copy.cloneNode() as typeof copy
+  uploadBtn.innerText = 'Upload'
+  controls.appendChild(uploadBtn)
+
   let copyTimeout1: NodeJS.Timeout
   let copyTimeout2: NodeJS.Timeout
+  function tryUpload() {
+    if (serialData.serialLevel === SerialDataLevel.COVER
+    && serialData.blob && serialData.mangadexId !== undefined) {
+      const imageTypeMatch = serialData.blob.type.match(/^image\/(.+)/)
+      const volumeMatch = serialData.title.match(/(?:\((\d+(?:\.\d+)?)\)| (\d+(?:\.\d+)?))$/)
+      let volume: string | undefined
+      if (volumeMatch) {
+        volume = volumeMatch[1]
+      }
+      if (volume === undefined) volume = ''
+      if (imageTypeMatch !== null && volume !== null) {
+        const imageType = imageTypeMatch[1]
+        listUploadBtn(serialData.mangadexId ,volume ,serialData.blob ,`${serialData.title}.${imageType}`)
+      }
+    }
+  }
   function tryCopy() {
     if (!copy.disabled) {
       cover.style.outlineStyle = 'double'
@@ -579,6 +703,10 @@ function createSingleInterface(serialData: SerialData): HTMLDivElement {
   cover.onclick = () => {
     tryCopy()
   }
+  uploadBtn.onclick = () => {
+    tryUpload()
+  }
+
   let lastBlobUri: string | undefined
 
   function revokeLastUri() {
@@ -603,6 +731,7 @@ function createSingleInterface(serialData: SerialData): HTMLDivElement {
   function enable() {
     next.disabled = false
     copy.disabled = false
+    uploadBtn.disabled = false
     next.innerText = 'Wrong Image?'
     copy.innerText = 'Copy'
   }
@@ -610,12 +739,14 @@ function createSingleInterface(serialData: SerialData): HTMLDivElement {
     cover.src = LOADING_IMG
     next.disabled = true
     copy.disabled = true
+    uploadBtn.disabled = true
     next.innerText = 'Looking for Image'
   }
   function fail() {
     cover.src = ERROR_IMG
     next.disabled = false
     copy.disabled = true
+    uploadBtn.disabled = true
     next.innerText = 'Not Found! Retry?'
     serialData.rid = getRidFromId(serialData.id)
     serialData.triesLeft = serialData.maxTries

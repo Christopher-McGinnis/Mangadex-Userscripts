@@ -349,18 +349,33 @@ function getTitleIdFromMD() {
   }
   throw Error('No MD Title ID Found')
 }
+function filterBwLink(url) {
+  const series = url.match(/^((?:https?:\/\/)?bookwalker\.jp\/series\/\d+)(\/.*)?/)
+  if (series) return series[1]
+  const volume = url.match(/^((?:https?:\/\/)?bookwalker\.jp\/de[a-zA-Z0-9]+-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]+)(\/.*)?/)
+  if (volume) return volume[1]
+  return undefined
+}
 function getBW_CoversFromMD() {
   const id = getTitleIdFromMD()
   getSerieseDetailsFromMD(id)
     .then((e) => {
       const { bw } = e.manga.links
       if (bw) {
-        return `https://bookwalker.jp/${bw}`
+        const usableBw = filterBwLink(`https://bookwalker.jp/${bw}`)
+        if (usableBw) return Promise.resolve(usableBw)
+        return Promise.reject(Error(`Unusable Bookwalker Url Recieved! '${bw}'`))
       }
       return Promise.reject(Error('Bookwalker Url Not Found!'))
     })
     .then(bw => fetchDom(bw)
       .then(dom => getSerialDataFromBookwalker(bw ,dom)))
+    .then((serialData) => {
+      serialData.forEach((e) => {
+        e.mangadexId = id
+      })
+      return serialData
+    })
     .then((serialData) => {
       createInterface(serialData)
       function loopRun(fn) {
@@ -375,7 +390,88 @@ function getBW_CoversFromMD() {
       })
     })
 }
-// interface
+function listUploadBtn(mangadexId ,volume ,blob ,filename) {
+  const uploadType = 0 /* BLOB */
+  const form = document.querySelector('#manga_cover_upload_form')
+  if (!form) {
+    throw Error('No Cover Upload Form Found')
+  }
+  const fileNameField = form.querySelector("input[name='old_file']")
+  if (!fileNameField) {
+    throw Error('No Cover File Name Field Found')
+  }
+  fileNameField.value = filename
+  const volumeNameField = form.querySelector("input[name='volume']")
+  if (!volumeNameField) {
+    throw Error('No Cover Volume Field Found')
+  }
+  if (volume !== '') volumeNameField.value = volume
+  const uploadBtn = form.querySelector('#upload_cover_button')
+  if (!uploadBtn) {
+    throw Error('No Submit Button Found')
+  }
+  const fileField = form.querySelector("input[type='file']")
+  if (!fileField) {
+    throw Error('No Cover File Field Found')
+  }
+  const dt = new DataTransfer() // specs compliant (as of March 2018 only Chrome)
+  dt.items.add(new File([blob] ,filename))
+  fileField.files = dt.files
+  /*
+    uploadBtn.type = 'button'
+    uploadBtn.onclick = () => {
+      if (uploadType === UploadType.BLOB) {
+        blobPost(mangadexId ,volumeNameField.value ,blob ,filename)
+      }
+      uploadBtn.onclick = null
+      fileField.onclick = null
+    }
+
+    fileField.onclick = () => {
+      uploadType = UploadType.FILE
+      uploadBtn.type = 'submit'
+      uploadBtn.onclick = null
+      fileField.onclick = null
+    }
+  */
+  const showDiagBtn = document.querySelector('a[data-target="#manga_cover_upload_modal"]')
+  if (showDiagBtn) showDiagBtn.click()
+  return undefined
+}
+function blobPost(mangadexId ,volume ,blob ,filename) {
+  if (!['image/png' ,'image/jpeg' ,'image/gif'].includes(blob.type)) {
+    throw Error(`Unsupported Image Format '${blob.type}'`)
+  }
+  if (volume.trim() === '') {
+    throw Error(`Invalid Volume Number '${volume}'`)
+  }
+  const formData = new FormData()
+  formData.append('volume' ,volume)
+  formData.append('old_file' ,filename)
+  formData.append('file' ,blob ,filename)
+  console.log('FETCH BASE')
+  console.log(formData)
+  // unsafeWindow.formData = formData
+  // return undefined
+  fetch(`https://mangadex.org/ajax/actions.ajax.php?function=manga_cover_upload&id=${mangadexId}` ,{
+    credentials: 'include'
+    ,headers: {
+      // 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.14; rv:70.0) Gecko/20100101 Firefox/70.0'
+      // ,'Accept': '*/*'
+      // ,'Accept-Language': 'en-US,en;q=0.5'
+      'cache-control': 'no-cache'
+      ,'X-Requested-With': 'XMLHttpRequest'
+      // ,'Content-Type': 'multipart/form-data; boundary=---------------------------157450823414663905041102867756'
+    }
+    ,referrer: `https://mangadex.org/title/${mangadexId}/ijiranaide-nagatoro-san/covers/`
+    ,body: formData
+    ,method: 'POST'
+    ,mode: 'cors'
+  })
+}
+/*
+  Interface
+*/
 function createSingleInterface(serialData) {
   const cont = document.createElement('div')
   const info = document.createElement('div')
@@ -431,8 +527,27 @@ function createSingleInterface(serialData) {
   cont.style.width = `${coverDisplayWidth}px`
   next.innerText = 'Next'
   copy.innerText = 'Copy'
+  const uploadBtn = copy.cloneNode()
+  uploadBtn.innerText = 'Upload'
+  controls.appendChild(uploadBtn)
   let copyTimeout1
   let copyTimeout2
+  function tryUpload() {
+    if (serialData.serialLevel === 2 /* COVER */
+            && serialData.blob && serialData.mangadexId !== undefined) {
+      const imageTypeMatch = serialData.blob.type.match(/^image\/(.+)/)
+      const volumeMatch = serialData.title.match(/(?:\((\d+(?:\.\d+)?)\)| (\d+(?:\.\d+)?))$/)
+      let volume
+      if (volumeMatch) {
+        volume = volumeMatch[1]
+      }
+      if (volume === undefined) volume = ''
+      if (imageTypeMatch !== null && volume !== null) {
+        const imageType = imageTypeMatch[1]
+        listUploadBtn(serialData.mangadexId ,volume ,serialData.blob ,`${serialData.title}.${imageType}`)
+      }
+    }
+  }
   function tryCopy() {
     if (!copy.disabled) {
       cover.style.outlineStyle = 'double'
@@ -473,6 +588,9 @@ function createSingleInterface(serialData) {
   cover.onclick = () => {
     tryCopy()
   }
+  uploadBtn.onclick = () => {
+    tryUpload()
+  }
   let lastBlobUri
   function revokeLastUri() {
     if (lastBlobUri !== undefined) {
@@ -494,6 +612,7 @@ function createSingleInterface(serialData) {
   function enable() {
     next.disabled = false
     copy.disabled = false
+    uploadBtn.disabled = false
     next.innerText = 'Wrong Image?'
     copy.innerText = 'Copy'
   }
@@ -501,12 +620,14 @@ function createSingleInterface(serialData) {
     cover.src = LOADING_IMG
     next.disabled = true
     copy.disabled = true
+    uploadBtn.disabled = true
     next.innerText = 'Looking for Image'
   }
   function fail() {
     cover.src = ERROR_IMG
     next.disabled = false
     copy.disabled = true
+    uploadBtn.disabled = true
     next.innerText = 'Not Found! Retry?'
     serialData.rid = getRidFromId(serialData.id)
     serialData.triesLeft = serialData.maxTries
