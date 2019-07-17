@@ -445,13 +445,14 @@ type MD_LanguageFlags = 'jp' | 'en' | string;
 
 interface MD_SeriesDetailsJson {
     manga: {
-        artist: string;
-        author: string;
-        cover_url: string;
-        description: string;
-        lang_flag: MD_LanguageFlags;
+        artist: string
+        author: string
+        cover_url: string
+        description: string
+        lang_flag: MD_LanguageFlags
+        lang_name: string
         links?: {
-            [index: string]: string;
+            [index: string]: string
         };
     };
 }
@@ -534,6 +535,9 @@ function getBW_CoversFromMD() {
           if (usableBw) return Promise.resolve(usableBw)
           return Promise.reject(Error(`Unusable Bookwalker Url Recieved! '${bw}'`))
         }
+      }
+      if (e.manga.lang_flag !== 'jp') {
+        return Promise.reject(Error(`Bookwalker is for Japanese Manga Only. This is '${e.manga.lang_name}'`))
       }
       // return Promise.reject(Error('Bookwalker Url Not Found!'))
 

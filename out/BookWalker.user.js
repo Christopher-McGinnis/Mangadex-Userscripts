@@ -426,6 +426,9 @@ function getBW_CoversFromMD() {
           return Promise.reject(Error(`Unusable Bookwalker Url Recieved! '${bw}'`))
         }
       }
+      if (e.manga.lang_flag !== 'jp') {
+        return Promise.reject(Error(`Bookwalker is for Japanese Manga Only. This is '${e.manga.lang_name}'`))
+      }
       // return Promise.reject(Error('Bookwalker Url Not Found!'))
       const titles = getJapaneseTitlesFromMD()
       // FIXME do not just assume 1st result is correct
