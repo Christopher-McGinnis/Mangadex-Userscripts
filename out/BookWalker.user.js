@@ -5,7 +5,7 @@
 // @include    /^(?:https?:\/\/)?bookwalker\.jp\/de[a-zA-Z0-9]+-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]+(\/.*)?/
 // @include    /^(?:https?:\/\/)?bookwalker\.jp\/series\/\d+(\/.*)?/
 // @include    /^(?:https?:\/\/)?mangadex\.org\/title\/\d+(\/.*)?/
-// @version  0.1.30
+// @version  0.1.31
 // @grant unsafeWindow
 // @grant GM_xmlhttpRequest
 // ==/UserScript==
@@ -599,7 +599,7 @@ function createSingleInterface(serialData) {
             && serialData.blob && serialData.mangadexId !== undefined) {
       const imageTypeMatch = serialData.blob.type.match(/^image\/(.+)/)
       let volumeMatch = toAsciiEquivilent(serialData.title).match(/\((\d+(?:\.\d+)?)\)$/)
-      if (!volumeMatch) volumeMatch = toAsciiEquivilent(serialData.title).match(/\s(\d+(?:\.\d+)?)$/)
+      if (!volumeMatch) volumeMatch = toAsciiEquivilent(serialData.title).match(/\D(\d+(?:\.\d+)?)$/)
       let volume
       if (volumeMatch) {
         volume = volumeMatch[1]
