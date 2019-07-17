@@ -542,7 +542,13 @@ function createSingleInterface(serialData) {
   controls.style.position = 'relative'
   controls.style.display = 'flex'
   copy.style.flexGrow = '1'
+  copy.style.whiteSpace = 'normal'
+  copy.type = 'button'
+  copy.classList.add('btn' ,'btn-secondary')
   next.style.flexGrow = '1'
+  next.style.whiteSpace = 'normal'
+  next.type = 'button'
+  next.classList.add('btn' ,'btn-secondary')
   coverCont.style.position = 'relative'
   info.appendChild(title)
   const coverDisplayWidth = 200
@@ -710,6 +716,9 @@ function createInterface(serialData) {
   const faces = serialData.map(e => createSingleInterface(e))
   const cont = document.createElement('div')
   const copyAll = document.createElement('button')
+  copyAll.type = 'button'
+  copyAll.classList.add('btn' ,'btn-secondary')
+  copyAll.style.whiteSpace = 'normal'
   copyAll.style.display = 'flex'
   copyAll.style.flexGrow = '1'
   copyAll.style.flexDirection = 'column'
