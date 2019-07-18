@@ -5,7 +5,7 @@
 // @include    /^(?:https?:\/\/)?bookwalker\.jp\/de[a-zA-Z0-9]+-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]+(\/.*)?/
 // @include    /^(?:https?:\/\/)?bookwalker\.jp\/series\/\d+(\/.*)?/
 // @include    /^(?:https?:\/\/)?mangadex\.org\/title\/\d+(\/.*)?/
-// @version  0.1.31
+// @version  0.1.32
 // @grant unsafeWindow
 // @grant GM_xmlhttpRequest
 // ==/UserScript==
@@ -351,6 +351,12 @@ function fetchCoverImageFromSerialData(serialDataOrig) {
       })
   })
 }
+function getExistingCoversFromMD() {
+  return Object.values(document.querySelectorAll('.edit div[id^="volume_"]')).map((e) => {
+    if (e.id) return e.id.match(/volume_(.*)/)[1]
+    throw Error('Failed to find volume Id from MD cover image')
+  })
+}
 function getSerieseDetailsFromMD(mangadexId) {
   return fetch(`https://mangadex.org/api/manga/${mangadexId}`)
     .then((r) => {
@@ -414,38 +420,59 @@ function getJapaneseTitlesFromMD() {
   }
   throw Error('Could not find MD Titles')
 }
+class BookwalkerLinkError extends Error {
+  constructor(message ,serialDetails) {
+    super(message)
+    this.name = 'BookwalkerLinkError'
+    this.serialDetails = serialDetails
+  }
+}
 function getBW_CoversFromMD() {
   const id = getTitleIdFromMD()
   getSerieseDetailsFromMD(id)
     .then((e) => {
+      // Try to get BW link from MD page
       if (e.manga.links) {
         const { bw } = e.manga.links
         if (bw) {
           const usableBw = filterBwLink(`https://bookwalker.jp/${bw}`)
           if (usableBw) return Promise.resolve(usableBw)
-          return Promise.reject(Error(`Unusable Bookwalker Url Recieved! '${bw}'`))
+          return Promise.reject(new BookwalkerLinkError(`Unusable Bookwalker Url Recieved! '${bw}'` ,e))
         }
       }
-      if (e.manga.lang_flag !== 'jp') {
-        return Promise.reject(Error(`Bookwalker is for Japanese Manga Only. This is '${e.manga.lang_name}'`))
+      return Promise.reject(new BookwalkerLinkError('Bookwalker Url Not Found!' ,e))
+    })
+  // Chose Title to Search Bookwalker for if link is not provided
+    .catch((err) => {
+      if (!(err instanceof BookwalkerLinkError)) {
+        throw err
       }
-      // return Promise.reject(Error('Bookwalker Url Not Found!'))
+      const e = err.serialDetails
+      // Try auto-search
+      if (e.manga.lang_flag !== 'jp') {
+        return Promise.reject(new BookwalkerLinkError(`Bookwalker is for Japanese Manga Only. This is '${e.manga.lang_name}'` ,e))
+      }
       const titles = getJapaneseTitlesFromMD()
       // FIXME do not just assume 1st result is correct
       if (titles && titles[0]) {
         return searchBookWalkerForMangaTitle(titles[0]).then((searchRes) => {
           const usableBw = filterBwLink(searchRes)
-          if (usableBw) return Promise.resolve(usableBw)
-          return Promise.reject(Error(`Search Gave Unusable Bookwalker Url! '${searchRes}'`))
+          if (usableBw) {
+            console.log(`Bookwalker Search resolved to '${usableBw}'`)
+            return Promise.resolve(usableBw)
+          }
+          return Promise.reject(new BookwalkerLinkError(`Search Gave Unusable Bookwalker Url! '${searchRes}'` ,e))
         })
       }
-      return Promise.reject(Error('Failed to find Bookwalker URL!'))
+      return Promise.reject(new BookwalkerLinkError('Failed to find Bookwalker URL!' ,e))
     })
+  // Load covers from BW
     .then(bw => fetchDom(bw)
       .then(dom => getSerialDataFromBookwalker(bw ,dom)))
     .then((serialData) => {
       serialData.forEach((e) => {
         e.mangadexId = id
+        e.mangadexCoverIds = getExistingCoversFromMD()
       })
       return serialData
     })
@@ -463,8 +490,8 @@ function getBW_CoversFromMD() {
       })
     })
 }
-function listUploadBtn(mangadexId ,volume ,blob ,filename) {
-  const uploadType = 0 /* BLOB */
+function listUploadBtn(serialData ,volumeNumber ,filename) {
+  const { blob } = serialData
   const form = document.querySelector('#manga_cover_upload_form')
   if (!form) {
     throw Error('No Cover Upload Form Found')
@@ -478,7 +505,26 @@ function listUploadBtn(mangadexId ,volume ,blob ,filename) {
   if (!volumeNameField) {
     throw Error('No Cover Volume Field Found')
   }
-  if (volume !== '') volumeNameField.value = volume
+  volumeNameField.classList.remove('bg-danger')
+  volumeNameField.classList.remove('bg-warning')
+  volumeNameField.classList.remove('bg-success')
+  if (volumeNumber !== '') volumeNameField.value = volumeNumber
+  if (volumeNumber !== '') {
+    try {
+      const hasVolume = serialData.mangadexCoverIds.map((e) => {
+        // Prefers IDK state 2 over Do Not Upload state 1 and Do upload state 0
+        if (e === volumeNumber) return 1
+        if (parseInt(e) === parseInt(volumeNumber)) return 2
+        return 0
+      }).sort((a ,b) => b - a)[0]
+      if (hasVolume === 0 || hasVolume === undefined) volumeNameField.classList.add('bg-success')
+      else if (hasVolume === 2) volumeNameField.classList.add('bg-warning')
+      else if (hasVolume === 1) volumeNameField.classList.add('bg-danger')
+    }
+    catch (e) {
+      console.warn(e)
+    }
+  }
   const uploadBtn = form.querySelector('#upload_cover_button')
   if (!uploadBtn) {
     throw Error('No Submit Button Found')
@@ -528,10 +574,21 @@ function blobPost(mangadexId ,volume ,blob ,filename) {
 /*
   Interface
 */
-function createSingleInterface(serialData) {
+function toVolumeNumber(title) {
+  let volumeMatch = toAsciiEquivilent(title).match(/\((\d+(?:\.\d+)?)\)$/)
+  if (!volumeMatch) volumeMatch = toAsciiEquivilent(title).match(/\D(\d+(?:\.\d+)?)$/)
+  let volume
+  if (volumeMatch) {
+    [,volume] = volumeMatch
+  }
+  if (volume) return volume
+  throw Error(`Failed to parse volume number for title '${title}'`)
+}
+function createSingleInterface(serialData ,allSerialData) {
   const cont = document.createElement('div')
   const info = document.createElement('div')
   const title = document.createElement('h4')
+  const sizeInfo = document.createElement('small')
   const coverCont = document.createElement('div')
   const cover = document.createElement('img')
   const copy = document.createElement('button')
@@ -551,6 +608,7 @@ function createSingleInterface(serialData) {
   next.classList.add('btn' ,'btn-secondary')
   coverCont.style.position = 'relative'
   info.appendChild(title)
+  info.appendChild(sizeInfo)
   const coverDisplayWidth = 200
   controls.style.width = `${coverDisplayWidth}px`
   coverCont.style.width = `${coverDisplayWidth}px`
@@ -580,6 +638,7 @@ function createSingleInterface(serialData) {
   info.style.display = 'flex'
   info.style.minHeight = '3em'
   info.style.alignItems = 'center'
+  info.style.flexDirection = 'column'
   cont.style.marginLeft = '5px'
   cont.appendChild(info)
   cont.appendChild(coverCont)
@@ -591,23 +650,71 @@ function createSingleInterface(serialData) {
   copy.innerText = 'Copy'
   const uploadBtn = copy.cloneNode()
   uploadBtn.innerText = 'Upload'
-  controls.appendChild(uploadBtn)
+  // Only add Upload button if on mangadex
+  if (serialData.mangadexId !== undefined) {
+    try {
+      let volumeNumber = toVolumeNumber(serialData.title)
+      // FIXME Multiple covers same volume needs work
+      try {
+        if (allSerialData) {
+          const decimalPlace = allSerialData.filter(e => toVolumeNumber(e.title) === volumeNumber)
+            .indexOf(serialData)
+          if (decimalPlace !== 0) {
+            volumeNumber = `${volumeNumber}.${decimalPlace}`
+          }
+        }
+      }
+      catch (e) {
+        // Failed to calculate decimal place
+        console.log(e)
+      }
+      const hasVolume = serialData.mangadexCoverIds.map((e) => {
+        // Prefers IDK state 2 over Do Not Upload state 1 and Do upload state 0
+        if (e === volumeNumber) return 1
+        if (parseInt(e) === parseInt(volumeNumber)) return 2
+        return 0
+      }).sort((a ,b) => b - a)[0]
+      if (hasVolume === 0 || hasVolume === undefined) title.classList.add('text-success')
+      else if (hasVolume === 2) title.classList.add('text-warning')
+      else if (hasVolume === 1) title.classList.add('text-danger')
+    }
+    catch (e) {
+      console.warn(e)
+    }
+    controls.appendChild(uploadBtn)
+  }
   let copyTimeout1
   let copyTimeout2
   function tryUpload() {
     if (serialData.serialLevel === 2 /* COVER */
             && serialData.blob && serialData.mangadexId !== undefined) {
       const imageTypeMatch = serialData.blob.type.match(/^image\/(.+)/)
-      let volumeMatch = toAsciiEquivilent(serialData.title).match(/\((\d+(?:\.\d+)?)\)$/)
-      if (!volumeMatch) volumeMatch = toAsciiEquivilent(serialData.title).match(/\D(\d+(?:\.\d+)?)$/)
-      let volume
-      if (volumeMatch) {
-        volume = volumeMatch[1]
+      let volumeNumber
+      try {
+        volumeNumber = toVolumeNumber(serialData.title)
+        // FIXME Multiple covers same volume needs work
+        try {
+          if (allSerialData) {
+            const decimalPlace = allSerialData.filter(e => toVolumeNumber(e.title) === volumeNumber)
+              .indexOf(serialData)
+            if (decimalPlace !== 0) {
+              volumeNumber = `${volumeNumber}.${decimalPlace}`
+            }
+          }
+        }
+        catch (e) {
+          // Failed to calculate decimal place
+          // Do not autofill volume number for safety
+          volumeNumber = undefined
+        }
       }
-      if (volume === undefined) volume = ''
-      if (imageTypeMatch !== null && volume !== null) {
+      catch (e) {
+        console.log(e)
+      }
+      if (volumeNumber === undefined) volumeNumber = ''
+      if (imageTypeMatch !== null && volumeNumber !== null) {
         const imageType = imageTypeMatch[1]
-        listUploadBtn(serialData.mangadexId ,volume ,serialData.blob ,`${serialData.title}.${imageType}`)
+        listUploadBtn(serialData ,volumeNumber ,`${serialData.title}.${imageType}`)
       }
     }
   }
@@ -671,6 +778,9 @@ function createSingleInterface(serialData) {
       lastBlobUri = url
     }
     cover.src = url
+    serialData.coverPromise.then((coverImg) => {
+      sizeInfo.innerText = `${coverImg.naturalWidth}x${coverImg.naturalHeight}`
+    }).catch()
   }
   function enable() {
     next.disabled = false
@@ -681,6 +791,7 @@ function createSingleInterface(serialData) {
   }
   function loading() {
     cover.src = LOADING_IMG
+    sizeInfo.innerText = ''
     next.disabled = true
     copy.disabled = true
     uploadBtn.disabled = true
@@ -688,6 +799,7 @@ function createSingleInterface(serialData) {
   }
   function fail() {
     cover.src = ERROR_IMG
+    sizeInfo.innerText = ''
     next.disabled = false
     copy.disabled = true
     uploadBtn.disabled = true
@@ -698,9 +810,8 @@ function createSingleInterface(serialData) {
   }
   loading()
   title.innerText = serialData.title
-  serialData.coverPromise.then((/* same serialData Object */) => {
+  serialData.coverPromise.then(() => {
     updateCover(serialData)
-    title.innerText = serialData.title
     enable()
   }).catch(fail)
   next.onclick = () => {
@@ -712,8 +823,8 @@ function createSingleInterface(serialData) {
   }
   return cont
 }
-function createInterface(serialData) {
-  const faces = serialData.map(e => createSingleInterface(e))
+function createInterface(allSerialData) {
+  const faces = allSerialData.map(e => createSingleInterface(e ,allSerialData))
   const cont = document.createElement('div')
   const copyAll = document.createElement('button')
   copyAll.type = 'button'
@@ -734,7 +845,7 @@ function createInterface(serialData) {
       copyAll.style.outlineStyle = 'double'
       copyAll.style.zIndex = '1'
       copyAll.innerText = 'Coppied All Covers!'
-      const urls = serialData.reduce((a ,e) => {
+      const urls = allSerialData.reduce((a ,e) => {
         if (e.ready) {
           return `${a}\n${getCoverUrlFromRID(e.rid)}`.trim()
         }
@@ -763,6 +874,24 @@ function createInterface(serialData) {
   return cont
 }
 // Do it
-if (window.location.href.match(/^(?:https?:\/\/)?mangadex\.org\/title\/\d+\/[^\/]+\/covers(\/.*)?/)) {
+if (window.location.href.match(/^(?:https?:\/\/)?mangadex\.org\/title\/\d+\/[^/]+\/covers(\/.*)?/)) {
   getBW_CoversFromMD()
+}
+else if (window.location.href.match(/^https?:\/\/(?:www\.)?book/)) {
+  const sideMenu = document.querySelector('.side-deals')
+  if (sideMenu) sideMenu.remove()
+  getSerialDataFromBookwalker(window.location.href ,document.documentElement)
+    .then((serialData) => {
+      createInterface(serialData)
+      function loopRun(fn) {
+        return fn().then(() => loopRun(fn)).catch(() => { })
+      }
+      let idx = 0
+      loopRun(() => {
+        if (serialData[idx]) {
+          return fetchCoverImageFromSerialData(serialData[idx]).then(() => idx++)
+        }
+        return Promise.reject(Error('Out of Idxs'))
+      })
+    })
 }
