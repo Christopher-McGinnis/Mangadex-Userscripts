@@ -5,7 +5,7 @@
 // @include    /^(?:https?:\/\/)?bookwalker\.jp\/de[a-zA-Z0-9]+-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]+(\/.*)?/
 // @include    /^(?:https?:\/\/)?bookwalker\.jp\/series\/\d+(\/.*)?/
 // @include    /^(?:https?:\/\/)?mangadex\.org\/title\/\d+(\/.*)?/
-// @version  0.1.32
+// @version  0.1.33
 // @grant unsafeWindow
 // @grant GM_xmlhttpRequest
 // ==/UserScript==
@@ -269,7 +269,9 @@ function searchBookWalkerForMangaTitle(manga: string): Promise<string> {
     .then(doc => Object.values(doc.querySelectorAll('.bookItem') as NodeListOf<HTMLDivElement>)
       .map(e => e.querySelector('[class*="bookItemHover"]') as HTMLDivElement | null)
       .filter((e): e is HTMLDivElement => {
-        if (e) return e.title.includes(manga)
+        // FIXME only become more lenient if no matches found
+        // if (e) return e.title.includes(manga)
+        if (e) return toAsciiEquivilent(e.title).replace(/\s/ ,'').includes(toAsciiEquivilent(manga).replace(/\s/ ,''))
         return false
       }))
     .then((e) => {
