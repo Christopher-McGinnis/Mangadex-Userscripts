@@ -5,7 +5,7 @@
 // @include    /^(?:https?:\/\/)?bookwalker\.jp\/de[a-zA-Z0-9]+-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]+(\/.*)?/
 // @include    /^(?:https?:\/\/)?bookwalker\.jp\/series\/\d+(\/.*)?/
 // @include    /^(?:https?:\/\/)?mangadex\.org\/title\/\d+(\/.*)?/
-// @version  0.1.34
+// @version  0.1.35
 // @grant GM_xmlhttpRequest
 // ==/UserScript==
 
@@ -430,7 +430,7 @@ function fetchCoverImageFromSerialData(serialDataOrig: SerialData): Promise<Seri
     serialDataOrig.fetchLocked = true
     serialDataOrig.fetchLockedId = 0
     if (serialDataOrig.serialLevel === SerialDataLevel.BASE) {
-      serialDataOrig.maxTries = 10
+      serialDataOrig.maxTries = 15
     }
     serialDataOrig.triesLeft = serialDataOrig.maxTries
     serialData = serialDataOrig as SerialDataBase as SerialDataCover
