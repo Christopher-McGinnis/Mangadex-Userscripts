@@ -5,7 +5,7 @@
 // @include    /^(?:https?:\/\/)?bookwalker\.jp\/de[a-zA-Z0-9]+-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]+(\/.*)?/
 // @include    /^(?:https?:\/\/)?bookwalker\.jp\/series\/\d+(\/.*)?/
 // @include    /^(?:https?:\/\/)?mangadex\.org\/title\/\d+(\/.*)?/
-// @version  0.1.36
+// @version  0.1.37
 // @grant GM_xmlhttpRequest
 // ==/UserScript==
 
@@ -13,8 +13,18 @@
 // @grant unsafeWindow
 
 // @require https://gitcdn.xyz/repo/nodeca/pica/5.0.0/dist/pica.min.js
-// FIXME: MD Sanity Check. Ensure BW link is to a Manga (as opposed to an LN)
 // FIXME: GM4 compatibility
+
+// TODO: Amazon search?
+// Manga only search query component (Does this work with Kindel? No?)
+// rh=n%3A465392%2Cn%3A466280%2Cp_n_srvg_2374648051%3A86141051
+// Search Title
+// s?k=${MANGA_TITLE}
+// s?k=こちらラスボス
+// Title List document.querySelectorAll('[data-component-type="s-search-results"] .s-result-list.s-search-results > div a img')
+// Preview Image List document.querySelectorAll('[data-component-type="s-search-results"] .s-result-list.s-search-results > div h2 > a')
+// AmazonID = document.querySelectorAll('[data-component-type="s-search-results"] .s-result-list.s-search-results > div').dataset.asin
+// Link = `https://www.amazon.co.jp/dp/${AmazonID}`
 
 /* eslint no-param-reassign: ["error", { "props": true, "ignorePropertyModificationsFor": ["serialData","serialDataAll","serialDataOrig"] }] */
 
@@ -700,13 +710,29 @@ function getBW_CoversFromMD() {
       if (titles && titles[0]) {
         setStatusMessage(`Searching BookWalker for '${titles[0]}'`)
         return searchBookWalkerForMangaTitle(titles[0]).then((searchRes) => {
+          // This will be a seriese link if more than 1 volume is out
+          // Else it will be a volume link
           const usableBw = filterBwLink(searchRes)
           if (usableBw) {
             setStatusMessage(`BookWalker Search resolved to '${usableBw}'`)
-            resolveBookwalkerSerieseUrl(usableBw)
-            return fetchDom(usableBw).then(dom => Promise.resolve({
-              bwLink: usableBw ,dom ,mangaDexDetails
-            }))
+            return fetchDom(usableBw).then((dom) => {
+              if (usableBw.startsWith('https://bookwalker.jp/series')) {
+                resolveBookwalkerSerieseUrl(usableBw)
+              }
+              else {
+                const seriesBreadcrumb = dom.querySelector('.bw_link-breadcrumb li.breadcrumb-item a[href^="https://bookwalker.jp/series/"]') as HTMLAnchorElement
+                if (seriesBreadcrumb && seriesBreadcrumb.href && seriesBreadcrumb.href.length !== 0) {
+                  const seriesLink = filterBwLink(seriesBreadcrumb.href)
+                  if (seriesLink)resolveBookwalkerSerieseUrl(seriesLink)
+                }
+              }
+              // NOTE: Double resolve is safe atm BECAUSE it is a promise
+              // If we move to another callback, be sure to fix this
+              resolveBookwalkerSerieseUrl(usableBw)
+              return Promise.resolve({
+                bwLink: usableBw ,dom ,mangaDexDetails
+              })
+            })
           }
           return Promise.reject(new BookwalkerLinkError(`Search Gave Unusable Bookwalker Url! '${searchRes}'` ,mangaDexDetails ,true))
         })
