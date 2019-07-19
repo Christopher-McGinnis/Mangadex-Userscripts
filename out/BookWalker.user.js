@@ -5,7 +5,7 @@
 // @include    /^(?:https?:\/\/)?bookwalker\.jp\/de[a-zA-Z0-9]+-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]+(\/.*)?/
 // @include    /^(?:https?:\/\/)?bookwalker\.jp\/series\/\d+(\/.*)?/
 // @include    /^(?:https?:\/\/)?mangadex\.org\/title\/\d+(\/.*)?/
-// @version  0.1.35
+// @version  0.1.36
 // @grant GM_xmlhttpRequest
 // ==/UserScript==
 // No longer needed
@@ -53,6 +53,12 @@ class BookwalkerLinkError extends BookwalkerErrorBase {
     super(message ,isFatal ,shouldRemoveInterface)
     this.name = 'BookwalkerLinkError'
     this.serialDetails = serialDetails
+  }
+}
+class BookwalkerSearchError extends BookwalkerErrorBase {
+  constructor(message ,shouldRemoveInterface) {
+    super(message ,true ,shouldRemoveInterface)
+    this.name = 'BookwalkerLinkError'
   }
 }
 /*
@@ -226,8 +232,8 @@ function searchBookWalkerForMangaTitle(manga) {
   // cat 2 = manga
   return fetchDomNoCORS(`https://bookwalker.jp/search/?qcat=2&word=${encodeURIComponent(manga)}`)
     .catch((err) => {
-      err.message = `Bookwalker search for '${manga}' failed: ${err.message}`
-      throw err
+      // FIXME copy stack?
+      throw new BookwalkerSearchError(`Bookwalker search for '${manga}' failed: ${err.message}`)
     })
     .then(doc => Object.values(doc.querySelectorAll('.bookItem'))
       .map(bookItem => bookItem.querySelector('[class*="bookItemHover"]'))
@@ -243,9 +249,9 @@ function searchBookWalkerForMangaTitle(manga) {
       if (bookItems.length === 1) {
         const { url } = bookItems[0].dataset
         if (url) return Promise.resolve(url)
-        return Promise.reject(Error('Manga Match found but failed to find Seriese/Volume URL'))
+        return Promise.reject(new BookwalkerSearchError('Manga Match found but failed to find Seriese/Volume URL'))
       }
-      return Promise.reject(Error('Multiple Matching Manga Found'))
+      return Promise.reject(new BookwalkerSearchError('Multiple Matching Manga Found!'))
     })
 }
 function toImgPromise(uri) {
@@ -580,6 +586,18 @@ function getBW_CoversFromMD() {
       serialDataAll.forEach((serialData) => {
         serialData.mangadexId = id
         serialData.mangadexCoverIds = getExistingCoversFromMD()
+        try {
+          serialData.volumeNumber = toVolumeNumber(serialData.title)
+        }
+        catch { }
+        try {
+          serialData.volumeDecimal = toVolumeDecimal(serialData ,serialDataAll)
+        }
+        catch { }
+        try {
+          serialData.volumeLevel = toVolumeLevel(serialData ,serialDataAll)
+        }
+        catch { }
       })
       return serialDataAll
     })
@@ -589,9 +607,10 @@ function getBW_CoversFromMD() {
         return fn().then(() => loopRun(fn)).catch(() => { })
       }
       let idx = 0
+      const serialDataAllSortedByLevel = serialDataAll.slice().sort((a ,b) => a.volumeLevel - b.volumeLevel)
       loopRun(() => {
-        if (serialDataAll[idx]) {
-          return fetchCoverImageFromSerialData(serialDataAll[idx]).then(() => idx++)
+        if (serialDataAllSortedByLevel[idx]) {
+          return fetchCoverImageFromSerialData(serialDataAllSortedByLevel[idx]).then(() => idx++)
         }
         return Promise.reject(Error('Out of Idxs'))
       })
@@ -618,15 +637,9 @@ function listUploadBtn(serialData ,volumeNumber ,filename) {
   if (volumeNumber !== '') volumeNameField.value = volumeNumber
   if (volumeNumber !== '') {
     try {
-      const hasVolume = serialData.mangadexCoverIds.map((e) => {
-        // Prefers IDK state 2 over Do Not Upload state 1 and Do upload state 0
-        if (e === volumeNumber) return 1
-        if (parseInt(e) === parseInt(volumeNumber)) return 2
-        return 0
-      }).sort((a ,b) => b - a)[0]
-      if (hasVolume === 0 || hasVolume === undefined) volumeNameField.classList.add('bg-success')
-      else if (hasVolume === 2) volumeNameField.classList.add('bg-warning')
-      else if (hasVolume === 1) volumeNameField.classList.add('bg-danger')
+      if (serialData.volumeLevel === 0 /* NEW */) volumeNameField.classList.add('bg-success')
+      else if (serialData.volumeLevel === 2 /* CONTESTED */) volumeNameField.classList.add('bg-warning')
+      else if (serialData.volumeLevel === 3 /* UPLOADED */) volumeNameField.classList.add('bg-danger')
     }
     catch (e) {
       console.warn(e)
@@ -693,6 +706,64 @@ function toVolumeNumber(title) {
   }
   if (volume) return volume
   throw new VolumeNameParseError(`Failed to parse volume number for title '${title}'`)
+}
+function toVolumeDecimal(serialData ,allSerialData) {
+  let volumeNumber
+  try {
+    volumeNumber = toVolumeNumber(serialData.title)
+    // Consider checking if we already have a decimal place?
+    if (allSerialData) {
+      const decimalPlace = allSerialData.filter(e => toVolumeNumber(e.title) === volumeNumber)
+        .indexOf(serialData)
+      if (decimalPlace !== 0) {
+        volumeNumber = `${volumeNumber}.${decimalPlace}`
+      }
+    }
+  }
+  catch (e) {
+    // Failed to calculate decimal place
+    console.log(e)
+  }
+  return volumeNumber
+}
+function toVolumeLevel(serialData ,allSerialData) {
+  let volumeLevel = 1 /* UNKNOWN */
+  if (serialData.mangadexId !== undefined) {
+    try {
+      const volumeNumber = toVolumeDecimal(serialData ,allSerialData)
+      let volumeNumberIsSane = true
+      // FIXME Multiple covers same volume needs work
+      try {
+        // Ensure we do not already have a decimal place
+        if (allSerialData) {
+          if (volumeNumber) {
+            if (parseInt(volumeNumber) > 2
+                            && !allSerialData.find(e => parseInt(toVolumeNumber(e.title)) === parseInt(volumeNumber) - 1)) volumeNumberIsSane = false
+          }
+          else volumeNumberIsSane = false
+        }
+      }
+      catch (e) {
+        // Failed to calculate decimal place
+        console.log(e)
+      }
+      if (volumeNumberIsSane && volumeNumber) {
+        const hasVolume = serialData.mangadexCoverIds.map((e) => {
+          // Prefers IDK state 2 over Do Not Upload state 1 and Do upload state 0
+          if (e === volumeNumber) return 1
+          if (parseInt(e) === parseInt(volumeNumber)) return 2
+          return 0
+        }).sort((a ,b) => b - a)[0]
+        if (hasVolume === 0 || hasVolume === undefined) volumeLevel = 0 /* NEW */
+        else if (hasVolume === 2) volumeLevel = 2 /* CONTESTED */
+        else if (hasVolume === 1) volumeLevel = 3 /* UPLOADED */
+      }
+    }
+    catch (e) {
+      console.warn(e)
+    }
+  }
+  return volumeLevel
 }
 function createSingleInterface(serialData ,allSerialData) {
   const cont = document.createElement('div')
@@ -763,41 +834,9 @@ function createSingleInterface(serialData ,allSerialData) {
   // FIXME: do this once. reuse code
   // Only add Upload button if we are on mangadex's site
   if (serialData.mangadexId !== undefined) {
-    try {
-      let volumeNumber = toVolumeNumber(serialData.title)
-      let volumeNumberIsSane = true
-      // FIXME Multiple covers same volume needs work
-      try {
-        // Ensure we do not already have a decimal place
-        if (allSerialData) {
-          const decimalPlace = allSerialData.filter(e => toVolumeNumber(e.title) === volumeNumber)
-            .indexOf(serialData)
-          if (decimalPlace !== 0) {
-            volumeNumber = `${volumeNumber}.${decimalPlace}`
-          }
-          if (parseInt(volumeNumber) > 2
-                        && !allSerialData.find(e => parseInt(toVolumeNumber(e.title)) === parseInt(volumeNumber) - 1)) volumeNumberIsSane = false
-        }
-      }
-      catch (e) {
-        // Failed to calculate decimal place
-        console.log(e)
-      }
-      if (volumeNumberIsSane) {
-        const hasVolume = serialData.mangadexCoverIds.map((e) => {
-          // Prefers IDK state 2 over Do Not Upload state 1 and Do upload state 0
-          if (e === volumeNumber) return 1
-          if (parseInt(e) === parseInt(volumeNumber)) return 2
-          return 0
-        }).sort((a ,b) => b - a)[0]
-        if (hasVolume === 0 || hasVolume === undefined) title.classList.add('text-success')
-        else if (hasVolume === 2) title.classList.add('text-warning')
-        else if (hasVolume === 1) title.classList.add('text-danger')
-      }
-    }
-    catch (e) {
-      console.warn(e)
-    }
+    if (serialData.volumeLevel === 0 /* NEW */) title.classList.add('text-success')
+    else if (serialData.volumeLevel === 2 /* CONTESTED */) title.classList.add('text-warning')
+    else if (serialData.volumeLevel === 3 /* UPLOADED */) title.classList.add('text-danger')
     controls.appendChild(uploadBtn)
   }
   let copyTimeout1
@@ -806,29 +845,9 @@ function createSingleInterface(serialData ,allSerialData) {
     if (serialData.serialLevel === 2 /* COVER */
             && serialData.blob && serialData.mangadexId !== undefined) {
       const imageTypeMatch = serialData.blob.type.match(/^image\/(.+)/)
-      let volumeNumber
-      try {
-        volumeNumber = toVolumeNumber(serialData.title)
-        // FIXME Multiple covers same volume needs work
-        try {
-          if (allSerialData) {
-            const decimalPlace = allSerialData.filter(e => toVolumeNumber(e.title) === volumeNumber)
-              .indexOf(serialData)
-            if (decimalPlace !== 0) {
-              volumeNumber = `${volumeNumber}.${decimalPlace}`
-            }
-          }
-        }
-        catch (e) {
-          // Failed to calculate decimal place
-          // Do not autofill volume number for safety
-          volumeNumber = undefined
-        }
-      }
-      catch (e) {
-        console.log(e)
-      }
-      if (volumeNumber === undefined) volumeNumber = ''
+      let volumeNumber = serialData.volumeDecimal
+      if (serialData.volumeLevel === 1 /* UNKNOWN */) volumeNumber = ''
+      if (serialData.volumeNumber === undefined) volumeNumber = ''
       if (imageTypeMatch !== null && volumeNumber !== null) {
         const imageType = imageTypeMatch[1]
         listUploadBtn(serialData ,volumeNumber ,`${serialData.title}.${imageType}`)
