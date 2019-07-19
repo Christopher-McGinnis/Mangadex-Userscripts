@@ -46,3 +46,17 @@ Current Bugs & Limitations
 * Intended for wide displays. May induce horizontal scrolling on mobile. (May not work at all on mobile)
 
 * Automated cover match checks are WIP. Will work only in userscript version due to restrictive CORS settings. *Currently disabled since primitive downsizing function is slow and Pica library isn't working.*
+
+Assets
+---
+
+Some Anime Loading Gif
+![Loading Trio](https://media1.tenor.com/images/de4defabd471cd1150534357644aeaf2/tenor.gif?itemid=12569177)
+
+
+Error icon. LQ Excerpt from [![Baka Oppai's Anime 404](https://img.shields.io/static/v1.svg?style=for-the-badge&logo=YouTube&logoColor=red&label=Baka%20Oppai's&message=Anime%20404&color=red)](https://www.youtube.com/watch?v=_NXrTujMP50)
+
+
+![img](https://i.postimg.cc/4NbKcsP6/404.gif)
+
+my next choice was the part [![right after this](https://img.shields.io/static/v1.svg?style=for-the-badge&logo=YouTube&logoColor=red&label=&message=right%20after%20this&color=grey)](https://youtu.be/_NXrTujMP50?t=61)

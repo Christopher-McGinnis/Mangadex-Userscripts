@@ -5,17 +5,56 @@
 // @include    /^(?:https?:\/\/)?bookwalker\.jp\/de[a-zA-Z0-9]+-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]+(\/.*)?/
 // @include    /^(?:https?:\/\/)?bookwalker\.jp\/series\/\d+(\/.*)?/
 // @include    /^(?:https?:\/\/)?mangadex\.org\/title\/\d+(\/.*)?/
-// @version  0.1.33
-// @grant unsafeWindow
+// @version  0.1.34
 // @grant GM_xmlhttpRequest
 // ==/UserScript==
+// No longer needed
+// @grant unsafeWindow
 // @require https://gitcdn.xyz/repo/nodeca/pica/5.0.0/dist/pica.min.js
-// TODO: MD Sanity Check. Ensure BW link is to a Manga (as opposed to an LN)
+// FIXME: MD Sanity Check. Ensure BW link is to a Manga (as opposed to an LN)
+// FIXME: GM4 compatibility
+/* eslint no-param-reassign: ["error", { "props": true, "ignorePropertyModificationsFor": ["serialData","serialDataAll","serialDataOrig"] }] */
 
 'use strict'
 
 const ERROR_IMG = 'https://i.postimg.cc/4NbKcsP6/404.gif'
-const LOADING_IMG = 'https://i.redd.it/ounq1mw5kdxy.gif'
+// const LOADING_IMG = 'https://i.redd.it/ounq1mw5kdxy.gif'
+const LOADING_IMG = 'https://media1.tenor.com/images/de4defabd471cd1150534357644aeaf2/tenor.gif?itemid=12569177'
+/*
+  Error Classes
+*/
+// FIXME use class
+// FIXME add undefined type
+// FIXME use status message stack
+let statusMessageCallback
+function setStatusMessage(status) {
+  if (statusMessageCallback !== undefined) statusMessageCallback(status)
+}
+class BookwalkerErrorBase extends Error {
+  constructor(message ,isFatal ,shouldRemoveInterface) {
+    super(message)
+    this.name = 'BookwalkerErrorBase'
+    this.isFatal = false
+    this.shouldRemoveInterface = false
+    if (isFatal !== undefined) this.isFatal = isFatal
+    if (shouldRemoveInterface !== undefined) this.shouldRemoveInterface = shouldRemoveInterface
+    setStatusMessage(this)
+    console.error(message)
+  }
+}
+class VolumeNameParseError extends BookwalkerErrorBase {
+  constructor() {
+    super(...arguments)
+    this.name = 'VolumeNameParseError'
+  }
+}
+class BookwalkerLinkError extends BookwalkerErrorBase {
+  constructor(message ,serialDetails ,isFatal ,shouldRemoveInterface) {
+    super(message ,isFatal ,shouldRemoveInterface)
+    this.name = 'BookwalkerLinkError'
+    this.serialDetails = serialDetails
+  }
+}
 /*
   Utilities
 */
@@ -103,6 +142,8 @@ async function isValidAspectRatio(serialData) {
   return true
 }
 // Ignore CORS
+// FIXME cache 1 seriese worth of images.
+// OR do not reload page when uploading.
 function getImageBlobIgnoreCORS(url) {
   return new Promise((ret ,err) => {
     GM_xmlhttpRequest({
@@ -176,7 +217,6 @@ async function toImgPromiseIgnoreCORS(uri) {
     }
     img.onerror = (e) => {
       URL.revokeObjectURL(src)
-      // console.error(e)
       err(e)
     }
     img.src = src
@@ -185,21 +225,23 @@ async function toImgPromiseIgnoreCORS(uri) {
 function searchBookWalkerForMangaTitle(manga) {
   // cat 2 = manga
   return fetchDomNoCORS(`https://bookwalker.jp/search/?qcat=2&word=${encodeURIComponent(manga)}`)
-    .catch((e) => {
-      e.message = `Bookwalker search for '${manga}' failed: ${e.message}`
-      throw e
+    .catch((err) => {
+      err.message = `Bookwalker search for '${manga}' failed: ${err.message}`
+      throw err
     })
     .then(doc => Object.values(doc.querySelectorAll('.bookItem'))
-      .map(e => e.querySelector('[class*="bookItemHover"]'))
-      .filter((e) => {
-        // FIXME only become more lenient if no matches found
-        // if (e) return e.title.includes(manga)
-        if (e) return toAsciiEquivilent(e.title).replace(/\s/ ,'').includes(toAsciiEquivilent(manga).replace(/\s/ ,''))
+      .map(bookItem => bookItem.querySelector('[class*="bookItemHover"]'))
+      .filter((bookItemHover) => {
+        // NOTE: only becomes more lenient if no matches found
+        if (bookItemHover) {
+          if (bookItemHover.title.includes(manga)) return true
+          if (toAsciiEquivilent(bookItemHover.title).replace(/\s/ ,'').includes(toAsciiEquivilent(manga).replace(/\s/ ,''))) return true
+        }
         return false
       }))
-    .then((e) => {
-      if (e.length === 1) {
-        const { url } = e[0].dataset
+    .then((bookItems) => {
+      if (bookItems.length === 1) {
+        const { url } = bookItems[0].dataset
         if (url) return Promise.resolve(url)
         return Promise.reject(Error('Manga Match found but failed to find Seriese/Volume URL'))
       }
@@ -221,7 +263,7 @@ function toImgPromise(uri) {
     src = uri.src
   }
   else {
-    return Promise.reject(`Invalid URI '${uri}'`)
+    return Promise.reject(Error(`Invalid URI '${uri}'`))
   }
   return new Promise((ret ,err) => {
     img.onload = () => {
@@ -230,7 +272,6 @@ function toImgPromise(uri) {
     }
     img.onerror = (e) => {
       URL.revokeObjectURL(src)
-      // console.error(e)
       return err(e)
     }
     if (img.complete) {
@@ -271,8 +312,9 @@ function serializeImg(img) {
   return serialData
 }
 function getSerialDataFromSeriesPage(doc) {
+  setStatusMessage('Fetching BookWalker Volume Page')
   return getVolumePageFromSeriesPage(doc)
-    .then(doc => getCoverImgElmsFromVolumePage(doc))
+    .then(volDoc => getCoverImgElmsFromVolumePage(volDoc))
     .then(imgs => imgs.map((img) => {
       const serial = serializeImg(img)
       return serial
@@ -330,6 +372,7 @@ function fetchCoverImageFromSerialData(serialDataOrig) {
     }
     serialData.triesLeft--
     serialData.rid--
+    setStatusMessage(`Testing BookWalker Cover: ${serialData.rid}`)
     return getCoverFromRid(serialData.rid)
       .then(async ({ img ,blob }) => {
         serialData.cover = img
@@ -339,13 +382,16 @@ function fetchCoverImageFromSerialData(serialDataOrig) {
         }
         if (blob) serialData.blob = blob
         img.then(() => {
-          if (serialData.coverResolver) serialData.coverResolver(img)
-          else return Promise.reject(Error('Cover Resolver failed to initialize before images were found!'))
+          if (serialData.coverResolver) {
+            setStatusMessage('Covers Found!')
+            return serialData.coverResolver(img)
+          }
+          return Promise.reject(Error('Cover Resolver failed to initialize before images were found!'))
         })
         // this should never happen. else isValidAspect would fail
         img.catch(() => {
-          if (serialData.coverRejector) serialData.coverRejector(img)
-          else return Promise.reject(Error('Cover Rejector failed to initialize and an attempt to use it was made!'))
+          if (serialData.coverRejector) return serialData.coverRejector(img)
+          return Promise.reject(Error('Cover Rejector failed to initialize and an attempt to use it was made!'))
         })
         serialData.ready = true
         serialData.fetchLocked = false
@@ -422,71 +468,130 @@ function getJapaneseTitlesFromMD() {
   }
   throw Error('Could not find MD Titles')
 }
-class BookwalkerLinkError extends Error {
-  constructor(message ,serialDetails) {
-    super(message)
-    this.name = 'BookwalkerLinkError'
-    this.serialDetails = serialDetails
-  }
-}
 function getBW_CoversFromMD() {
   const id = getTitleIdFromMD()
-  getSerieseDetailsFromMD(id)
-    .then((e) => {
+  // FIXME why am I doing this again?
+  let resolveAllSerialData
+  let rejectAllSerialData
+  const allSerialDataPromise = new Promise((r ,e) => {
+    resolveAllSerialData = r
+    rejectAllSerialData = e
+  })
+  let resolveBookwalkerSerieseUrl
+  let rejectBookwalkerSerieseUrl
+  const bookwalkerSerieseUrlPromise = new Promise((r ,e) => {
+    resolveBookwalkerSerieseUrl = r
+    rejectBookwalkerSerieseUrl = e
+  })
+  return getSerieseDetailsFromMD(id)
+    .then((mangaDexDetails) => {
+      // FIXME this is a little late... but until we parse the flag from current page, it will have to do
+      createInterface(allSerialDataPromise ,bookwalkerSerieseUrlPromise)
+      setStatusMessage('Checking for BookWalker link')
       // Try to get BW link from MD page
-      if (e.manga.links) {
-        const { bw } = e.manga.links
+      if (mangaDexDetails.manga.links) {
+        const { bw } = mangaDexDetails.manga.links
         if (bw) {
           const usableBw = filterBwLink(`https://bookwalker.jp/${bw}`)
-          if (usableBw) return Promise.resolve(usableBw)
-          return Promise.reject(new BookwalkerLinkError(`Unusable Bookwalker Url Recieved! '${bw}'` ,e))
+          if (usableBw) {
+            return Promise.resolve({
+              bwLink: usableBw ,mangaDexDetails
+            })
+          }
+          return Promise.reject(new BookwalkerLinkError(`Unusable Bookwalker Url Recieved! '${bw}'` ,mangaDexDetails))
         }
       }
-      return Promise.reject(new BookwalkerLinkError('Bookwalker Url Not Found!' ,e))
+      return Promise.reject(new BookwalkerLinkError('Bookwalker Url Not Found!' ,mangaDexDetails))
     })
-  // Chose Title to Search Bookwalker for if link is not provided
+    .then(({ bwLink ,mangaDexDetails }) => {
+      setStatusMessage('Verifying Link is to a Manga!')
+      return fetchDom(bwLink).then(dom => ({
+        bwLink ,dom ,mangaDexDetails
+      }))
+    })
+  // Error if non manga title
+    .then(({ bwLink ,dom ,mangaDexDetails }) => {
+      /*
+        if (dom.querySelector('#detail-productInfo .work-tag-item a[href="https://bookwalker.jp/category/2/"]')) {
+          return {
+            bwLink ,dom ,mangaDexDetails
+          }
+        }
+        */
+      // Alternitivly, use
+      /*
+        const mainGenreElm = dom.querySelector('.detail-header-main .main-info .main-genre')
+        let mainGenere
+        if (mainGenreElm && mainGenreElm.textContent) mainGenere = mainGenreElm.textContent
+        if (mainGenere) {
+          if (mainGenere.match('マンガ')) {
+            return {
+              bwLink ,dom ,mangaDexDetails
+            }
+          }
+          throw new BookwalkerLinkError(`Provided BookWalker Url is not a manga!「${mainGenere}}」!=「マンガ」` ,mangaDexDetails)
+        }
+        */
+      // One more try
+      const categoryElm = dom.querySelector('.bw_link-breadcrumb li.breadcrumb-item a[href^="https://bookwalker.jp/category/"]')
+      let category
+      if (categoryElm != null) category = categoryElm.textContent
+      if (category != null) {
+        if (category.match('マンガ')) {
+          return {
+            bwLink ,dom ,mangaDexDetails
+          }
+        }
+        throw new BookwalkerLinkError(`Provided BookWalker Url is not a manga!「${category}}」!=「マンガ」` ,mangaDexDetails)
+      }
+      throw new BookwalkerLinkError('Failed to determine if BookWalker link is to a manga!' ,mangaDexDetails ,true)
+    })
+  // Chose Title to Search Bookwalker for if link is not provided or link is invalid
     .catch((err) => {
-      if (!(err instanceof BookwalkerLinkError)) {
+      if (!(err instanceof BookwalkerLinkError) || err.isFatal) {
         throw err
       }
-      const e = err.serialDetails
-      // Try auto-search
-      if (e.manga.lang_flag !== 'jp') {
-        return Promise.reject(new BookwalkerLinkError(`Bookwalker is for Japanese Manga Only. This is '${e.manga.lang_name}'` ,e))
+      const mangaDexDetails = err.serialDetails
+      if (mangaDexDetails.manga.lang_flag !== 'jp') {
+        return Promise.reject(new BookwalkerLinkError(`Bookwalker is for Japanese Manga Only. This is '${mangaDexDetails.manga.lang_name}'` ,mangaDexDetails ,true ,true))
       }
+      // Try auto-search
       const titles = getJapaneseTitlesFromMD()
       // FIXME do not just assume 1st result is correct
       if (titles && titles[0]) {
+        setStatusMessage(`Searching BookWalker for '${titles[0]}'`)
         return searchBookWalkerForMangaTitle(titles[0]).then((searchRes) => {
           const usableBw = filterBwLink(searchRes)
           if (usableBw) {
-            console.log(`Bookwalker Search resolved to '${usableBw}'`)
-            return Promise.resolve(usableBw)
+            setStatusMessage(`BookWalker Search resolved to '${usableBw}'`)
+            resolveBookwalkerSerieseUrl(usableBw)
+            return fetchDom(usableBw).then(dom => Promise.resolve({
+              bwLink: usableBw ,dom ,mangaDexDetails
+            }))
           }
-          return Promise.reject(new BookwalkerLinkError(`Search Gave Unusable Bookwalker Url! '${searchRes}'` ,e))
+          return Promise.reject(new BookwalkerLinkError(`Search Gave Unusable Bookwalker Url! '${searchRes}'` ,mangaDexDetails ,true))
         })
       }
-      return Promise.reject(new BookwalkerLinkError('Failed to find Bookwalker URL!' ,e))
+      return Promise.reject(new BookwalkerLinkError('Failed to find Bookwalker URL!' ,mangaDexDetails ,true))
     })
-  // Load covers from BW
-    .then(bw => fetchDom(bw)
-      .then(dom => getSerialDataFromBookwalker(bw ,dom)))
-    .then((serialData) => {
-      serialData.forEach((e) => {
-        e.mangadexId = id
-        e.mangadexCoverIds = getExistingCoversFromMD()
+  // Load Serial Details
+    .then(({ bwLink ,dom }) => getSerialDataFromBookwalker(bwLink ,dom))
+    .then((serialDataAll) => {
+      serialDataAll.forEach((serialData) => {
+        serialData.mangadexId = id
+        serialData.mangadexCoverIds = getExistingCoversFromMD()
       })
-      return serialData
+      return serialDataAll
     })
-    .then((serialData) => {
-      createInterface(serialData)
+    .then((serialDataAll) => {
+      resolveAllSerialData(serialDataAll)
       function loopRun(fn) {
         return fn().then(() => loopRun(fn)).catch(() => { })
       }
       let idx = 0
       loopRun(() => {
-        if (serialData[idx]) {
-          return fetchCoverImageFromSerialData(serialData[idx]).then(() => idx++)
+        if (serialDataAll[idx]) {
+          return fetchCoverImageFromSerialData(serialDataAll[idx]).then(() => idx++)
         }
         return Promise.reject(Error('Out of Idxs'))
       })
@@ -547,7 +652,7 @@ function blobPost(mangadexId ,volume ,blob ,filename) {
     throw Error(`Unsupported Image Format '${blob.type}'`)
   }
   if (volume.trim() === '') {
-    throw Error(`Invalid Volume Number '${volume}'`)
+    throw new VolumeNameParseError(`Invalid Volume Number '${volume}'`)
   }
   const formData = new FormData()
   formData.append('volume' ,volume)
@@ -577,14 +682,17 @@ function blobPost(mangadexId ,volume ,blob ,filename) {
   Interface
 */
 function toVolumeNumber(title) {
+  // FIXME regex delete BookWalker seriese title out prior to search
+  // NOTE. Chapter number is sometimes placed in middle of title...
   let volumeMatch = toAsciiEquivilent(title).match(/\((\d+(?:\.\d+)?)\)$/)
   if (!volumeMatch) volumeMatch = toAsciiEquivilent(title).match(/\D(\d+(?:\.\d+)?)$/)
+  if (!volumeMatch) volumeMatch = toAsciiEquivilent(title).match(/\D(\d+(?:\.\d+)?)\D*?$/)
   let volume
   if (volumeMatch) {
     [,volume] = volumeMatch
   }
   if (volume) return volume
-  throw Error(`Failed to parse volume number for title '${title}'`)
+  throw new VolumeNameParseError(`Failed to parse volume number for title '${title}'`)
 }
 function createSingleInterface(serialData ,allSerialData) {
   const cont = document.createElement('div')
@@ -652,33 +760,40 @@ function createSingleInterface(serialData ,allSerialData) {
   copy.innerText = 'Copy'
   const uploadBtn = copy.cloneNode()
   uploadBtn.innerText = 'Upload'
-  // Only add Upload button if on mangadex
+  // FIXME: do this once. reuse code
+  // Only add Upload button if we are on mangadex's site
   if (serialData.mangadexId !== undefined) {
     try {
       let volumeNumber = toVolumeNumber(serialData.title)
+      let volumeNumberIsSane = true
       // FIXME Multiple covers same volume needs work
       try {
+        // Ensure we do not already have a decimal place
         if (allSerialData) {
           const decimalPlace = allSerialData.filter(e => toVolumeNumber(e.title) === volumeNumber)
             .indexOf(serialData)
           if (decimalPlace !== 0) {
             volumeNumber = `${volumeNumber}.${decimalPlace}`
           }
+          if (parseInt(volumeNumber) > 2
+                        && !allSerialData.find(e => parseInt(toVolumeNumber(e.title)) === parseInt(volumeNumber) - 1)) volumeNumberIsSane = false
         }
       }
       catch (e) {
         // Failed to calculate decimal place
         console.log(e)
       }
-      const hasVolume = serialData.mangadexCoverIds.map((e) => {
-        // Prefers IDK state 2 over Do Not Upload state 1 and Do upload state 0
-        if (e === volumeNumber) return 1
-        if (parseInt(e) === parseInt(volumeNumber)) return 2
-        return 0
-      }).sort((a ,b) => b - a)[0]
-      if (hasVolume === 0 || hasVolume === undefined) title.classList.add('text-success')
-      else if (hasVolume === 2) title.classList.add('text-warning')
-      else if (hasVolume === 1) title.classList.add('text-danger')
+      if (volumeNumberIsSane) {
+        const hasVolume = serialData.mangadexCoverIds.map((e) => {
+          // Prefers IDK state 2 over Do Not Upload state 1 and Do upload state 0
+          if (e === volumeNumber) return 1
+          if (parseInt(e) === parseInt(volumeNumber)) return 2
+          return 0
+        }).sort((a ,b) => b - a)[0]
+        if (hasVolume === 0 || hasVolume === undefined) title.classList.add('text-success')
+        else if (hasVolume === 2) title.classList.add('text-warning')
+        else if (hasVolume === 1) title.classList.add('text-danger')
+      }
     }
     catch (e) {
       console.warn(e)
@@ -772,15 +887,16 @@ function createSingleInterface(serialData ,allSerialData) {
   }
   cover.onload = revokeLastUri
   cover.onerror = revokeLastUri
-  function updateCover(serialData) {
-    let url = getCoverUrlFromRID(serialData.rid)
+  // NOTE: this is same serial data obj as above, just some more type narowing done.
+  function updateCover(serialDataCover) {
+    let url = getCoverUrlFromRID(serialDataCover.rid)
     revokeLastUri()
-    if (serialData.blob) {
-      url = URL.createObjectURL(serialData.blob)
+    if (serialDataCover.blob) {
+      url = URL.createObjectURL(serialDataCover.blob)
       lastBlobUri = url
     }
     cover.src = url
-    serialData.coverPromise.then((coverImg) => {
+    serialDataCover.coverPromise.then((coverImg) => {
       sizeInfo.innerText = `${coverImg.naturalWidth}x${coverImg.naturalHeight}`
     }).catch()
   }
@@ -825,12 +941,10 @@ function createSingleInterface(serialData ,allSerialData) {
   }
   return cont
 }
-function createInterface(allSerialData) {
-  const faces = allSerialData.map(e => createSingleInterface(e ,allSerialData))
+function createInterface(allSerialDataPromise ,bookwalkerUrlPromise) {
   const cont = document.createElement('div')
   const copyAll = document.createElement('button')
   copyAll.type = 'button'
-  copyAll.classList.add('btn' ,'btn-secondary')
   copyAll.style.whiteSpace = 'normal'
   copyAll.style.display = 'flex'
   copyAll.style.flexGrow = '1'
@@ -839,52 +953,97 @@ function createInterface(allSerialData) {
   copyAll.style.outlineStyle = 'none'
   copyAll.style.outlineWidth = '5px'
   copyAll.style.outlineColor = 'yellow'
-  copyAll.innerText = 'Copy All Covers'
+  copyAll.innerText = 'Copy All Cover URLs'
   copyAll.style.fontSize = '3em'
-  let copyTimeout1
-  function tryCopy() {
-    if (!copyAll.disabled) {
-      copyAll.style.outlineStyle = 'double'
-      copyAll.style.zIndex = '1'
-      copyAll.innerText = 'Coppied All Covers!'
-      const urls = allSerialData.reduce((a ,e) => {
-        if (e.ready) {
-          return `${a}\n${getCoverUrlFromRID(e.rid)}`.trim()
-        }
-        return a
-      } ,'')
-      copyToClipboard(urls)
-      clearTimeout(copyTimeout1)
-      copyTimeout1 = setTimeout(() => {
-        copyAll.style.outlineStyle = 'none'
-        copyAll.innerText = 'Copy All Covers'
-        copyAll.style.zIndex = '0'
-      } ,2000)
-    }
-  }
+  copyAll.disabled = true
+  copyAll.classList.add('btn')
+  const copyBookwalkerUrl = copyAll.cloneNode()
+  copyBookwalkerUrl.innerText = 'Copy BookWalker Series URL'
+  copyBookwalkerUrl.classList.add('btn-primary')
+  copyAll.classList.add('btn-secondary')
   // cont.style.marginLeft = '200px'
   cont.style.marginLeft = '35px'
   cont.style.marginRight = '35px'
   cont.style.display = 'flex'
   cont.style.flexWrap = 'wrap'
-  copyAll.onclick = tryCopy
   cont.appendChild(copyAll)
-  faces.forEach((e) => {
-    cont.appendChild(e)
+  if (bookwalkerUrlPromise) {
+    bookwalkerUrlPromise.then((url) => {
+      let copyTimeout
+      copyBookwalkerUrl.disabled = false
+      cont.insertBefore(copyBookwalkerUrl ,copyAll)
+      copyBookwalkerUrl.addEventListener('click' ,() => {
+        // copyBookwalkerUrl.style.outlineStyle = 'double'
+        copyBookwalkerUrl.style.zIndex = '1'
+        copyBookwalkerUrl.innerText = 'Coppied BookWalker Series URL!'
+        copyToClipboard(url)
+        clearTimeout(copyTimeout)
+        copyTimeout = setTimeout(() => {
+          copyBookwalkerUrl.style.outlineStyle = 'none'
+          copyBookwalkerUrl.innerText = 'Copy BookWalker Series URL'
+          copyBookwalkerUrl.style.zIndex = '0'
+        } ,2000)
+      })
+    })
+  }
+  statusMessageCallback = (status) => {
+    if (status instanceof BookwalkerErrorBase) {
+      copyAll.innerText = status.message
+      if (status.isFatal) copyAll.classList.replace('btn-secondary' ,'btn-danger')
+      if (status.shouldRemoveInterface) {
+        copyAll.remove()
+        // setTimeout(() => copyAll.remove() ,5000)
+      }
+    }
+    else copyAll.innerText = status
+  }
+  allSerialDataPromise.then((allSerialData) => {
+    copyAll.disabled = false
+    let copyTimeout1
+    function tryCopy() {
+      if (!copyAll.disabled) {
+        // copyAll.style.outlineStyle = 'double'
+        copyAll.style.zIndex = '1'
+        copyAll.innerText = 'Coppied All Cover URLs!'
+        const urls = allSerialData.reduce((a ,e) => {
+          if (e.ready) {
+            return `${a}\n${getCoverUrlFromRID(e.rid)}`.trim()
+          }
+          return a
+        } ,'')
+        copyToClipboard(urls)
+        clearTimeout(copyTimeout1)
+        copyTimeout1 = setTimeout(() => {
+          copyAll.style.outlineStyle = 'none'
+          copyAll.innerText = 'Copy All Cover URLs'
+          copyAll.style.zIndex = '0'
+        } ,2000)
+      }
+    }
+    copyAll.addEventListener('click' ,tryCopy)
+    const faces = allSerialData.map(e => createSingleInterface(e ,allSerialData))
+    faces.forEach((e) => {
+      cont.appendChild(e)
+    })
   })
   document.body.appendChild(cont)
   return cont
 }
-// Do it
+// Run On MD
 if (window.location.href.match(/^(?:https?:\/\/)?mangadex\.org\/title\/\d+\/[^/]+\/covers(\/.*)?/)) {
   getBW_CoversFromMD()
+    .catch((e) => {
+      if (e instanceof Error) setStatusMessage(e.message)
+      throw e
+    })
 }
+// Run On BW
 else if (window.location.href.match(/^https?:\/\/(?:www\.)?book/)) {
   const sideMenu = document.querySelector('.side-deals')
   if (sideMenu) sideMenu.remove()
   getSerialDataFromBookwalker(window.location.href ,document.documentElement)
     .then((serialData) => {
-      createInterface(serialData)
+      createInterface(Promise.resolve(serialData))
       function loopRun(fn) {
         return fn().then(() => loopRun(fn)).catch(() => { })
       }
@@ -895,5 +1054,9 @@ else if (window.location.href.match(/^https?:\/\/(?:www\.)?book/)) {
         }
         return Promise.reject(Error('Out of Idxs'))
       })
+    })
+    .catch((e) => {
+      if (e instanceof Error) setStatusMessage(e.message)
+      throw e
     })
 }
