@@ -1,7 +1,10 @@
 // ==UserScript==
-// @name     Mangadex Preview Post
+// @name        Mangadex Preview Post
 // @description Preview new forum/comment posts and edits on MangaDex. Shows a formatted preview of your post/comment beside the edit box.
-// @namespace https://github.com/Brandon-Beck
+// @namespace   https://github.com/Brandon-Beck
+// @author      Brandon Beck
+// @license     MIT
+// @icon        https://mangadex.org/favicon-96x96.png
 // @version  0.2.2
 // @grant    unsafeWindow
 // @grant    GM.getValue
@@ -14,9 +17,6 @@
 // @require  https://gitcdn.xyz/repo/Brandon-Beck/Mangadex-Userscripts/0d46bb0b3fa43f11ea904945e7baef7c6e2a6a5b/settings-ui.js
 // @require  https://gitcdn.xyz/cdn/pegjs/pegjs/30f32600084d8da6a50b801edad49619e53e2a05/website/vendor/pegjs/peg.js
 // @match    https://mangadex.org/*
-// @author   Brandon Beck
-// @icon     https://mangadex.org/images/misc/default_brand.png
-// @license  MIT
 // ==/UserScript==
 
 'use strict'
@@ -48,12 +48,12 @@ function getImageBlob(url) {
   }
   return imageBlobs[url]
   /* return fetch(url).then(d=>{
-    if (d.ok) {
-      imageBlobs[url] = d.blob()
-      return imageBlobs[url]
-    }
-    return Promise.reject(d.statusText)
-  }) */
+      if (d.ok) {
+        imageBlobs[url] = d.blob()
+        return imageBlobs[url]
+      }
+      return Promise.reject(d.statusText)
+    }) */
 }
 function getImageObjectURL(url) {
   return getImageBlob(url).then(b =>
@@ -459,10 +459,10 @@ function pegAstToHtml_v2(ast) {
         element.element.appendChild(child_ast_element.element)
       })
       /* In a perfect world. it would work like this... but md is a bit broken
-      ;(button.element as HTMLButtonElement).addEventListener('click',()=>{
-        ;(element.element as HTMLDivElement).classList.toggle('display-none')
-      })
-      Code to do this is afer makepreview, to ensure buggieness is preserved */
+            ;(button.element as HTMLButtonElement).addEventListener('click',()=>{
+              ;(element.element as HTMLDivElement).classList.toggle('display-none')
+            })
+            Code to do this is afer makepreview, to ensure buggieness is preserved */
     }
     else if (e.tag === 'center' || e.tag === 'left' || e.tag === 'right') {
       // accum += `<p class="text-center">${pegAstToHtml(e.content)}</p>`
@@ -505,10 +505,10 @@ function pegAstToHtml_v2(ast) {
       // FIXME: Does this even happed
       throw Error(`Recieved unknown and unhandeled ast entry '${JSON.stringify(e)}'`)
       /* accum.push({
-        type: 'text'
-        ,element: document.createTextNode(e.content)
-        ,location: e.location
-      }) */
+              type: 'text'
+              ,element: document.createTextNode(e.content)
+              ,location: e.location
+            }) */
     }
     return accum
   } ,[])

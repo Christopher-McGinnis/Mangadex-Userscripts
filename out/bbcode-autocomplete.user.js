@@ -1,8 +1,11 @@
 // ==UserScript==
-// @name     Mangadex Autocomplete
+// @name        Mangadex Autocomplete
 // @description Autocompletes @mentions and :titles. Maintains a small history of user posts and manga you recently viewed and searches that for matches. Example image shown in additional info
-// @namespace https://github.com/Brandon-Beck
-// @version  0.0.12
+// @namespace   https://github.com/Brandon-Beck
+// @author      Brandon Beck
+// @license     MIT
+// @icon        https://mangadex.org/favicon-96x96.png
+// @version  0.0.13
 // @grant    unsafeWindow
 // @grant    GM.getValue
 // @grant    GM.setValue
@@ -14,9 +17,6 @@
 // @require  https://gitcdn.xyz/repo/Brandon-Beck/Mangadex-Userscripts/21ec54406809722c425c39a0f5b6aad59fb3d88d/uncommon.js
 // @require  https://gitcdn.xyz/repo/Brandon-Beck/Mangadex-Userscripts/0d46bb0b3fa43f11ea904945e7baef7c6e2a6a5b/settings-ui.js
 // @match    https://mangadex.org/*
-// @author   Brandon Beck
-// @icon     https://mangadex.org/images/misc/default_brand.png
-// @license  MIT
 // ==/UserScript==
 // FIXME: Move away from dead atwho. Considing https://github.com/zurb/tribute
 /* global XPath ,XPath2 ,getUserValues ,setUserValue ,dbg ,$ */
@@ -756,17 +756,17 @@ function initSettingsDialog({ loaded_settings ,atWhoMethods }) {
     }
   })
   /* const userCompletionCharCount = settingsUi.addTextbox({
-    key: 'userCompletionCharCount'
-    ,title: 'Minimum username length'
-    ,settingsTreeConfig: {
-      defaultValue: 0
-      ,corrector: newNumberCorrector(0 ,10)
-    }
-    ,min: 0
-    ,max: 10
-    ,titleText: 'Mnimum number of characters in the Username you must type before autocompletion starts. Default: 0'
-    ,type: 'number'
-  }) */
+      key: 'userCompletionCharCount'
+      ,title: 'Minimum username length'
+      ,settingsTreeConfig: {
+        defaultValue: 0
+        ,corrector: newNumberCorrector(0 ,10)
+      }
+      ,min: 0
+      ,max: 10
+      ,titleText: 'Mnimum number of characters in the Username you must type before autocompletion starts. Default: 0'
+      ,type: 'number'
+    }) */
   const showUsersWho = settingsUi.addSelect({
     title: 'Show users who'
     ,key: 'showUsersWho' // ,placeholder: 'Are in this thread'
@@ -838,17 +838,17 @@ function initSettingsDialog({ loaded_settings ,atWhoMethods }) {
     ,titleText: 'Character(s) you must type in order to trigger Manga Title auto completion. default: colon character <:>'
   })
   /* const titleCompletionCharCount = settingsUi.addTextbox({
-    key: 'titleCompletionCharCount'
-    ,title: 'Minimum title length'
-    ,settingsTreeConfig: {
-      defaultValue: 200
-      ,corrector: newNumberCorrector(0 ,10)
-    }
-    ,min: 0
-    ,max: 10
-    ,titleText: 'Mnimum number of characters in the Title you must type before autocompletion starts. Default: 0'
-    ,type: 'number'
-  }) */
+      key: 'titleCompletionCharCount'
+      ,title: 'Minimum title length'
+      ,settingsTreeConfig: {
+        defaultValue: 200
+        ,corrector: newNumberCorrector(0 ,10)
+      }
+      ,min: 0
+      ,max: 10
+      ,titleText: 'Mnimum number of characters in the Title you must type before autocompletion starts. Default: 0'
+      ,type: 'number'
+    }) */
   const showUnfollowed = settingsUi.addSelect({
     title: 'Unfollowed manga is'
     ,key: 'showUnfollowed' // ,placeholder: 'Are in this thread'

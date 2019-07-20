@@ -1,7 +1,10 @@
 // ==UserScript==
-// @name     Mangadex Preview Post
+// @name        Mangadex Preview Post
 // @description Preview new forum/comment posts and edits on MangaDex. Shows a formatted preview of your post/comment beside the edit box.
-// @namespace https://github.com/Brandon-Beck
+// @namespace   https://github.com/Brandon-Beck
+// @author      Brandon Beck
+// @license     MIT
+// @icon        https://mangadex.org/favicon-96x96.png
 // @version  0.2.2
 // @grant    unsafeWindow
 // @grant    GM.getValue
@@ -14,9 +17,6 @@
 // @require  https://gitcdn.xyz/repo/Brandon-Beck/Mangadex-Userscripts/0d46bb0b3fa43f11ea904945e7baef7c6e2a6a5b/settings-ui.js
 // @require  https://gitcdn.xyz/cdn/pegjs/pegjs/30f32600084d8da6a50b801edad49619e53e2a05/website/vendor/pegjs/peg.js
 // @match    https://mangadex.org/*
-// @author   Brandon Beck
-// @icon     https://mangadex.org/images/misc/default_brand.png
-// @license  MIT
 // ==/UserScript==
 
 'use strict'
@@ -33,26 +33,26 @@ declare interface Window {
 const imageBlobs: {[index: string]: Promise<Blob>} = {}
 // @ts-ignore
 function getImageBlob(url: string): Promise<Blob> {
-    if (!imageBlobs[url]) {
-        imageBlobs[url] = new Promise((ret ,err) => {
-            GM_xmlhttpRequest({
-                method: 'GET'
-                ,url
-                ,responseType: 'blob'
-                ,onerror: err
-                ,ontimeout: err
-                ,onload: (response: { status: number; response: Blob | PromiseLike<Blob> | undefined }) => {
-                    if ((response.status == 200 || response.status == 304) && response.response) {
-                        imageBlobs[url] = Promise.resolve(response.response)
-                        return ret(imageBlobs[url])
-                    }
-                    return err(response)
-                }
-            })
-        })
-    }
-    return imageBlobs[url]
-    /* return fetch(url).then(d=>{
+  if (!imageBlobs[url]) {
+    imageBlobs[url] = new Promise((ret ,err) => {
+      GM_xmlhttpRequest({
+        method: 'GET'
+        ,url
+        ,responseType: 'blob'
+        ,onerror: err
+        ,ontimeout: err
+        ,onload: (response: { status: number; response: Blob | PromiseLike<Blob> | undefined }) => {
+          if ((response.status == 200 || response.status == 304) && response.response) {
+            imageBlobs[url] = Promise.resolve(response.response)
+            return ret(imageBlobs[url])
+          }
+          return err(response)
+        }
+      })
+    })
+  }
+  return imageBlobs[url]
+  /* return fetch(url).then(d=>{
     if (d.ok) {
       imageBlobs[url] = d.blob()
       return imageBlobs[url]
@@ -61,7 +61,7 @@ function getImageBlob(url: string): Promise<Blob> {
   }) */
 }
 function getImageObjectURL(url: string): Promise<string> {
-    return getImageBlob(url).then(b =>
+  return getImageBlob(url).then(b =>
     /* For converting them into data-uris. Not too useful.
     const a = new FileReader()
     a.onload = (e) => {
@@ -69,7 +69,7 @@ function getImageObjectURL(url: string): Promise<string> {
     }
     a.readAsDataURL(b)
     */
-        URL.createObjectURL(b))
+    URL.createObjectURL(b))
 }
 
 
@@ -316,331 +316,331 @@ type AST_HTML_ELEMENT = AST_HTML_ELEMENT_CONTAINER | AST_HTML_ELEMENT_IMAGE | AS
 // AST_WithHTML + cursor_location -> HtmlElement
 // AST_WithHTML + text_change_location_and_range + all_text -> LocalAST_WithHTML_OfChange + local_ast_text_range -> LocalAST_WithHTML -> HtmlElement
 function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[] {
-    if (ast == null) {
-        return []
-    }
-    if (typeof (ast) !== 'object') {
+  if (ast == null) {
+    return []
+  }
+  if (typeof (ast) !== 'object') {
     // This should never happen
-        return []
-    }
-    function pushIt(a: AST_HTML_ELEMENT[] ,ast: BBCodeAst ,element: Text) {
-        a.push({
-            type: 'text'
-            ,element
-            ,location: ast.location
-        })
-    }
+    return []
+  }
+  function pushIt(a: AST_HTML_ELEMENT[] ,ast: BBCodeAst ,element: Text) {
+    a.push({
+      type: 'text'
+      ,element
+      ,location: ast.location
+    })
+  }
 
-    const res = ast.reduce((accum: AST_HTML_ELEMENT[] ,e) => {
-        if (e.type == 'text') {
-            pushIt(accum ,e ,document.createTextNode(e.content))
-        }
-        else if (e.type == 'linebreak') {
-            // pushIt(accum, e, document.createElement('br'), 'container')
-            const element: AST_HTML_ELEMENT = {
-                element: document.createElement('br')
-                ,location: e.location
-                ,type: 'container'
-                ,contains: []
-            }
-            accum.push(element)
-        }
-        else if (e.type == 'error') {
-            pushIt(accum ,e ,document.createTextNode(e.content))
-        }
-        // Everything after this must have a tag attribute!
-        // not nesting to avoid right shift
-        else if (!(e.type == 'open' || e.type == 'prefix' || e.type == 'opendata')) {
-            // @ts-ignore: Not a string, but doesn't need to be. Make or edit type
-            throw new Error({
-                msg: `Unknown AST type "${e.type}" recieved!` ,child_ast: e ,container_ast: ast
-            })
-        }
-        else if (e.tag === 'u' || e.tag == 's' || e.tag == 'sub'
+  const res = ast.reduce((accum: AST_HTML_ELEMENT[] ,e) => {
+    if (e.type == 'text') {
+      pushIt(accum ,e ,document.createTextNode(e.content))
+    }
+    else if (e.type == 'linebreak') {
+      // pushIt(accum, e, document.createElement('br'), 'container')
+      const element: AST_HTML_ELEMENT = {
+        element: document.createElement('br')
+        ,location: e.location
+        ,type: 'container'
+        ,contains: []
+      }
+      accum.push(element)
+    }
+    else if (e.type == 'error') {
+      pushIt(accum ,e ,document.createTextNode(e.content))
+    }
+    // Everything after this must have a tag attribute!
+    // not nesting to avoid right shift
+    else if (!(e.type == 'open' || e.type == 'prefix' || e.type == 'opendata')) {
+      // @ts-ignore: Not a string, but doesn't need to be. Make or edit type
+      throw new Error({
+        msg: `Unknown AST type "${e.type}" recieved!` ,child_ast: e ,container_ast: ast
+      })
+    }
+    else if (e.tag === 'u' || e.tag == 's' || e.tag == 'sub'
       || e.tag == 'sup' || e.tag == 'ol' || e.tag == 'code'
       || e.tag == 'h1' || e.tag == 'h2' || e.tag == 'h3'
       || e.tag == 'h4' || e.tag == 'h5' || e.tag == 'h6'
-        ) {
-            const element: AST_HTML_ELEMENT = {
-                element: document.createElement(e.tag)
-                ,location: e.location
-                ,type: 'container'
-                ,contains: []
-            }
-            accum.push(element)
-            element.contains = pegAstToHtml_v2(e.content)
-            element.contains.forEach((child_ast_element) => {
-                element.element.appendChild(child_ast_element.element)
-            })
+    ) {
+      const element: AST_HTML_ELEMENT = {
+        element: document.createElement(e.tag)
+        ,location: e.location
+        ,type: 'container'
+        ,contains: []
+      }
+      accum.push(element)
+      element.contains = pegAstToHtml_v2(e.content)
+      element.contains.forEach((child_ast_element) => {
+        element.element.appendChild(child_ast_element.element)
+      })
+    }
+    else if (e.tag === 'list' || e.tag === 'ul') {
+      const element: AST_HTML_ELEMENT = {
+        element: document.createElement('ul')
+        ,location: e.location
+        ,type: 'container'
+        ,contains: []
+      }
+      accum.push(element)
+      element.contains = pegAstToHtml_v2(e.content)
+      element.contains.forEach((child_ast_element) => {
+        element.element.appendChild(child_ast_element.element)
+      })
+    }
+    else if (e.tag === 'hr') {
+      const element: AST_HTML_ELEMENT = {
+        element: document.createElement(e.tag)
+        ,location: e.location
+        ,type: 'container'
+        ,contains: []
+      }
+      accum.push(element)
+      // FIXME Contain children, in a non nested fashion
+      // element.contains=pegAstToHtml_v2(e.content)
+      pegAstToHtml_v2(e.content).forEach((e) => {
+        accum.push(e)
+      })
+    }
+    else if (e.tag === 'b') {
+      const element: AST_HTML_ELEMENT = {
+        element: document.createElement('strong')
+        ,location: e.location
+        ,type: 'container'
+        ,contains: []
+      }
+      accum.push(element)
+      element.contains = pegAstToHtml_v2(e.content)
+      element.contains.forEach((child_ast_element) => {
+        element.element.appendChild(child_ast_element.element)
+      })
+    }
+    else if (e.tag === 'i') {
+      const element: AST_HTML_ELEMENT = {
+        element: document.createElement('em')
+        ,location: e.location
+        ,type: 'container'
+        ,contains: []
+      }
+      accum.push(element)
+      element.contains = pegAstToHtml_v2(e.content)
+      element.contains.forEach((child_ast_element) => {
+        element.element.appendChild(child_ast_element.element)
+      })
+    }
+    else if (e.tag === 'h') {
+      const element: AST_HTML_ELEMENT = {
+        element: document.createElement('mark')
+        ,location: e.location
+        ,type: 'container'
+        ,contains: []
+      }
+      accum.push(element)
+      element.contains = pegAstToHtml_v2(e.content)
+      element.contains.forEach((child_ast_element) => {
+        element.element.appendChild(child_ast_element.element)
+      })
+    }
+    else if (e.tag === 'url') {
+      // accum += `<a href="${e.data}" target="_blank">${pegAstToHtml(e.content)}</a>`
+      const element: AST_HTML_ELEMENT = {
+        element: document.createElement('a')
+        ,location: e.location
+        ,type: 'container'
+        ,contains: []
+      }
+      accum.push(element)
+      if (e.data) {
+        (element.element as HTMLAnchorElement).href = e.data
+      }
+      element.contains = pegAstToHtml_v2(e.content)
+      element.contains.forEach((child_ast_element) => {
+        element.element.appendChild(child_ast_element.element)
+      })
+    }
+    else if (e.tag === 'img') {
+      // accum += `<img src="${pegAstToHtml(e.content)}"/>`
+      let promise: Promise<string> = Promise.reject()
+      // FIXME should Only pass url via image when parsing
+      let url: string
+      if (e.content) {
+        // @ts-ignore
+        const urltest = (e.content as BBCodeAst[])[0]
+        if (urltest && urltest.type === 'text') {
+          url = urltest.content
+          promise = getImageObjectURL(url)
         }
-        else if (e.tag === 'list' || e.tag === 'ul') {
-            const element: AST_HTML_ELEMENT = {
-                element: document.createElement('ul')
-                ,location: e.location
-                ,type: 'container'
-                ,contains: []
-            }
-            accum.push(element)
-            element.contains = pegAstToHtml_v2(e.content)
-            element.contains.forEach((child_ast_element) => {
-                element.element.appendChild(child_ast_element.element)
-            })
+      }
+      const element: AST_HTML_ELEMENT = {
+        element: document.createElement(e.tag)
+        ,location: e.location
+        ,type: 'image'
+        ,imagePromise: promise
+      }
+      // element.element.src=LOADING_IMG
+      promise.then((e) => {
+        element.element.onload = () => {
+          URL.revokeObjectURL(e)
         }
-        else if (e.tag === 'hr') {
-            const element: AST_HTML_ELEMENT = {
-                element: document.createElement(e.tag)
-                ,location: e.location
-                ,type: 'container'
-                ,contains: []
-            }
-            accum.push(element)
-            // FIXME Contain children, in a non nested fashion
-            // element.contains=pegAstToHtml_v2(e.content)
-            pegAstToHtml_v2(e.content).forEach((e) => {
-                accum.push(e)
-            })
+        element.element.onerror = () => {
+          URL.revokeObjectURL(e)
         }
-        else if (e.tag === 'b') {
-            const element: AST_HTML_ELEMENT = {
-                element: document.createElement('strong')
-                ,location: e.location
-                ,type: 'container'
-                ,contains: []
-            }
-            accum.push(element)
-            element.contains = pegAstToHtml_v2(e.content)
-            element.contains.forEach((child_ast_element) => {
-                element.element.appendChild(child_ast_element.element)
-            })
-        }
-        else if (e.tag === 'i') {
-            const element: AST_HTML_ELEMENT = {
-                element: document.createElement('em')
-                ,location: e.location
-                ,type: 'container'
-                ,contains: []
-            }
-            accum.push(element)
-            element.contains = pegAstToHtml_v2(e.content)
-            element.contains.forEach((child_ast_element) => {
-                element.element.appendChild(child_ast_element.element)
-            })
-        }
-        else if (e.tag === 'h') {
-            const element: AST_HTML_ELEMENT = {
-                element: document.createElement('mark')
-                ,location: e.location
-                ,type: 'container'
-                ,contains: []
-            }
-            accum.push(element)
-            element.contains = pegAstToHtml_v2(e.content)
-            element.contains.forEach((child_ast_element) => {
-                element.element.appendChild(child_ast_element.element)
-            })
-        }
-        else if (e.tag === 'url') {
-            // accum += `<a href="${e.data}" target="_blank">${pegAstToHtml(e.content)}</a>`
-            const element: AST_HTML_ELEMENT = {
-                element: document.createElement('a')
-                ,location: e.location
-                ,type: 'container'
-                ,contains: []
-            }
-            accum.push(element)
-            if (e.data) {
-                (element.element as HTMLAnchorElement).href = e.data
-            }
-            element.contains = pegAstToHtml_v2(e.content)
-            element.contains.forEach((child_ast_element) => {
-                element.element.appendChild(child_ast_element.element)
-            })
-        }
-        else if (e.tag === 'img') {
-            // accum += `<img src="${pegAstToHtml(e.content)}"/>`
-            let promise: Promise<string> = Promise.reject()
-            // FIXME should Only pass url via image when parsing
-            let url: string
-            if (e.content) {
-                // @ts-ignore
-                const urltest = (e.content as BBCodeAst[])[0]
-                if (urltest && urltest.type === 'text') {
-                    url = urltest.content
-                    promise = getImageObjectURL(url)
-                }
-            }
-            const element: AST_HTML_ELEMENT = {
-                element: document.createElement(e.tag)
-                ,location: e.location
-                ,type: 'image'
-                ,imagePromise: promise
-            }
-            // element.element.src=LOADING_IMG
-            promise.then((e) => {
-                element.element.onload = () => {
-                    URL.revokeObjectURL(e)
-                }
-                element.element.onerror = () => {
-                    URL.revokeObjectURL(e)
-                }
-                element.element.src = e
-            }).catch((b) => {
-                console.log(`Url '${url}' failed to load with error!`)
-                console.log(b)
-                // element.element.src = ERROR_IMG
-            })
-            accum.push(element)
-        }
-        else if (e.tag === 'quote') {
-            // accum += `<div style="width: 100%; display: inline-block; margin: 1em 0;" class="well well-sm">${pegAstToHtml(e.content)}</div>`
-            const element: AST_HTML_ELEMENT = {
-                element: document.createElement('div')
-                ,location: e.location
-                ,type: 'container'
-                ,contains: []
-            }
-            accum.push(element)
-            ;(element.element as HTMLDivElement).style.width = '100%'
-            ;(element.element as HTMLDivElement).style.display = 'inline-block'
-            ;(element.element as HTMLDivElement).style.margin = '1em 0'
-            ;(element.element as HTMLDivElement).classList.add('well' ,'well-sm')
-            element.contains = pegAstToHtml_v2(e.content)
-            element.contains.forEach((child_ast_element) => {
-                element.element.appendChild(child_ast_element.element)
-            })
-        }
-        else if (e.tag === 'spoiler') {
-            // FIXME: Spoiler buttons are nested, however, spoiler divs are TopLevel only!
-            // accum += `<button type="button" class="btn btn-sm btn-warning btn-spoiler">Spoiler</button><p class="spoiler display-none">${pegAstToHtml(e.content)}</p>`
-            const button: AST_HTML_ELEMENT = {
-                element: document.createElement('button')
-                ,location: e.location
-                ,type: 'container'
-                ,contains: []
-            }
-            button.element.textContent = 'Spoiler'
-            ;(button.element as HTMLButtonElement).classList.add('btn' ,'btn-sm' ,'btn-warning' ,'btn-spoiler')
-            accum.push(button)
-            const element: AST_HTML_ELEMENT = {
-                element: document.createElement('p')
-                ,location: e.location
-                ,type: 'container'
-                ,contains: []
-            }
-            accum.push(element)
-            ;(element.element as HTMLDivElement).classList.add('spoiler' ,'display-none')
-            element.contains = pegAstToHtml_v2(e.content)
-            element.contains.forEach((child_ast_element) => {
-                element.element.appendChild(child_ast_element.element)
-            })
-            /* In a perfect world. it would work like this... but md is a bit broken
+        element.element.src = e
+      }).catch((b) => {
+        console.log(`Url '${url}' failed to load with error!`)
+        console.log(b)
+        // element.element.src = ERROR_IMG
+      })
+      accum.push(element)
+    }
+    else if (e.tag === 'quote') {
+      // accum += `<div style="width: 100%; display: inline-block; margin: 1em 0;" class="well well-sm">${pegAstToHtml(e.content)}</div>`
+      const element: AST_HTML_ELEMENT = {
+        element: document.createElement('div')
+        ,location: e.location
+        ,type: 'container'
+        ,contains: []
+      }
+      accum.push(element)
+      ;(element.element as HTMLDivElement).style.width = '100%'
+      ;(element.element as HTMLDivElement).style.display = 'inline-block'
+      ;(element.element as HTMLDivElement).style.margin = '1em 0'
+      ;(element.element as HTMLDivElement).classList.add('well' ,'well-sm')
+      element.contains = pegAstToHtml_v2(e.content)
+      element.contains.forEach((child_ast_element) => {
+        element.element.appendChild(child_ast_element.element)
+      })
+    }
+    else if (e.tag === 'spoiler') {
+      // FIXME: Spoiler buttons are nested, however, spoiler divs are TopLevel only!
+      // accum += `<button type="button" class="btn btn-sm btn-warning btn-spoiler">Spoiler</button><p class="spoiler display-none">${pegAstToHtml(e.content)}</p>`
+      const button: AST_HTML_ELEMENT = {
+        element: document.createElement('button')
+        ,location: e.location
+        ,type: 'container'
+        ,contains: []
+      }
+      button.element.textContent = 'Spoiler'
+      ;(button.element as HTMLButtonElement).classList.add('btn' ,'btn-sm' ,'btn-warning' ,'btn-spoiler')
+      accum.push(button)
+      const element: AST_HTML_ELEMENT = {
+        element: document.createElement('p')
+        ,location: e.location
+        ,type: 'container'
+        ,contains: []
+      }
+      accum.push(element)
+      ;(element.element as HTMLDivElement).classList.add('spoiler' ,'display-none')
+      element.contains = pegAstToHtml_v2(e.content)
+      element.contains.forEach((child_ast_element) => {
+        element.element.appendChild(child_ast_element.element)
+      })
+      /* In a perfect world. it would work like this... but md is a bit broken
       ;(button.element as HTMLButtonElement).addEventListener('click',()=>{
         ;(element.element as HTMLDivElement).classList.toggle('display-none')
       })
       Code to do this is afer makepreview, to ensure buggieness is preserved */
-        }
-        else if (e.tag === 'center' || e.tag === 'left' || e.tag === 'right') {
-            // accum += `<p class="text-center">${pegAstToHtml(e.content)}</p>`
-            const element: AST_HTML_ELEMENT = {
-                element: document.createElement('p')
-                ,location: e.location
-                ,type: 'container'
-                ,contains: []
-            }
-            accum.push(element)
-            ;(element.element as HTMLDivElement).classList.add(`text-${e.tag}`)
-            element.contains = pegAstToHtml_v2(e.content)
-            element.contains.forEach((child_ast_element) => {
-                element.element.appendChild(child_ast_element.element)
-            })
-        }
-        else if (e.tag == '*') {
-            // must parse the inside for v2
-            // accum += `<li>${pegAstToHtml( bbcodePegParser.parse(e.unparse) )}</li>`
-            // accum += `<li>${pegAstToHtml(e.content)}</li>`
-            const element: AST_HTML_ELEMENT = {
-                element: document.createElement('li')
-                ,location: e.location
-                ,type: 'container'
-                ,contains: []
-            }
-            accum.push(element)
-            element.contains = pegAstToHtml_v2(e.content)
-            element.contains.forEach((child_ast_element) => {
-                element.element.appendChild(child_ast_element.element)
-            })
-        }
-        else if (e.content != null) {
-            // FIXME? Is this possible? Root?
-            pegAstToHtml_v2(e.content).forEach((e) => {
-                accum.push(e)
-            })
-        }
-        else {
-            // FIXME: Does this even happed
-            throw Error(`Recieved unknown and unhandeled ast entry '${JSON.stringify(e)}'`)
-            /* accum.push({
+    }
+    else if (e.tag === 'center' || e.tag === 'left' || e.tag === 'right') {
+      // accum += `<p class="text-center">${pegAstToHtml(e.content)}</p>`
+      const element: AST_HTML_ELEMENT = {
+        element: document.createElement('p')
+        ,location: e.location
+        ,type: 'container'
+        ,contains: []
+      }
+      accum.push(element)
+      ;(element.element as HTMLDivElement).classList.add(`text-${e.tag}`)
+      element.contains = pegAstToHtml_v2(e.content)
+      element.contains.forEach((child_ast_element) => {
+        element.element.appendChild(child_ast_element.element)
+      })
+    }
+    else if (e.tag == '*') {
+      // must parse the inside for v2
+      // accum += `<li>${pegAstToHtml( bbcodePegParser.parse(e.unparse) )}</li>`
+      // accum += `<li>${pegAstToHtml(e.content)}</li>`
+      const element: AST_HTML_ELEMENT = {
+        element: document.createElement('li')
+        ,location: e.location
+        ,type: 'container'
+        ,contains: []
+      }
+      accum.push(element)
+      element.contains = pegAstToHtml_v2(e.content)
+      element.contains.forEach((child_ast_element) => {
+        element.element.appendChild(child_ast_element.element)
+      })
+    }
+    else if (e.content != null) {
+      // FIXME? Is this possible? Root?
+      pegAstToHtml_v2(e.content).forEach((e) => {
+        accum.push(e)
+      })
+    }
+    else {
+      // FIXME: Does this even happed
+      throw Error(`Recieved unknown and unhandeled ast entry '${JSON.stringify(e)}'`)
+      /* accum.push({
         type: 'text'
         ,element: document.createTextNode(e.content)
         ,location: e.location
       }) */
-        }
-        return accum
-    } ,[])
-    return res
+    }
+    return accum
+  } ,[])
+  return res
 }
 
 
 function makePreview(txt: string): [HTMLDivElement ,AST_HTML_ELEMENT[]] {
-    // dbg(pegAstToHtml(bbcodePegParser.parse(txt)))
-    // Faster, but less dynamic
-    // let html = bbCodeParser.parse(txt)
-    // Slower, but more dynamic
-    // let html = pegAstToHtml(bbcodePegParser.parse(txt))
-    const astHtml = pegAstToHtml_v2(bbcodePegParser_v2.parse(txt))
-    // dbg(JSON.stringify(bbcodePegParser_v2.parse(txt)))
-    const previewDiv = document.createElement('div')
-    previewDiv.style.flexGrow = '1'
-    astHtml.forEach(e => previewDiv.appendChild(e.element))
-    // tmpl.innerHTML = html
-    return [previewDiv ,astHtml]
+  // dbg(pegAstToHtml(bbcodePegParser.parse(txt)))
+  // Faster, but less dynamic
+  // let html = bbCodeParser.parse(txt)
+  // Slower, but more dynamic
+  // let html = pegAstToHtml(bbcodePegParser.parse(txt))
+  const astHtml = pegAstToHtml_v2(bbcodePegParser_v2.parse(txt))
+  // dbg(JSON.stringify(bbcodePegParser_v2.parse(txt)))
+  const previewDiv = document.createElement('div')
+  previewDiv.style.flexGrow = '1'
+  astHtml.forEach(e => previewDiv.appendChild(e.element))
+  // tmpl.innerHTML = html
+  return [previewDiv ,astHtml]
 }
 
 function createPreviewInterface(forum: HTMLElement) {
-    const container = forum.parentElement!
-    const previewDiv = document.createElement('div')
-    previewDiv.style.flexGrow = '1'
-    container.style.alignItems = 'flex-start'
-    container.classList.add('d-flex' ,'')
-    container.insertBefore(previewDiv ,forum)
+  const container = forum.parentElement!
+  const previewDiv = document.createElement('div')
+  previewDiv.style.flexGrow = '1'
+  container.style.alignItems = 'flex-start'
+  container.classList.add('d-flex' ,'')
+  container.insertBefore(previewDiv ,forum)
 }
 
 function createPreviewCallbacks() {
-    const nav = document.querySelector('nav.navbar.fixed-top') as HTMLElement
-    // @ts-ignore
-    const navHeight = nav ? nav.getBoxQuads()[0].p4.y : 0
-    // let image_buffers: Map<string, Blob>
-    let forms = Object.values(document.querySelectorAll('.post_edit_form'))
-    forms = forms.concat(Object.values(document.querySelectorAll('#post_reply_form')))
-    forms = forms.concat(Object.values(document.querySelectorAll('#change_profile_form, #start_thread_form')))
+  const nav = document.querySelector('nav.navbar.fixed-top') as HTMLElement
+  // @ts-ignore
+  const navHeight = nav ? nav.getBoxQuads()[0].p4.y : 0
+  // let image_buffers: Map<string, Blob>
+  let forms = Object.values(document.querySelectorAll('.post_edit_form'))
+  forms = forms.concat(Object.values(document.querySelectorAll('#post_reply_form')))
+  forms = forms.concat(Object.values(document.querySelectorAll('#change_profile_form, #start_thread_form')))
 
-    forms.forEach((forum) => {
+  forms.forEach((forum) => {
     // Try to make it side by side
     // e.parentElement.parentElement.insertBefore(previewDiv,e.parentElement)
     // e.parentElement.classList.add("sticky-top", "pt-5", "col-6")
-        const textarea = (forum.querySelector('textarea') as HTMLTextAreaElement)
-        if (!textarea) {
-            // FIXME throw errors. Kind of want to short circit this one though
-            return Error('Failed to find text area for forum')
-        }
-        // Setup variables
-        let curDisplayedVersion = 0
-        let nextVersion = 1
-        let updateTimeout: number
-        let updateTimeoutDelay = 500
+    const textarea = (forum.querySelector('textarea') as HTMLTextAreaElement)
+    if (!textarea) {
+      // FIXME throw errors. Kind of want to short circit this one though
+      return Error('Failed to find text area for forum')
+    }
+    // Setup variables
+    let curDisplayedVersion = 0
+    let nextVersion = 1
+    let updateTimeout: number
+    let updateTimeoutDelay = 500
 
-        const maxAcceptableDelay = 10000
-        const useFallbackPreview = false
+    const maxAcceptableDelay = 10000
+    const useFallbackPreview = false
         // Prepare form
         forum.parentElement!.style.alignItems = 'flex-start'
         forum.parentElement!.classList.add('d-flex')
@@ -655,58 +655,58 @@ function createPreviewCallbacks() {
         console.log(astHtml)
         let currentSpoiler: undefined | HTMLParagraphElement
         function searchAst(ast: AST_HTML_ELEMENT[] ,cpos: number): undefined | Text | HTMLElement {
-            // slice bc reverse is in place
-            const a = ast.slice().reverse().find(e => e.location[0] <= cpos && cpos <= e.location[1])
-            if (a) {
-                if (a.type == 'container') {
-                    // unhide spoilers
-                    // Ensure we are not a Text node and that we are a spoiler
-                    if (!currentSpoiler && a.element.nodeType !== 3
+          // slice bc reverse is in place
+          const a = ast.slice().reverse().find(e => e.location[0] <= cpos && cpos <= e.location[1])
+          if (a) {
+            if (a.type == 'container') {
+              // unhide spoilers
+              // Ensure we are not a Text node and that we are a spoiler
+              if (!currentSpoiler && a.element.nodeType !== 3
             && (a.element as HTMLParagraphElement).classList.contains('spoiler')
             && (a.element as HTMLParagraphElement).style.display !== 'block'
-                    ) {
-                        currentSpoiler = a.element as HTMLParagraphElement
-                        currentSpoiler.style.display = 'block'
-                    }
-                    const b = searchAst(a.contains ,cpos)
-                    if (b) {
-                        return b
-                    }
-                }
-                return a.element
+              ) {
+                currentSpoiler = a.element as HTMLParagraphElement
+                currentSpoiler.style.display = 'block'
+              }
+              const b = searchAst(a.contains ,cpos)
+              if (b) {
+                return b
+              }
             }
-            return undefined
+            return a.element
+          }
+          return undefined
         }
         // Auto scroll into view
         function scrollToPos(pos = textarea!.selectionStart) {
-            // Hide previous spoiler
-            if (currentSpoiler) {
-                currentSpoiler.style.display = 'none'
-                currentSpoiler = undefined
-            }
-            // Get element from ast that starts closest to pos
-            const elm = searchAst(astHtml ,pos)
-            if (elm) {
-                console.log(elm)
-                // FIXME Scroll pos is a bit hard to find.
-                // getBoxQuads, getClientRect, getClientBoundingRect all give the offset from the viewport
-                // Height of child elements not calculated in...
-                // SAFE for (text)nodes?, not safe for elements with nested content
-                if (elm.nodeType === 3) {
-                    // @ts-ignore
-                    const { y } = (elm as Text).getBoxQuads()[0].p1
+          // Hide previous spoiler
+          if (currentSpoiler) {
+            currentSpoiler.style.display = 'none'
+            currentSpoiler = undefined
+          }
+          // Get element from ast that starts closest to pos
+          const elm = searchAst(astHtml ,pos)
+          if (elm) {
+            console.log(elm)
+            // FIXME Scroll pos is a bit hard to find.
+            // getBoxQuads, getClientRect, getClientBoundingRect all give the offset from the viewport
+            // Height of child elements not calculated in...
+            // SAFE for (text)nodes?, not safe for elements with nested content
+            if (elm.nodeType === 3) {
+              // @ts-ignore
+              const { y } = (elm as Text).getBoxQuads()[0].p1
                     // FIXME. Must be a better way to scroll (especialy in case of nested scroll frames)
                     // Scroll to top
                     document.scrollingElement!.scrollBy(0 ,y)
-                }
-                else {
-                    // FIXME. Must be a better way to scroll (especialy in case of nested scroll frames)
-                    // Scroll to ~ center directly
-                    // const y: number = (elm as HTMLElement).offsetTop
-                    // document.scrollingElement!.scrollTo({top:y})
-                    // Scroll to top
-                    (elm as HTMLElement).scrollIntoView()
-                }
+            }
+            else {
+              // FIXME. Must be a better way to scroll (especialy in case of nested scroll frames)
+              // Scroll to ~ center directly
+              // const y: number = (elm as HTMLElement).offsetTop
+              // document.scrollingElement!.scrollTo({top:y})
+              // Scroll to top
+              (elm as HTMLElement).scrollIntoView()
+            }
                 // Scroll out of nav
                 document.scrollingElement!.scrollBy(0 ,-navHeight)
                 // Add this line to scroll to center
@@ -715,71 +715,71 @@ function createPreviewCallbacks() {
                 const bound = (forum as HTMLFormElement).getBoundingClientRect()
                 // document.scrollingElement!.scrollBy(0,bound.bottom - bound.height)
                 document.scrollingElement!.scrollBy(0 ,bound.top)
-            }
+          }
         }
         textarea.addEventListener('selectionchange' ,() => {
-            // Only autoscroll if our ast is in sync with the preview.
-            console.log(astHtml[astHtml.length - 1])
-            console.log(astHtml[astHtml.length - 1].location)
-            if (curDisplayedVersion === nextVersion - 1
+          // Only autoscroll if our ast is in sync with the preview.
+          console.log(astHtml[astHtml.length - 1])
+          console.log(astHtml[astHtml.length - 1].location)
+          if (curDisplayedVersion === nextVersion - 1
         && astHtml[astHtml.length - 1] != null
         && astHtml[astHtml.length - 1].location[1] === textarea.value.length
-            ) {
-                scrollToPos()
-            }
+          ) {
+            scrollToPos()
+          }
         })
         if (!forum.parentElement) {
-            return
+          return
         }
         forum.parentElement.insertBefore(previewDiv ,forum)
         function UpdatePreview() {
-            // Measure load speed. Used for setting update delay dynamicly.
-            const startTime = Date.now()
-            // Create a preview buffer
-            const thisVersion = nextVersion++
-            const [newPreview ,newAstHtml] = makePreview(textarea!.value)
+          // Measure load speed. Used for setting update delay dynamicly.
+          const startTime = Date.now()
+          // Create a preview buffer
+          const thisVersion = nextVersion++
+          const [newPreview ,newAstHtml] = makePreview(textarea!.value)
 
-            // Setup spoilers the same way md does
-            $(newPreview).find('.btn-spoiler').click(function () {
-                // @ts-ignore
-                $(this as HTMLButtonElement).next('.spoiler').toggle()
-            })
-            // previewDiv, astHtml
-            const imgLoadPromises: Promise<any>[] = []
-            Object.values(newPreview.querySelectorAll('img')).forEach((img: HTMLImageElement) => {
-                imgLoadPromises.push(new Promise((resolve) => {
-                    img.addEventListener('load' ,resolve)
-                    // Errors dont really matter to us
-                    img.addEventListener('error' ,resolve)
-                    // Esure we are not already done
-                    if (img.complete) {
-                        resolve()
-                    }
-                }))
-            })
-            // Wait for all images to load or error (size calculations needed) before we swap and rescroll
-            // This is the part that actualy updates the preview
-            Promise.all(imgLoadPromises).then(() => {
-                const endTime = Date.now()
-                const updateLoadDelay = endTime - startTime
-                if (!useFallbackPreview && updateLoadDelay > maxAcceptableDelay) {
-                    // NOTE: Fallback preview removed. Focusing on speed improvments of normal preview
-                    // useFallbackPreview = true
-                    // dbg(`It took ${updateLoadDelay} milli to update. Max acceptable delay was ${maxAcceptableDelay}! Switching to fallback preview!`)
-                    // We intentionally do not update the timout delay when we swap to fallback preview
-                }
-                else {
-                    // average out the times
-                    updateTimeoutDelay = (updateTimeoutDelay + updateLoadDelay) / 2
-                    // dbg(`It took ${updateLoadDelay} milli to update. Changing delay to ${updateTimeoutDelay} `)
-                }
+          // Setup spoilers the same way md does
+          $(newPreview).find('.btn-spoiler').click(function () {
+            // @ts-ignore
+            $(this as HTMLButtonElement).next('.spoiler').toggle()
+          })
+          // previewDiv, astHtml
+          const imgLoadPromises: Promise<any>[] = []
+          Object.values(newPreview.querySelectorAll('img')).forEach((img: HTMLImageElement) => {
+            imgLoadPromises.push(new Promise((resolve) => {
+              img.addEventListener('load' ,resolve)
+              // Errors dont really matter to us
+              img.addEventListener('error' ,resolve)
+              // Esure we are not already done
+              if (img.complete) {
+                resolve()
+              }
+            }))
+          })
+          // Wait for all images to load or error (size calculations needed) before we swap and rescroll
+          // This is the part that actualy updates the preview
+          Promise.all(imgLoadPromises).then(() => {
+            const endTime = Date.now()
+            const updateLoadDelay = endTime - startTime
+            if (!useFallbackPreview && updateLoadDelay > maxAcceptableDelay) {
+              // NOTE: Fallback preview removed. Focusing on speed improvments of normal preview
+              // useFallbackPreview = true
+              // dbg(`It took ${updateLoadDelay} milli to update. Max acceptable delay was ${maxAcceptableDelay}! Switching to fallback preview!`)
+              // We intentionally do not update the timout delay when we swap to fallback preview
+            }
+            else {
+              // average out the times
+              updateTimeoutDelay = (updateTimeoutDelay + updateLoadDelay) / 2
+              // dbg(`It took ${updateLoadDelay} milli to update. Changing delay to ${updateTimeoutDelay} `)
+            }
 
-                // Return if we are older than cur preview
-                if (thisVersion < curDisplayedVersion) {
-                    newPreview.remove()
-                    return
-                }
-                curDisplayedVersion = thisVersion
+            // Return if we are older than cur preview
+            if (thisVersion < curDisplayedVersion) {
+              newPreview.remove()
+              return
+            }
+            curDisplayedVersion = thisVersion
                 // Replace the Preview with the buffered content
                 previewDiv.parentElement!.insertBefore(newPreview ,previewDiv)
                 previewDiv.remove()
@@ -787,21 +787,21 @@ function createPreviewCallbacks() {
                 astHtml = newAstHtml
                 // Scroll to position
                 scrollToPos()
-            })
+          })
         }
         function UpdatePreviewProxy() {
-            // dbg(`Reseting timeout with delay ${updateTimeoutDelay} `)
-            clearTimeout(updateTimeout)
-            // @ts-ignore
-            updateTimeout = setTimeout(UpdatePreview ,updateTimeoutDelay)
+          // dbg(`Reseting timeout with delay ${updateTimeoutDelay} `)
+          clearTimeout(updateTimeout)
+          // @ts-ignore
+          updateTimeout = setTimeout(UpdatePreview ,updateTimeoutDelay)
         }
 
         const buttons = Object.values(forum.querySelectorAll('button'))
         buttons.forEach((btn) => {
-            btn.addEventListener('click' ,UpdatePreviewProxy)
+          btn.addEventListener('click' ,UpdatePreviewProxy)
         })
         textarea.oninput = UpdatePreviewProxy
-    })
+  })
 }
 
 createPreviewCallbacks()
