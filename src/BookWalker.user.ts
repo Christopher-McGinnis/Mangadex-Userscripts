@@ -1,13 +1,15 @@
 // ==UserScript==
-// @name BookWalker Cover Page Extractor
-// @namespace https://github.com/Brandon-Beck
-// @description Click on preview image for this page or another volume. Automatically copies the cover image url to clipboard (and prints it in the terminal)
-// @include    /^(?:https?:\/\/)?bookwalker\.jp\/de[a-zA-Z0-9]+-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]+(\/.*)?/
-// @include    /^(?:https?:\/\/)?bookwalker\.jp\/series\/\d+(\/.*)?/
-// @include    /^(?:https?:\/\/)?mangadex\.org\/title\/\d+(\/.*)?/
-// @version  0.1.40
-// @grant GM_xmlhttpRequest
-// @require https://gitcdn.xyz/repo/rsmbl/Resemble.js/db6f0b8298b4865c0d28ff68fab842254a249b9d/resemble.js
+// @name        BookWalker Cover Page Extractor
+// @description Aids in uploading covers to MD
+// @namespace   https://github.com/Brandon-Beck
+// @author      Brandon Beck
+// @license     MIT
+// @version     0.1.41
+// @include     /^(?:https?:\/\/)?bookwalker\.jp\/de[a-zA-Z0-9]+-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]+(\/.*)?/
+// @include     /^(?:https?:\/\/)?bookwalker\.jp\/series\/\d+(\/.*)?/
+// @include     /^(?:https?:\/\/)?mangadex\.org\/title\/\d+(\/.*)?/
+// @grant       GM_xmlhttpRequest
+// @require     https://gitcdn.xyz/repo/rsmbl/Resemble.js/db6f0b8298b4865c0d28ff68fab842254a249b9d/resemble.js
 // ==/UserScript==
 
 // No longer needed
