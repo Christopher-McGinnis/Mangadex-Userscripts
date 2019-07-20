@@ -36,6 +36,16 @@ Title Color Codes
 
 ![a](https://img.shields.io/static/v1.svg?style=flat-square&label=&message=No%20Color.%20Failed%20to%20parse%20volume%20number&color=grey&labelColor=grey,)
 
+Dimensions Color Codes
+---
+
+![a](https://img.shields.io/static/v1.svg?style=flat-square&label=Aspect%20Ratio%20Missmatch&message=MangaDex's%20current%20chapter%20cover%20has%20a%20notable%20diffrent%20aspect%20ratio%20from%20this%20cover&color=grey&labelColor=yellow)
+
+![a](https://img.shields.io/static/v1.svg?style=flat-square&label=Smaller%20Size&message=This%20cover%20has%20a%20notable%20smaller%20width/height%20than%20MangaDex's%20current%20chapter%20cover&color=grey&labelColor=red)
+
+![a](https://img.shields.io/static/v1.svg?style=flat-square&label=No%20Color:&message=Cover%20is%20of%20comparable%20quality%20to%20MangaDex's%20current%20chapter%20cover&color=grey&labelColor=grey)
+
+
 Current Bugs & Limitations
 ---
 
