@@ -4,6 +4,7 @@
 // @namespace   https://github.com/Christopher-McGinnis
 // @author      Christopher McGinnis
 // @license     MIT
+// @icon        https://mangadex.org/favicon-96x96.png
 // @version     0.1.41
 // @include     /^(?:https?:\/\/)?bookwalker\.jp\/de[a-zA-Z0-9]+-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]+(\/.*)?/
 // @include     /^(?:https?:\/\/)?bookwalker\.jp\/series\/\d+(\/.*)?/

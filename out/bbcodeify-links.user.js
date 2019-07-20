@@ -1,7 +1,10 @@
 // ==UserScript==
-// @name     Mangadex Copy link as BBCode
+// @name        Mangadex Copy link as BBCode
 // @description Adds a "Copy as BBCode" button next to links. Currently operates on title page links, and any breadcrumbs.
-// @namespace https://github.com/Christopher-McGinnis
+// @namespace   https://github.com/Christopher-McGinnis
+// @author      Christopher McGinnis
+// @license     MIT
+// @icon        https://mangadex.org/favicon-96x96.png
 // @version  0.0.3
 // @grant    unsafeWindow
 // @grant    GM.setClipboard
@@ -9,9 +12,6 @@
 // @require  https://gitcdn.xyz/repo/Christopher-McGinnis/Mangadex-Userscripts/a480c30b64fba63fad4e161cdae01e093bce1e4c/common.js
 // @require  https://gitcdn.xyz/repo/Christopher-McGinnis/Mangadex-Userscripts/21ec54406809722c425c39a0f5b6aad59fb3d88d/uncommon.js
 // @match    https://mangadex.org/*
-// @license  MIT
-// @author   Christopher McGinnis
-// @icon     https://mangadex.org/images/misc/default_brand.png?1
 // ==/UserScript==
 // TODO: Look for a decent IDE for userscripts.
 // Currently using ViolentMonkey with Atom and atom-live-server to sync changes with ViolentMonkey
