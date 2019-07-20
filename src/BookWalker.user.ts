@@ -5,8 +5,9 @@
 // @include    /^(?:https?:\/\/)?bookwalker\.jp\/de[a-zA-Z0-9]+-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]+(\/.*)?/
 // @include    /^(?:https?:\/\/)?bookwalker\.jp\/series\/\d+(\/.*)?/
 // @include    /^(?:https?:\/\/)?mangadex\.org\/title\/\d+(\/.*)?/
-// @version  0.1.38
+// @version  0.1.40
 // @grant GM_xmlhttpRequest
+// @require https://gitcdn.xyz/repo/rsmbl/Resemble.js/db6f0b8298b4865c0d28ff68fab842254a249b9d/resemble.js
 // ==/UserScript==
 
 // No longer needed
@@ -38,6 +39,43 @@ declare interface pica {
 }
 */
 export {}
+declare interface Resemble {
+}
+declare const resemble: (file:Blob)=>any
+
+function compareImages(image1 ,image2 ,options) {
+  return new Promise((resolve ,reject) => {
+    resemble.compare(image1 ,image2 ,options ,(err ,data) => {
+      if (err) {
+        reject(err)
+      }
+      else {
+        resolve(data)
+      }
+    })
+  })
+}
+
+async function imagePixelsAreComparable(coverP:Promise<Blob> ,previewP:Promise<Blob> ,requiredSimularityPercentage: number): Promise<boolean> {
+  const misMatchThreashold = 100 - (requiredSimularityPercentage * 100)
+  const cover = await coverP
+  const preview = await previewP
+  return new Promise((res ,rej) => {
+    resemble.compare(cover ,preview ,{ misMatchThreashold } ,(err ,data) => {
+      if (err) {
+        return rej(err)
+      }
+      console.log(`Comparing Images: ${data.rawMisMatchPercentage} >= ${misMatchThreashold}`)
+      return res(data.rawMisMatchPercentage >= misMatchThreashold)
+    })
+  })
+}
+
+
+// Type corrections
+interface BetterBlob extends Blob {
+  arrayBuffer(): Promise<ArrayBuffer>
+}
 
 const ERROR_IMG = 'https://i.postimg.cc/4NbKcsP6/404.gif'
 // const LOADING_IMG = 'https://i.redd.it/ounq1mw5kdxy.gif'
@@ -86,6 +124,12 @@ class BookwalkerSearchError extends BookwalkerErrorBase {
   constructor(message: string ,shouldRemoveInterface?: boolean) {
     super(message ,true ,shouldRemoveInterface)
   }
+}
+class PromiseIteratorEndError extends Error {
+  name = 'PromiseIteratorEndError'
+}
+class PromiseIteratorBreakError extends Error {
+  name = 'PromiseIteratorBreakError'
 }
 
 
@@ -429,21 +473,22 @@ function serializeImg(img: HTMLImageElement): SerialDataBasic {
   // }).then()
   return serialData
 }
+
+function getSerialDataFromVolumePage(doc: HTMLElement): SerialDataBasic[] {
+  const serialData = getCoverImgElmsFromVolumePage(doc).map(img => serializeImg(img))
+  return serialData
+}
 function getSerialDataFromSeriesPage(doc: HTMLElement): Promise<SerialDataBasic[]> {
   setStatusMessage('Fetching BookWalker Volume Page')
   return getVolumePageFromSeriesPage(doc)
-    .then(volDoc => getCoverImgElmsFromVolumePage(volDoc))
-    .then(imgs => imgs.map((img) => {
-      const serial = serializeImg(img)
-      return serial
-    }))
+    .then(volDoc => getSerialDataFromVolumePage(volDoc))
 }
 function getSerialDataFromBookwalker(url: string ,doc: HTMLElement): Promise<SerialDataBasic[]> {
   if (url.match(/^(?:https?:\/\/)?bookwalker\.jp\/series\/\d+(\/.*)?/)) {
     return getSerialDataFromSeriesPage(doc)
   }
   if (url.match(/^(?:https?:\/\/)?bookwalker\.jp\/de[a-zA-Z0-9]+-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]+(\/.*)?/)) {
-    return Promise.resolve(getCoverImgElmsFromVolumePage(doc).map(img => serializeImg(img)))
+    return Promise.resolve(getSerialDataFromVolumePage(doc))
   }
   return Promise.reject(Error(`Bookwalker URL expected. Got '${url}'`))
 }
@@ -742,16 +787,73 @@ function getBW_CoversFromMD() {
     })
     // Load Serial Details
     .then(({ bwLink ,dom }) => getSerialDataFromBookwalker(bwLink ,dom))
+    // Add on volume number, if possible
+    .then((serialDataAll) => {
+      serialDataAll.forEach((serialData) => {
+        try {
+          serialData.volumeNumber = toVolumeNumber(serialData.title)
+        }
+        catch {}
+      })
+      return serialDataAll
+    })
+    // NOTE: This filter awaits all preview images. Then REMOVES serial data with identicle previews
+    .then((serialDataAll: SerialDataBasic[]) => {
+      setStatusMessage('Filtering out duplicate volume covers for same volume')
+      function loopRun(fn) {
+        return fn().then(serialData => loopRun(fn))
+      }
+      let idx = 0
+      const resSerial: SerialDataBasic[] = []
+      return loopRun(() => {
+        const serialData1 = serialDataAll[idx]
+        idx++
+        if (!serialData1) return Promise.reject(new PromiseIteratorEndError('Out of IDXs'))
+        let idx2 = idx
+        return loopRun(async () => {
+          const serialData2 = serialDataAll[idx2]
+          idx2++
+          if (!serialData2) return Promise.reject(new PromiseIteratorEndError('Out of IDXs'))
+          // Ignore/Skip diffrent volumes
+          if (serialData1.volumeNumber !== serialData2.volumeNumber) return Promise.resolve(resSerial)
+
+          // Compare Image size
+          const [previewImg1 ,previewImg2] = [await serialData1.preview ,await serialData2.preview]
+          if (previewImg1.naturalWidth !== previewImg2.naturalWidth) return Promise.resolve(resSerial)
+          if (previewImg1.naturalHeight !== previewImg2.naturalHeight) return Promise.resolve(resSerial)
+
+          // WARNING! same cover & visual same preview (for volume on sale compared to normal volume preview)
+          // are generating 13% diffrence. 13%, however, is far more than large enough for false positives
+          // Unexpected since preview was generated by same site
+          return imagePixelsAreComparable(serialData1.previewBlob ,serialData2.previewBlob ,0.98)
+            .then((b: boolean) => {
+              if (!b) {
+                console.log('REMOVED DUPLICATE')
+                throw new PromiseIteratorBreakError('Duplicate Found')
+              }
+              return resSerial
+            })
+        }).then(() => {
+          resSerial.push(serialData1)
+          return resSerial
+        })
+          .catch((e) => {
+            if (e instanceof PromiseIteratorBreakError) return resSerial
+            if (e instanceof PromiseIteratorEndError) {
+              resSerial.push(serialData1)
+              return resSerial
+            }
+            throw e
+          })
+      })
+        .catch(() => resSerial)
+    })
     .then((serialDataAll: SerialDataBasic[]) => {
       serialDataAll.forEach((serialData) => {
         serialData.mangadexId = id
         serialData.mangadexCoverIds = getExistingCoversFromMD()
         const currentChapterCover = Object.values(document.querySelectorAll('#content .card .card-body a img') as NodeListOf<HTMLImageElement>).filter(e => e.src.match(/^(?:https?:\/\/)?(?:mangadex\.org)?\/images\/manga/))[0]
         if (currentChapterCover) serialData.mangadexCurrentCover = Promise.resolve(currentChapterCover)
-        try {
-          serialData.volumeNumber = toVolumeNumber(serialData.title)
-        }
-        catch {}
         try {
           serialData.volumeDecimal = toVolumeDecimal(serialData ,serialDataAll)
         }
