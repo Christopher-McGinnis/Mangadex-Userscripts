@@ -5,7 +5,7 @@
 // @include    /^(?:https?:\/\/)?bookwalker\.jp\/de[a-zA-Z0-9]+-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]+(\/.*)?/
 // @include    /^(?:https?:\/\/)?bookwalker\.jp\/series\/\d+(\/.*)?/
 // @include    /^(?:https?:\/\/)?mangadex\.org\/title\/\d+(\/.*)?/
-// @version  0.1.37
+// @version  0.1.38
 // @grant GM_xmlhttpRequest
 // ==/UserScript==
 
@@ -164,10 +164,10 @@ function fetchDom(url: string) {
 }
 
 // Image Utilities
-async function isValidAspectRatio(serialData: SerialDataCover): Promise<boolean> {
+async function isComparableAspectRatio(coverPromise: Promise<HTMLImageElement> ,previewPromise: Promise<HTMLImageElement> ,tollerance: number = 1): Promise<boolean> {
   // Reject failed images
-  const cover = await serialData.cover
-  const preview = await serialData.preview
+  const cover = await coverPromise
+  const preview = await previewPromise
   if (cover.naturalWidth === 0 || cover.naturalHeight === 0) {
     console.log('0 size image')
     return false
@@ -176,7 +176,7 @@ async function isValidAspectRatio(serialData: SerialDataCover): Promise<boolean>
   const widthDelta = preview.naturalWidth / cover.naturalWidth
   const convertW = cover.naturalWidth * widthDelta
   const convertH = cover.naturalHeight * widthDelta
-  if (preview.naturalHeight > convertH + 1 || preview.naturalHeight < convertH - 1) {
+  if (preview.naturalHeight > convertH + tollerance || preview.naturalHeight < convertH - tollerance) {
     console.log(`Rejecting height preview: ${preview.naturalHeight} cover: ${cover.naturalHeight} = conv: ${convertH}`)
     return false
   }
@@ -246,6 +246,7 @@ interface SerialDataBase {
   volumeLevel?: VOLUME_LEVEL;
   volumeNumber?: string;
   volumeDecimal?: string | undefined;
+  mangadexCurrentCover?: Promise<HTMLImageElement>
 }
 interface SerialDataBasic extends SerialDataBase {
   serialLevel: SerialDataLevel.BASE
@@ -496,7 +497,7 @@ function fetchCoverImageFromSerialData(serialDataOrig: SerialData): Promise<Seri
     return getCoverFromRid(serialData.rid)
       .then(async ({ img ,blob }) => {
         serialData.cover = img
-        if (!await isValidAspectRatio(serialData)) {
+        if (!await isComparableAspectRatio(serialData.cover ,serialData.preview)) {
           return Promise.reject(Error('Invalid Aspect Ratio'))
           // return Promise.reject(Error('Invalid Aspect Ratio'))
         }
@@ -508,7 +509,7 @@ function fetchCoverImageFromSerialData(serialDataOrig: SerialData): Promise<Seri
           }
           return Promise.reject(Error('Cover Resolver failed to initialize before images were found!'))
         })
-        // this should never happen. else isValidAspect would fail
+        // this should never happen. else isComparableAspectRatio would fail
         img.catch(() => {
           if (serialData.coverRejector) return serialData.coverRejector(img)
           return Promise.reject(Error('Cover Rejector failed to initialize and an attempt to use it was made!'))
@@ -745,6 +746,8 @@ function getBW_CoversFromMD() {
       serialDataAll.forEach((serialData) => {
         serialData.mangadexId = id
         serialData.mangadexCoverIds = getExistingCoversFromMD()
+        const currentChapterCover = Object.values(document.querySelectorAll('#content .card .card-body a img') as NodeListOf<HTMLImageElement>).filter(e => e.src.match(/^(?:https?:\/\/)?(?:mangadex\.org)?\/images\/manga/))[0]
+        if (currentChapterCover) serialData.mangadexCurrentCover = Promise.resolve(currentChapterCover)
         try {
           serialData.volumeNumber = toVolumeNumber(serialData.title)
         }
@@ -1100,7 +1103,31 @@ function createSingleInterface(serialData: SerialData ,allSerialData?: SerialDat
     }
     cover.src = url
     serialDataCover.coverPromise.then((coverImg) => {
-      sizeInfo.innerText = `${coverImg.naturalWidth}x${coverImg.naturalHeight}`
+      sizeInfo.innerText = `${coverImg.naturalWidth}×${coverImg.naturalHeight}`
+      if (serialDataCover.mangadexCurrentCover) {
+        serialDataCover.mangadexCurrentCover.then((mdChapterCover) => {
+          sizeInfo.title = `MD Chapter Cover: ${mdChapterCover.naturalWidth}×${mdChapterCover.naturalHeight}`
+          sizeInfo.classList.remove('text-danger')
+          sizeInfo.classList.remove('text-warning')
+          if (mdChapterCover.naturalWidth - 10 > coverImg.naturalWidth
+        || mdChapterCover.naturalHeight - 10 > coverImg.naturalHeight) {
+            sizeInfo.classList.add('text-danger')
+            sizeInfo.title = `Smaller than Chapter Cover: ${mdChapterCover.naturalWidth}×${mdChapterCover.naturalHeight}`
+          }
+          // TODO aspect raio check
+          else {
+            isComparableAspectRatio(serialDataCover.cover ,Promise.resolve(mdChapterCover) ,10)
+              .then((isComparable) => {
+                if (!isComparable) {
+                  sizeInfo.classList.add('text-warning')
+                  sizeInfo.title = `Chapter Cover Aspect Ratio Missmatch: ${mdChapterCover.naturalWidth}×${mdChapterCover.naturalHeight}`
+                }
+              })
+          }
+          //  sizeInfo.title = `MD Aspect Ratio Missmatch: ${mdChapterCover.naturalWidth}×${mdChapterCover.naturalHeight}`
+          // }
+        })
+      }
     }).catch()
   }
 
