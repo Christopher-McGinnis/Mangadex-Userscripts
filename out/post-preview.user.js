@@ -5,7 +5,7 @@
 // @author      Christopher McGinnis
 // @license     MIT
 // @icon        https://mangadex.org/favicon-96x96.png
-// @version  0.2.2
+// @version  0.2.7
 // @grant    unsafeWindow
 // @grant    GM.getValue
 // @grant    GM.setValue
@@ -400,6 +400,8 @@ function pegAstToHtml_v2(ast) {
         ,type: 'image'
         ,imagePromise: promise
       }
+      element.element.style.maxWidth = '100%'
+      element.element.classList.add('align-bottom')
       // element.element.src=LOADING_IMG
       promise.then((e) => {
         element.element.onload = () => {
@@ -544,6 +546,7 @@ function createPreviewCallbacks() {
   let forms = Object.values(document.querySelectorAll('.post_edit_form'))
   forms = forms.concat(Object.values(document.querySelectorAll('#post_reply_form')))
   forms = forms.concat(Object.values(document.querySelectorAll('#change_profile_form, #start_thread_form')))
+  // FIXME Format change_profile_form better
   forms.forEach((forum) => {
     // Try to make it side by side
     // e.parentElement.parentElement.insertBefore(previewDiv,e.parentElement)
