@@ -5,7 +5,7 @@
 // @author      Brandon Beck
 // @license     MIT
 // @icon        https://mangadex.org/favicon-96x96.png
-// @version  0.2.9
+// @version  0.3.0
 // @grant    GM.getValue
 // @grant    GM.setValue
 // @grant    GM_getValue
@@ -556,6 +556,9 @@ function createPreviewCallbacks() {
     const maxAcceptableDelay = 10000
     const useFallbackPreview = false
     // Prepare form
+    if (!forum.parentElement) {
+      return undefined
+    }
     forum.parentElement.style.alignItems = 'flex-start'
     forum.parentElement.classList.add('d-flex')
     forum.parentElement.style.flexDirection = 'row-reverse'
@@ -569,15 +572,26 @@ function createPreviewCallbacks() {
     textarea.style.resize = 'both'
     // FIXME put textArea in avatar slot
     // FIXME set textarea maxheight. form should be 100vh max.
-    textarea.style.minWidth = '200px'
-    // textarea.style.width = '200px'
+    textarea.style.minWidth = '120px'
+    textarea.style.width = '25vw'
+    textarea.style.paddingLeft = '0'
+    textarea.style.paddingRight = '0'
     let [previewDiv ,astHtml] = makePreview(textarea.value)
+    forum.parentElement.insertBefore(previewDiv ,forum)
+    // Move editor to left column if in a thread.
+    const tableLeft = forum.parentElement.parentElement.firstElementChild
+    if (tableLeft !== forum.parentElement) {
+      if (tableLeft.firstChild.nodeName.toLowerCase() === 'img') {
+        tableLeft.firstChild.remove()
+        tableLeft.appendChild(forum)
+      }
+    }
     let currentSpoiler
     function searchAst(ast ,cpos) {
       // slice bc reverse is in place
       const a = ast.slice().reverse().find(e => e.location[0] <= cpos && cpos <= e.location[1])
       if (a) {
-        if (a.type == 'container') {
+        if (a.type === 'container') {
           // unhide spoilers
           // Ensure we are not a Text node and that we are a spoiler
           if (!currentSpoiler && a.element.nodeType !== 3
@@ -642,10 +656,6 @@ function createPreviewCallbacks() {
         scrollToPos()
       }
     })
-    if (!forum.parentElement) {
-      return undefined
-    }
-    forum.parentElement.insertBefore(previewDiv ,forum)
     function UpdatePreview() {
       // Measure load speed. Used for setting update delay dynamicly.
       const startTime = Date.now()

@@ -5,7 +5,7 @@
 // @author      Brandon Beck
 // @license     MIT
 // @icon        https://mangadex.org/favicon-96x96.png
-// @version  0.2.9
+// @version  0.3.0
 // @grant    GM.getValue
 // @grant    GM.setValue
 // @grant    GM_getValue
@@ -633,76 +633,93 @@ function createPreviewCallbacks() {
 
     const maxAcceptableDelay = 10000
     const useFallbackPreview = false
-        // Prepare form
-        forum.parentElement!.style.alignItems = 'flex-start'
-        forum.parentElement!.classList.add('d-flex')
-        ;(forum.parentElement as HTMLElement).style.flexDirection = 'row-reverse'
-        forum.style.position = 'sticky'
-        forum.style.top = '0px'
-        // Causes buttons to wrap on resize
-        forum.style.width = 'min-content'
-        // Padding keeps us from hitting the navbar. Margin lines us back up with the preview
-        forum.style.paddingTop = `${navHeight}px`
-        forum.style.marginTop = `-${navHeight}px`
-        textarea.style.resize = 'both'
-        // FIXME put textArea in avatar slot
-        // FIXME set textarea maxheight. form should be 100vh max.
-        textarea.style.minWidth = '200px'
-        // textarea.style.width = '200px'
-        let [previewDiv ,astHtml] = makePreview(textarea.value)
-        let currentSpoiler: undefined | HTMLParagraphElement
-        function searchAst(ast: AST_HTML_ELEMENT[] ,cpos: number): undefined | Text | HTMLElement {
-          // slice bc reverse is in place
-          const a = ast.slice().reverse().find(e => e.location[0] <= cpos && cpos <= e.location[1])
-          if (a) {
-            if (a.type == 'container') {
-              // unhide spoilers
-              // Ensure we are not a Text node and that we are a spoiler
-              if (!currentSpoiler && a.element.nodeType !== 3
+    // Prepare form
+    if (!forum.parentElement) {
+      return undefined
+    }
+    forum.parentElement.style.alignItems = 'flex-start'
+    forum.parentElement.classList.add('d-flex')
+    forum.parentElement.style.flexDirection = 'row-reverse'
+
+    forum.style.position = 'sticky'
+    forum.style.top = '0px'
+    // Causes buttons to wrap on resize
+    forum.style.width = 'min-content'
+    // Padding keeps us from hitting the navbar. Margin lines us back up with the preview
+    forum.style.paddingTop = `${navHeight}px`
+    forum.style.marginTop = `-${navHeight}px`
+    textarea.style.resize = 'both'
+    // FIXME put textArea in avatar slot
+    // FIXME set textarea maxheight. form should be 100vh max.
+    textarea.style.minWidth = '120px'
+    textarea.style.width = '25vw'
+    textarea.style.paddingLeft = '0'
+    textarea.style.paddingRight = '0'
+    let [previewDiv ,astHtml] = makePreview(textarea.value)
+    forum.parentElement.insertBefore(previewDiv ,forum)
+
+    // Move editor to left column if in a thread.
+    const tableLeft = forum.parentElement.parentElement!.firstElementChild!
+    if (tableLeft !== forum.parentElement) {
+      if (tableLeft.firstChild!.nodeName.toLowerCase() === 'img') {
+            tableLeft.firstChild!.remove()
+            tableLeft.appendChild(forum)
+      }
+    }
+
+    let currentSpoiler: undefined | HTMLParagraphElement
+    function searchAst(ast: AST_HTML_ELEMENT[] ,cpos: number): undefined | Text | HTMLElement {
+      // slice bc reverse is in place
+      const a = ast.slice().reverse().find(e => e.location[0] <= cpos && cpos <= e.location[1])
+      if (a) {
+        if (a.type === 'container') {
+          // unhide spoilers
+          // Ensure we are not a Text node and that we are a spoiler
+          if (!currentSpoiler && a.element.nodeType !== 3
             && (a.element as HTMLParagraphElement).classList.contains('spoiler')
             && (a.element as HTMLParagraphElement).style.display !== 'block'
-              ) {
-                currentSpoiler = a.element as HTMLParagraphElement
-                currentSpoiler.style.display = 'block'
-              }
-              const b = searchAst(a.contains ,cpos)
-              if (b) {
-                return b
-              }
-            }
-            return a.element
+          ) {
+            currentSpoiler = a.element as HTMLParagraphElement
+            currentSpoiler.style.display = 'block'
           }
-          return undefined
+          const b = searchAst(a.contains ,cpos)
+          if (b) {
+            return b
+          }
         }
-        // Auto scroll into view
-        function scrollToPos(pos = textarea!.selectionStart) {
-          // Hide previous spoiler
-          if (currentSpoiler) {
-            currentSpoiler.style.display = 'none'
-            currentSpoiler = undefined
-          }
-          // Get element from ast that starts closest to pos
-          const elm = searchAst(astHtml ,pos)
-          if (elm) {
-            // FIXME Scroll pos is a bit hard to find.
-            // getBoxQuads, getClientRect, getClientBoundingRect all give the offset from the viewport
-            // Height of child elements not calculated in...
-            // SAFE for (text)nodes?, not safe for elements with nested content
-            if (elm.nodeType === 3) {
-              // @ts-ignore
-              const { y } = (elm as Text).getBoxQuads()[0].p1
+        return a.element
+      }
+      return undefined
+    }
+    // Auto scroll into view
+    function scrollToPos(pos = textarea!.selectionStart) {
+      // Hide previous spoiler
+      if (currentSpoiler) {
+        currentSpoiler.style.display = 'none'
+        currentSpoiler = undefined
+      }
+      // Get element from ast that starts closest to pos
+      const elm = searchAst(astHtml ,pos)
+      if (elm) {
+        // FIXME Scroll pos is a bit hard to find.
+        // getBoxQuads, getClientRect, getClientBoundingRect all give the offset from the viewport
+        // Height of child elements not calculated in...
+        // SAFE for (text)nodes?, not safe for elements with nested content
+        if (elm.nodeType === 3) {
+          // @ts-ignore
+          const { y } = (elm as Text).getBoxQuads()[0].p1
                     // FIXME. Must be a better way to scroll (especialy in case of nested scroll frames)
                     // Scroll to top
                     document.scrollingElement!.scrollBy(0 ,y)
-            }
-            else {
-              // FIXME. Must be a better way to scroll (especialy in case of nested scroll frames)
-              // Scroll to ~ center directly
-              // const y: number = (elm as HTMLElement).offsetTop
-              // document.scrollingElement!.scrollTo({top:y})
-              // Scroll to top
-              (elm as HTMLElement).scrollIntoView()
-            }
+        }
+        else {
+          // FIXME. Must be a better way to scroll (especialy in case of nested scroll frames)
+          // Scroll to ~ center directly
+          // const y: number = (elm as HTMLElement).offsetTop
+          // document.scrollingElement!.scrollTo({top:y})
+          // Scroll to top
+          (elm as HTMLElement).scrollIntoView()
+        }
                 // Scroll out of nav
                 document.scrollingElement!.scrollBy(0 ,-navHeight)
                 // Add this line to scroll to center
@@ -711,69 +728,66 @@ function createPreviewCallbacks() {
                 const bound = (forum as HTMLFormElement).getBoundingClientRect()
                 // document.scrollingElement!.scrollBy(0,bound.bottom - bound.height)
                 document.scrollingElement!.scrollBy(0 ,bound.top)
-          }
-        }
-        textarea.addEventListener('selectionchange' ,() => {
-          // Only autoscroll if our ast is in sync with the preview.
-          if (curDisplayedVersion === nextVersion - 1
+      }
+    }
+    textarea.addEventListener('selectionchange' ,() => {
+      // Only autoscroll if our ast is in sync with the preview.
+      if (curDisplayedVersion === nextVersion - 1
         && astHtml[astHtml.length - 1] != null
         && astHtml[astHtml.length - 1].location[1] === textarea.value.length
-          ) {
-            scrollToPos()
+      ) {
+        scrollToPos()
+      }
+    })
+
+    function UpdatePreview() {
+      // Measure load speed. Used for setting update delay dynamicly.
+      const startTime = Date.now()
+      // Create a preview buffer
+      const thisVersion = nextVersion++
+      const [newPreview ,newAstHtml] = makePreview(textarea!.value)
+
+      // Setup spoilers the same way md does
+      $(newPreview).find('.btn-spoiler').click(function () {
+        // @ts-ignore
+        $(this as HTMLButtonElement).next('.spoiler').toggle()
+      })
+      // previewDiv, astHtml
+      const imgLoadPromises: Promise<any>[] = []
+      Object.values(newPreview.querySelectorAll('img')).forEach((img: HTMLImageElement) => {
+        imgLoadPromises.push(new Promise((resolve) => {
+          img.addEventListener('load' ,resolve)
+          // Errors dont really matter to us
+          img.addEventListener('error' ,resolve)
+          // Esure we are not already done
+          if (img.complete) {
+            resolve()
           }
-        })
-        if (!forum.parentElement) {
-          return undefined
+        }))
+      })
+      // Wait for all images to load or error (size calculations needed) before we swap and rescroll
+      // This is the part that actualy updates the preview
+      Promise.all(imgLoadPromises).then(() => {
+        const endTime = Date.now()
+        const updateLoadDelay = endTime - startTime
+        if (!useFallbackPreview && updateLoadDelay > maxAcceptableDelay) {
+          // NOTE: Fallback preview removed. Focusing on speed improvments of normal preview
+          // useFallbackPreview = true
+          // dbg(`It took ${updateLoadDelay} milli to update. Max acceptable delay was ${maxAcceptableDelay}! Switching to fallback preview!`)
+          // We intentionally do not update the timout delay when we swap to fallback preview
         }
-        forum.parentElement.insertBefore(previewDiv ,forum)
-        function UpdatePreview() {
-          // Measure load speed. Used for setting update delay dynamicly.
-          const startTime = Date.now()
-          // Create a preview buffer
-          const thisVersion = nextVersion++
-          const [newPreview ,newAstHtml] = makePreview(textarea!.value)
+        else {
+          // average out the times
+          updateTimeoutDelay = (updateTimeoutDelay + updateLoadDelay) / 2
+          // dbg(`It took ${updateLoadDelay} milli to update. Changing delay to ${updateTimeoutDelay} `)
+        }
 
-          // Setup spoilers the same way md does
-          $(newPreview).find('.btn-spoiler').click(function () {
-            // @ts-ignore
-            $(this as HTMLButtonElement).next('.spoiler').toggle()
-          })
-          // previewDiv, astHtml
-          const imgLoadPromises: Promise<any>[] = []
-          Object.values(newPreview.querySelectorAll('img')).forEach((img: HTMLImageElement) => {
-            imgLoadPromises.push(new Promise((resolve) => {
-              img.addEventListener('load' ,resolve)
-              // Errors dont really matter to us
-              img.addEventListener('error' ,resolve)
-              // Esure we are not already done
-              if (img.complete) {
-                resolve()
-              }
-            }))
-          })
-          // Wait for all images to load or error (size calculations needed) before we swap and rescroll
-          // This is the part that actualy updates the preview
-          Promise.all(imgLoadPromises).then(() => {
-            const endTime = Date.now()
-            const updateLoadDelay = endTime - startTime
-            if (!useFallbackPreview && updateLoadDelay > maxAcceptableDelay) {
-              // NOTE: Fallback preview removed. Focusing on speed improvments of normal preview
-              // useFallbackPreview = true
-              // dbg(`It took ${updateLoadDelay} milli to update. Max acceptable delay was ${maxAcceptableDelay}! Switching to fallback preview!`)
-              // We intentionally do not update the timout delay when we swap to fallback preview
-            }
-            else {
-              // average out the times
-              updateTimeoutDelay = (updateTimeoutDelay + updateLoadDelay) / 2
-              // dbg(`It took ${updateLoadDelay} milli to update. Changing delay to ${updateTimeoutDelay} `)
-            }
-
-            // Return if we are older than cur preview
-            if (thisVersion < curDisplayedVersion) {
-              newPreview.remove()
-              return
-            }
-            curDisplayedVersion = thisVersion
+        // Return if we are older than cur preview
+        if (thisVersion < curDisplayedVersion) {
+          newPreview.remove()
+          return
+        }
+        curDisplayedVersion = thisVersion
                 // Replace the Preview with the buffered content
                 previewDiv.parentElement!.insertBefore(newPreview ,previewDiv)
                 previewDiv.remove()
@@ -781,20 +795,20 @@ function createPreviewCallbacks() {
                 astHtml = newAstHtml
                 // Scroll to position
                 scrollToPos()
-          })
-        }
-        function UpdatePreviewProxy() {
-          // dbg(`Reseting timeout with delay ${updateTimeoutDelay} `)
-          clearTimeout(updateTimeout)
-          // @ts-ignore
-          updateTimeout = setTimeout(UpdatePreview ,updateTimeoutDelay)
-        }
+      })
+    }
+    function UpdatePreviewProxy() {
+      // dbg(`Reseting timeout with delay ${updateTimeoutDelay} `)
+      clearTimeout(updateTimeout)
+      // @ts-ignore
+      updateTimeout = setTimeout(UpdatePreview ,updateTimeoutDelay)
+    }
 
-        const buttons = Object.values(forum.querySelectorAll('button'))
-        buttons.forEach((btn) => {
-          btn.addEventListener('click' ,UpdatePreviewProxy)
-        })
-        textarea.oninput = UpdatePreviewProxy
+    const buttons = Object.values(forum.querySelectorAll('button'))
+    buttons.forEach((btn) => {
+      btn.addEventListener('click' ,UpdatePreviewProxy)
+    })
+    textarea.oninput = UpdatePreviewProxy
   })
 }
 
