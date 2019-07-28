@@ -10,6 +10,7 @@
   export var GM_setClipboard: typeof GM.setClipboard
   export var GM_xmlhttpRequest: typeof GM.xmlHttpRequest
 } */
+/* eslint strict: ["off"] */
 declare namespace GM {
   interface Response<TContext> {
       readonly responseHeaders: string;
@@ -34,4 +35,4 @@ declare var GM_getResourceUrl: typeof GM.getResourceUrl
 declare var GM_notification: typeof GM.notification
 declare var GM_openInTab: typeof GM.openInTab
 declare var GM_setClipboard: typeof GM.setClipboard
-declare var GM_xmlhttpRequest: typeof GM.xmlHttpRequest
+declare function GM_xmlhttpRequest(details: GM.Request): {abort(): void}
