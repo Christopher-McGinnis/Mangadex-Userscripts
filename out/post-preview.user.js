@@ -5,7 +5,7 @@
 // @author      Brandon Beck
 // @license     MIT
 // @icon        https://mangadex.org/favicon-96x96.png
-// @version  0.2.8
+// @version  0.2.9
 // @grant    GM.getValue
 // @grant    GM.setValue
 // @grant    GM_getValue
@@ -134,10 +134,12 @@ Expressions = reses:Expression+ {
       if (astcur.tag == "*") {
         // FIXME are we supposed to subtract 1 here?
         astcur.location[1] = res.location[0] // - 1
+        // Are Linebreaks added when we are exiting a prefix? Seems like it!
+        // Not sure why though...
+        astcur.content.push(res)
         stack.pop()
         astcur=stack[stack.length -1]
       }
-      // Linebreaks are only added when we are not exiting a prefix
       else {
         astcur.location[1] = res.location[1]
         astcur.content.push(res)
@@ -249,10 +251,10 @@ function pegAstToHtml_v2(ast) {
     })
   }
   const res = ast.reduce((accum ,e) => {
-    if (e.type == 'text') {
+    if (e.type === 'text') {
       pushIt(accum ,e ,document.createTextNode(e.content))
     }
-    else if (e.type == 'linebreak') {
+    else if (e.type === 'linebreak') {
       // pushIt(accum, e, document.createElement('br'), 'container')
       const element = {
         element: document.createElement('br')
@@ -262,21 +264,21 @@ function pegAstToHtml_v2(ast) {
       }
       accum.push(element)
     }
-    else if (e.type == 'error') {
+    else if (e.type === 'error') {
       pushIt(accum ,e ,document.createTextNode(e.content))
     }
     // Everything after this must have a tag attribute!
     // not nesting to avoid right shift
-    else if (!(e.type == 'open' || e.type == 'prefix' || e.type == 'opendata')) {
+    else if (!(e.type === 'open' || e.type === 'prefix' || e.type === 'opendata')) {
       // @ts-ignore: Not a string, but doesn't need to be. Make or edit type
       throw new Error({
         msg: `Unknown AST type "${e.type}" recieved!` ,child_ast: e ,container_ast: ast
       })
     }
-    else if (e.tag === 'u' || e.tag == 's' || e.tag == 'sub'
-            || e.tag == 'sup' || e.tag == 'ol' || e.tag == 'code'
-            || e.tag == 'h1' || e.tag == 'h2' || e.tag == 'h3'
-            || e.tag == 'h4' || e.tag == 'h5' || e.tag == 'h6') {
+    else if (e.tag === 'u' || e.tag === 's' || e.tag === 'sub'
+            || e.tag === 'sup' || e.tag === 'ol' || e.tag === 'code'
+            || e.tag === 'h1' || e.tag === 'h2' || e.tag === 'h3'
+            || e.tag === 'h4' || e.tag === 'h5' || e.tag === 'h6') {
       const element = {
         element: document.createElement(e.tag)
         ,location: e.location
@@ -410,7 +412,6 @@ function pegAstToHtml_v2(ast) {
       accum.push(element)
     }
     else if (e.tag === 'quote') {
-      // accum += `<div style="width: 100%; display: inline-block; margin: 1em 0;" class="well well-sm">${pegAstToHtml(e.content)}</div>`
       const element = {
         element: document.createElement('div')
         ,location: e.location
@@ -428,8 +429,6 @@ function pegAstToHtml_v2(ast) {
       })
     }
     else if (e.tag === 'spoiler') {
-      // FIXME: Spoiler buttons are nested, however, spoiler divs are TopLevel only!
-      // accum += `<button type="button" class="btn btn-sm btn-warning btn-spoiler">Spoiler</button><p class="spoiler display-none">${pegAstToHtml(e.content)}</p>`
       const button = {
         element: document.createElement('button')
         ,location: e.location
@@ -440,7 +439,7 @@ function pegAstToHtml_v2(ast) {
       button.element.classList.add('btn' ,'btn-sm' ,'btn-warning' ,'btn-spoiler')
       accum.push(button)
       const element = {
-        element: document.createElement('p')
+        element: document.createElement('div')
         ,location: e.location
         ,type: 'container'
         ,contains: []
@@ -451,6 +450,7 @@ function pegAstToHtml_v2(ast) {
       element.contains.forEach((child_ast_element) => {
         element.element.appendChild(child_ast_element.element)
       })
+      // NOTE: The world was fixed and mended together! This might be equivilent now
       /* In a perfect world. it would work like this... but md is a bit broken
             ;(button.element as HTMLButtonElement).addEventListener('click',()=>{
               ;(element.element as HTMLDivElement).classList.toggle('display-none')
@@ -460,7 +460,7 @@ function pegAstToHtml_v2(ast) {
     else if (e.tag === 'center' || e.tag === 'left' || e.tag === 'right') {
       // accum += `<p class="text-center">${pegAstToHtml(e.content)}</p>`
       const element = {
-        element: document.createElement('p')
+        element: document.createElement('div')
         ,location: e.location
         ,type: 'container'
         ,contains: []
@@ -472,10 +472,7 @@ function pegAstToHtml_v2(ast) {
         element.element.appendChild(child_ast_element.element)
       })
     }
-    else if (e.tag == '*') {
-      // must parse the inside for v2
-      // accum += `<li>${pegAstToHtml( bbcodePegParser.parse(e.unparse) )}</li>`
-      // accum += `<li>${pegAstToHtml(e.content)}</li>`
+    else if (e.tag === '*') {
       const element = {
         element: document.createElement('li')
         ,location: e.location
@@ -495,7 +492,7 @@ function pegAstToHtml_v2(ast) {
       })
     }
     else {
-      // FIXME: Does this even happed
+      // FIXME: Does this even happen?
       throw Error(`Recieved unknown and unhandeled ast entry '${JSON.stringify(e)}'`)
       /* accum.push({
               type: 'text'
@@ -505,6 +502,13 @@ function pegAstToHtml_v2(ast) {
     }
     return accum
   } ,[])
+  /* TODO: Implement
+    res.filter(e => e.element.nodeName.toLowerCase() !== 'button')
+      .forEach((e) => {
+        e.element.addEventListener('click' ,() => {
+          selectTextAreaPosition(e.location[0])
+        })
+      }) */
   return res
 }
 function makePreview(txt) {
@@ -519,7 +523,11 @@ function createPreviewInterface(forum) {
   const previewDiv = document.createElement('div')
   previewDiv.style.flexGrow = '1'
   container.style.alignItems = 'flex-start'
-  container.classList.add('d-flex' ,'')
+  container.classList.add('d-flex')
+  // Conform to MD style
+  previewDiv.classList.add('postbody' ,'mb-3' ,'mt-4')
+  container.classList.remove('p-3')
+  container.classList.add('pb-3')
   container.insertBefore(previewDiv ,forum)
 }
 function createPreviewCallbacks() {
@@ -553,9 +561,16 @@ function createPreviewCallbacks() {
     forum.parentElement.style.flexDirection = 'row-reverse'
     forum.style.position = 'sticky'
     forum.style.top = '0px'
+    // Causes buttons to wrap on resize
+    forum.style.width = 'min-content'
+    // Padding keeps us from hitting the navbar. Margin lines us back up with the preview
     forum.style.paddingTop = `${navHeight}px`
     forum.style.marginTop = `-${navHeight}px`
     textarea.style.resize = 'both'
+    // FIXME put textArea in avatar slot
+    // FIXME set textarea maxheight. form should be 100vh max.
+    textarea.style.minWidth = '200px'
+    // textarea.style.width = '200px'
     let [previewDiv ,astHtml] = makePreview(textarea.value)
     let currentSpoiler
     function searchAst(ast ,cpos) {
@@ -628,7 +643,7 @@ function createPreviewCallbacks() {
       }
     })
     if (!forum.parentElement) {
-      return
+      return undefined
     }
     forum.parentElement.insertBefore(previewDiv ,forum)
     function UpdatePreview() {

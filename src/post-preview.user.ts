@@ -5,7 +5,7 @@
 // @author      Brandon Beck
 // @license     MIT
 // @icon        https://mangadex.org/favicon-96x96.png
-// @version  0.2.8
+// @version  0.2.9
 // @grant    GM.getValue
 // @grant    GM.setValue
 // @grant    GM_getValue
@@ -182,10 +182,12 @@ Expressions = reses:Expression+ {
       if (astcur.tag == "*") {
         // FIXME are we supposed to subtract 1 here?
         astcur.location[1] = res.location[0] // - 1
+        // Are Linebreaks added when we are exiting a prefix? Seems like it!
+        // Not sure why though...
+        astcur.content.push(res)
         stack.pop()
         astcur=stack[stack.length -1]
       }
-      // Linebreaks are only added when we are not exiting a prefix
       else {
         astcur.location[1] = res.location[1]
         astcur.content.push(res)
@@ -597,7 +599,11 @@ function createPreviewInterface(forum: HTMLElement) {
   const previewDiv = document.createElement('div')
   previewDiv.style.flexGrow = '1'
   container.style.alignItems = 'flex-start'
-  container.classList.add('d-flex' ,'')
+  container.classList.add('d-flex')
+  // Conform to MD style
+  previewDiv.classList.add('postbody' ,'mb-3' ,'mt-4')
+  container.classList.remove('p-3')
+  container.classList.add('pb-3')
   container.insertBefore(previewDiv ,forum)
 }
 
@@ -606,7 +612,7 @@ function createPreviewCallbacks() {
   // @ts-ignore
   const navHeight = nav ? nav.getBoxQuads()[0].p4.y : 0
   // let image_buffers: Map<string, Blob>
-  let forms = Object.values(document.querySelectorAll('.post_edit_form'))
+  let forms: HTMLElement[] = Object.values(document.querySelectorAll('.post_edit_form'))
   forms = forms.concat(Object.values(document.querySelectorAll('#post_reply_form')))
   forms = forms.concat(Object.values(document.querySelectorAll('#change_profile_form, #start_thread_form')))
   // FIXME Format change_profile_form better
@@ -631,12 +637,18 @@ function createPreviewCallbacks() {
         forum.parentElement!.style.alignItems = 'flex-start'
         forum.parentElement!.classList.add('d-flex')
         ;(forum.parentElement as HTMLElement).style.flexDirection = 'row-reverse'
-        ;(forum as HTMLElement).style.position = 'sticky'
-        ;(forum as HTMLElement).style.top = '0px'
+        forum.style.position = 'sticky'
+        forum.style.top = '0px'
+        // Causes buttons to wrap on resize
+        forum.style.width = 'min-content'
         // Padding keeps us from hitting the navbar. Margin lines us back up with the preview
-        ;(forum as HTMLElement).style.paddingTop = `${navHeight}px`
-        ;(forum as HTMLElement).style.marginTop = `-${navHeight}px`
+        forum.style.paddingTop = `${navHeight}px`
+        forum.style.marginTop = `-${navHeight}px`
         textarea.style.resize = 'both'
+        // FIXME put textArea in avatar slot
+        // FIXME set textarea maxheight. form should be 100vh max.
+        textarea.style.minWidth = '200px'
+        // textarea.style.width = '200px'
         let [previewDiv ,astHtml] = makePreview(textarea.value)
         let currentSpoiler: undefined | HTMLParagraphElement
         function searchAst(ast: AST_HTML_ELEMENT[] ,cpos: number): undefined | Text | HTMLElement {
