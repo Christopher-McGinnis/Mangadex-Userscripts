@@ -5,7 +5,7 @@
 // @author      Christopher McGinnis
 // @license     MIT
 // @icon        https://mangadex.org/favicon-96x96.png
-// @version  0.3.0
+// @version  0.3.1
 // @grant    GM.getValue
 // @grant    GM.setValue
 // @grant    GM_getValue
@@ -552,7 +552,7 @@ function createPreviewCallbacks() {
     let curDisplayedVersion = 0
     let nextVersion = 1
     let updateTimeout
-    let updateTimeoutDelay = 500
+    let updateTimeoutDelay = 50
     const maxAcceptableDelay = 10000
     const useFallbackPreview = false
     // Prepare form
