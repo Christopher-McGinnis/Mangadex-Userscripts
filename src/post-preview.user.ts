@@ -321,10 +321,10 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
   }
 
   const res = ast.reduce((accum: AST_HTML_ELEMENT[] ,e) => {
-    if (e.type == 'text') {
+    if (e.type === 'text') {
       pushIt(accum ,e ,document.createTextNode(e.content))
     }
-    else if (e.type == 'linebreak') {
+    else if (e.type === 'linebreak') {
       // pushIt(accum, e, document.createElement('br'), 'container')
       const element: AST_HTML_ELEMENT = {
         element: document.createElement('br')
@@ -334,21 +334,21 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
       }
       accum.push(element)
     }
-    else if (e.type == 'error') {
+    else if (e.type === 'error') {
       pushIt(accum ,e ,document.createTextNode(e.content))
     }
     // Everything after this must have a tag attribute!
     // not nesting to avoid right shift
-    else if (!(e.type == 'open' || e.type == 'prefix' || e.type == 'opendata')) {
+    else if (!(e.type === 'open' || e.type === 'prefix' || e.type === 'opendata')) {
       // @ts-ignore: Not a string, but doesn't need to be. Make or edit type
       throw new Error({
         msg: `Unknown AST type "${e.type}" recieved!` ,child_ast: e ,container_ast: ast
       })
     }
-    else if (e.tag === 'u' || e.tag == 's' || e.tag == 'sub'
-      || e.tag == 'sup' || e.tag == 'ol' || e.tag == 'code'
-      || e.tag == 'h1' || e.tag == 'h2' || e.tag == 'h3'
-      || e.tag == 'h4' || e.tag == 'h5' || e.tag == 'h6'
+    else if (e.tag === 'u' || e.tag === 's' || e.tag === 'sub'
+      || e.tag === 'sup' || e.tag === 'ol' || e.tag === 'code'
+      || e.tag === 'h1' || e.tag === 'h2' || e.tag === 'h3'
+      || e.tag === 'h4' || e.tag === 'h5' || e.tag === 'h6'
     ) {
       const element: AST_HTML_ELEMENT = {
         element: document.createElement(e.tag)
@@ -483,7 +483,6 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
       accum.push(element)
     }
     else if (e.tag === 'quote') {
-      // accum += `<div style="width: 100%; display: inline-block; margin: 1em 0;" class="well well-sm">${pegAstToHtml(e.content)}</div>`
       const element: AST_HTML_ELEMENT = {
         element: document.createElement('div')
         ,location: e.location
@@ -501,8 +500,6 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
       })
     }
     else if (e.tag === 'spoiler') {
-      // FIXME: Spoiler buttons are nested, however, spoiler divs are TopLevel only!
-      // accum += `<button type="button" class="btn btn-sm btn-warning btn-spoiler">Spoiler</button><p class="spoiler display-none">${pegAstToHtml(e.content)}</p>`
       const button: AST_HTML_ELEMENT = {
         element: document.createElement('button')
         ,location: e.location
@@ -513,7 +510,7 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
       ;(button.element as HTMLButtonElement).classList.add('btn' ,'btn-sm' ,'btn-warning' ,'btn-spoiler')
       accum.push(button)
       const element: AST_HTML_ELEMENT = {
-        element: document.createElement('p')
+        element: document.createElement('div')
         ,location: e.location
         ,type: 'container'
         ,contains: []
@@ -524,6 +521,7 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
       element.contains.forEach((child_ast_element) => {
         element.element.appendChild(child_ast_element.element)
       })
+      // NOTE: The world was fixed and mended together! This might be equivilent now
       /* In a perfect world. it would work like this... but md is a bit broken
       ;(button.element as HTMLButtonElement).addEventListener('click',()=>{
         ;(element.element as HTMLDivElement).classList.toggle('display-none')
@@ -533,7 +531,7 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
     else if (e.tag === 'center' || e.tag === 'left' || e.tag === 'right') {
       // accum += `<p class="text-center">${pegAstToHtml(e.content)}</p>`
       const element: AST_HTML_ELEMENT = {
-        element: document.createElement('p')
+        element: document.createElement('div')
         ,location: e.location
         ,type: 'container'
         ,contains: []
@@ -545,10 +543,7 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
         element.element.appendChild(child_ast_element.element)
       })
     }
-    else if (e.tag == '*') {
-      // must parse the inside for v2
-      // accum += `<li>${pegAstToHtml( bbcodePegParser.parse(e.unparse) )}</li>`
-      // accum += `<li>${pegAstToHtml(e.content)}</li>`
+    else if (e.tag === '*') {
       const element: AST_HTML_ELEMENT = {
         element: document.createElement('li')
         ,location: e.location
@@ -568,7 +563,7 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
       })
     }
     else {
-      // FIXME: Does this even happed
+      // FIXME: Does this even happen?
       throw Error(`Recieved unknown and unhandeled ast entry '${JSON.stringify(e)}'`)
       /* accum.push({
         type: 'text'
@@ -578,6 +573,13 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
     }
     return accum
   } ,[])
+  /* TODO: Implement
+  res.filter(e => e.element.nodeName.toLowerCase() !== 'button')
+    .forEach((e) => {
+      e.element.addEventListener('click' ,() => {
+        selectTextAreaPosition(e.location[0])
+      })
+    }) */
   return res
 }
 
@@ -709,7 +711,7 @@ function createPreviewCallbacks() {
           }
         })
         if (!forum.parentElement) {
-          return
+          return undefined
         }
         forum.parentElement.insertBefore(previewDiv ,forum)
         function UpdatePreview() {
