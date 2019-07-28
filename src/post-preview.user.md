@@ -4,6 +4,7 @@ ___
 [![Install with GreasyFork](https://img.shields.io/static/v1.svg?style=popout-square&label=Install%20with&message=GreasyFork&color=red)](https://greasyfork.org/en/scripts/381831-mangadex-preview-post) [![View On Github](https://img.shields.io/static/v1.svg?style=for-the-badge&logo=GitHub&label=&message=View%20Code&color=grey)](https://github.com/Brandon-Beck/Mangadex-Userscripts)
 
 As one of the more complex bbcode users, I am rather confident this supports everything you normal people want.
+
 Preview
 ---
 
