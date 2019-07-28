@@ -5,8 +5,7 @@
 // @author      Brandon Beck
 // @license     MIT
 // @icon        https://mangadex.org/favicon-96x96.png
-// @version  0.2.7
-// @grant    unsafeWindow
+// @version  0.2.8
 // @grant    GM.getValue
 // @grant    GM.setValue
 // @grant    GM_getValue
@@ -37,7 +36,7 @@ function getImageBlob(url) {
         ,onerror: err
         ,ontimeout: err
         ,onload: (response) => {
-          if ((response.status == 200 || response.status == 304) && response.response) {
+          if ((response.status === 200 || response.status === 304) && response.response) {
             imageBlobs[url] = Promise.resolve(response.response)
             return ret(imageBlobs[url])
           }
@@ -56,15 +55,7 @@ function getImageBlob(url) {
     }) */
 }
 function getImageObjectURL(url) {
-  return getImageBlob(url).then(b =>
-    /* For converting them into data-uris. Not too useful.
-    const a = new FileReader()
-    a.onload = (e) => {
-      console.log(a.result)
-    }
-    a.readAsDataURL(b)
-    */
-    URL.createObjectURL(b))
+  return getImageBlob(url).then(b => URL.createObjectURL(b))
 }
 /* PEG grammer */
 // New version will enable:
@@ -180,7 +171,7 @@ OpenCloseTag = open:(OpenTag / OpenDataTag) content:Expression? close:CloseTag?
       throw new Error(
           "Expected [/" + open.tag + "] but [/" + close.tag + "] found."
       );
-	}
+    }
     return true
 } {
     return {type:open.tag, data:open.attr, content}
@@ -517,17 +508,10 @@ function pegAstToHtml_v2(ast) {
   return res
 }
 function makePreview(txt) {
-  // dbg(pegAstToHtml(bbcodePegParser.parse(txt)))
-  // Faster, but less dynamic
-  // let html = bbCodeParser.parse(txt)
-  // Slower, but more dynamic
-  // let html = pegAstToHtml(bbcodePegParser.parse(txt))
   const astHtml = pegAstToHtml_v2(bbcodePegParser_v2.parse(txt))
-  // dbg(JSON.stringify(bbcodePegParser_v2.parse(txt)))
   const previewDiv = document.createElement('div')
   previewDiv.style.flexGrow = '1'
   astHtml.forEach(e => previewDiv.appendChild(e.element))
-  // tmpl.innerHTML = html
   return [previewDiv ,astHtml]
 }
 function createPreviewInterface(forum) {
@@ -573,7 +557,6 @@ function createPreviewCallbacks() {
     forum.style.marginTop = `-${navHeight}px`
     textarea.style.resize = 'both'
     let [previewDiv ,astHtml] = makePreview(textarea.value)
-    console.log(astHtml)
     let currentSpoiler
     function searchAst(ast ,cpos) {
       // slice bc reverse is in place
@@ -607,7 +590,6 @@ function createPreviewCallbacks() {
       // Get element from ast that starts closest to pos
       const elm = searchAst(astHtml ,pos)
       if (elm) {
-        console.log(elm)
         // FIXME Scroll pos is a bit hard to find.
         // getBoxQuads, getClientRect, getClientBoundingRect all give the offset from the viewport
         // Height of child elements not calculated in...
@@ -639,8 +621,6 @@ function createPreviewCallbacks() {
     }
     textarea.addEventListener('selectionchange' ,() => {
       // Only autoscroll if our ast is in sync with the preview.
-      console.log(astHtml[astHtml.length - 1])
-      console.log(astHtml[astHtml.length - 1].location)
       if (curDisplayedVersion === nextVersion - 1
                 && astHtml[astHtml.length - 1] != null
                 && astHtml[astHtml.length - 1].location[1] === textarea.value.length) {
