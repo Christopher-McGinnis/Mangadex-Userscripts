@@ -13,6 +13,9 @@
 // @require     https://gitcdn.xyz/repo/rsmbl/Resemble.js/db6f0b8298b4865c0d28ff68fab842254a249b9d/resemble.js
 // ==/UserScript==
 
+// Temporarily using github directly due to issues
+// @require     https://gitcdn.xyz/repo/evidentpoint/buffer-image-size/92d014e394c05542c320c94c7d7f2b23ad449330/lib/index.js
+
 // No longer needed
 // @grant unsafeWindow
 
@@ -30,9 +33,45 @@
 // AmazonID = document.querySelectorAll('[data-component-type="s-search-results"] .s-result-list.s-search-results > div').dataset.asin
 // Link = `https://www.amazon.co.jp/dp/${AmazonID}`
 
+/* AMAZON Volume Page Cover Search
+// Comic version
+P.when("ImageBlockATF").execute((b)=>{console.log(b.imageGalleryData[0].mainUrl)}) ;
+console.log(document.querySelectorAll('.sims-fbt-image'));
+// Kindel version
+
+Object.values(document.querySelectorAll('.a-carousel [data-a-dynamic-image]')).map(e=>e.src.match(/\/I\/([^.]+).*\.([^.]+)$/)).filter(e=>e!=undefined).filter(([,id,ext])=>id.startsWith('91')).map(([,id,ext])=>`https://images-na.ssl-images-amazon.com/images/I/${id}.${ext}`).map(url=>{const img = document.createElement('img')
+img.crossOrigin = "Anonymous"
+//fetch(url).then((r)=>r.blob()).then(b=>img.src= URL.createObjectURL(b))
+img.src=url
+return img}).map(img=>{document.body.appendChild(img)
+return img})
+
+
+// Combined
+//let comicImg
+//P.when("ImageBlockATF").execute((b)=>{comicImg=b.imageGalleryData[0].mainUrl}) ;
+Object.values(
+//[
+//comicImg
+//...document.querySelectorAll('img.sims-fbt-image')
+//,...document.querySelectorAll('.a-carousel img[data-a-dynamic-image]')
+//]
+document.querySelectorAll('img')
+).map(e=>e.src.match(/\/I\/([^.]+).*\.([^.]+)$/)).filter(e=>e!=undefined).filter(([,id,ext])=>id.match(/^[6789]1/)!=undefined).map(([,id,ext])=>`https://images-na.ssl-images-amazon.com/images/I/${id}.${ext}`).map(url=>{const img = document.createElement('img')
+img.crossOrigin = "Anonymous"
+//fetch(url).then((r)=>r.blob()).then(b=>img.src= URL.createObjectURL(b))
+img.src=url
+return img}).map(img=>{document.body.appendChild(img)
+return img})
+
+*/
+
 /* eslint no-param-reassign: ["error", { "props": true, "ignorePropertyModificationsFor": ["serialData","serialDataAll","serialDataOrig"] }] */
 
 'use strict'
+
+// const sizeOf = require('../node_modules/buffer-image-size/lib/index.js')
+// require('buffer')
 
 /*
 declare interface pica {
@@ -44,9 +83,16 @@ declare interface pica {
 export {}
 declare interface Resemble {
 }
-declare const resemble: (file:Blob)=>any
+declare const resemble: {
+  compare: (
+    file: Blob
+    ,file2: Blob
+    ,options: any
+    ,callback: (err:any ,data:any)=>any
+  ) => any
+}
 
-function compareImages(image1 ,image2 ,options) {
+function compareImages(image1: Blob ,image2: Blob ,options: any) {
   return new Promise((resolve ,reject) => {
     resemble.compare(image1 ,image2 ,options ,(err ,data) => {
       if (err) {
@@ -76,9 +122,14 @@ async function imagePixelsAreComparable(coverP:Promise<Blob> ,previewP:Promise<B
 
 
 // Type corrections
-interface BetterBlob extends Blob {
-  arrayBuffer(): Promise<ArrayBuffer>
+
+interface ImageSizeInfo {
+    width: number
+    height: number
+    type: string
 }
+
+// declare function sizeOf(buffer: Buffer): ImageSizeInfo;
 
 const ERROR_IMG = 'https://i.postimg.cc/4NbKcsP6/404.gif'
 // const LOADING_IMG = 'https://i.redd.it/ounq1mw5kdxy.gif'
@@ -133,6 +184,20 @@ class PromiseIteratorEndError extends Error {
 }
 class PromiseIteratorBreakError extends Error {
   name = 'PromiseIteratorBreakError'
+}
+class PromiseIteratorContinueError extends Error {
+  name = 'PromiseIteratorContinueError'
+}
+class DebugableError extends Error {
+  name = 'DebugableError'
+
+  object: any
+
+  constructor(message: string ,object?: any) {
+    super(message)
+    this.object = object
+    console.error(object)
+  }
 }
 
 
@@ -211,20 +276,17 @@ function fetchDom(url: string) {
 }
 
 // Image Utilities
-async function isComparableAspectRatio(coverPromise: Promise<HTMLImageElement> ,previewPromise: Promise<HTMLImageElement> ,tollerance: number = 1): Promise<boolean> {
+function isComparableAspectRatio(coverNaturalWidth: number ,coverNaturalHeight: number ,previewNaturalWidth: number ,previewNaturalHeight: number ,tollerance: number = 1): boolean {
   // Reject failed images
-  const cover = await coverPromise
-  const preview = await previewPromise
-  if (cover.naturalWidth === 0 || cover.naturalHeight === 0) {
-    console.log('0 size image')
+  if (coverNaturalWidth === 0 || coverNaturalHeight === 0) {
     return false
   }
-
-  const widthDelta = preview.naturalWidth / cover.naturalWidth
-  const convertW = cover.naturalWidth * widthDelta
-  const convertH = cover.naturalHeight * widthDelta
-  if (preview.naturalHeight > convertH + tollerance || preview.naturalHeight < convertH - tollerance) {
-    console.log(`Rejecting height preview: ${preview.naturalHeight} cover: ${cover.naturalHeight} = conv: ${convertH}`)
+  // const previewNaturalWidth = preview.naturalWidth
+  // const previewNaturalHeight = preview.naturalHeight
+  const widthDelta = previewNaturalWidth / coverNaturalWidth
+  const convertW = coverNaturalWidth * widthDelta
+  const convertH = coverNaturalHeight * widthDelta
+  if (previewNaturalHeight > convertH + tollerance || previewNaturalHeight < convertH - tollerance) {
     return false
   }
   return true
@@ -375,7 +437,7 @@ async function toImgPromiseIgnoreCORS(uri: string | Blob | Promise<Blob> | HTMLI
     }
     img.onerror = (e) => {
       URL.revokeObjectURL(src)
-      err(e)
+      err(Error(e.toString()))
     }
     img.src = src
   })
@@ -442,14 +504,157 @@ function toImgPromise(uri: string | Blob | HTMLImageElement): Promise<HTMLImageE
     if (img.src !== src) img.src = src
   })
 }
+/* function toBuffer(ab: ArrayBuffer) {
+  const buf = Buffer.alloc(ab.byteLength)
+  const view = new Uint8Array(ab)
+  for (let i = 0; i < buf.length; ++i) {
+    buf[i] = view[i]
+  }
+  return buf
+} */
+function checkValidURL(url: string): Promise<true> {
+  return new Promise((ret ,err) => {
+    const request = GM_xmlhttpRequest({
+      method: 'HEAD'
+      ,url
+      ,onerror: err
+      ,ontimeout: err
+      ,onload: (response) => {
+        if (!(response.status >= 200 && response.status <= 299)) {
+          return err(Error(response.statusText))
+        }
+        return ret(true)
+      }
+    })
+  })
+}
+function getPartialBlob(url: string ,startByte: number ,endByte?: number): Promise<GM.Response<Blob>> {
+  return new Promise((ret ,err) => {
+    const request = GM_xmlhttpRequest({
+      method: 'GET'
+      ,url
+      ,responseType: 'blob'
+      ,onerror: err
+      ,ontimeout: err
+      ,headers: { Range: `bytes=${startByte}-${endByte !== undefined ? endByte : ''}` }
+      ,onload: (response) => {
+        if (!(response.status >= 200 && response.status <= 299)) {
+          return err(Error(response.statusText))
+        }
+        return ret(response)
+      }
+    })
+  })
+}
 
-function getCoverFromRid(rid: number): Promise<{img: Promise<HTMLImageElement> ,blob?: Blob}> {
+async function getImgIncrementaly(url:string ,previewPromise: Promise<HTMLImageElement> ,imgPart: Blob = new Blob() ,downloadToCompletion: boolean = false): Promise<{img: Promise<HTMLImageElement> ,blob: Blob}> {
+  // Downloads in 3 steps
+  // Step 1: Validate existance
+  // Step 2: Validate Dimensions
+  // Step 3: Download Full image
+  const startByte:number = imgPart.size
+  let stopByte:number | undefined
+  if (!downloadToCompletion) {
+    // if (imgPart.size === 0) {
+    //  stopByte = 1024
+    // }
+    // else {
+    stopByte = imgPart.size + 65536
+    // }
+  }
+  if (imgPart.size === 0) {
+    // FIXME: Beter covention
+    // Checks if url returns valid statu (200-299). Throws error otherwise
+    // Relying on errors this way feels wrong
+    // I should at least catch and rethrow, for fun.
+    checkValidURL(url)
+  }
+  const preview = await previewPromise
+  const previewNaturalWidth = preview.naturalWidth
+  const previewNaturalHeight = preview.naturalHeight
+  return getPartialBlob(url ,startByte ,stopByte)
+    .then(async (response) => {
+      // Ensure response sanity
+      const rangeMatch = response.responseHeaders.match(/content-range: bytes (\d+)-(\d+)\/(\d+)/i)
+      if (!rangeMatch) {
+        throw new DebugableError('Could not determin blob partial range' ,response)
+      }
+      const [,start ,stop ,size] = rangeMatch
+      const isFinished = parseInt(stop) >= parseInt(size) - 1
+      // FIXME Check for overlaps
+      imgPart = new Blob([imgPart ,response.response])
+      // FIXME Faster method? But... cannot find GM supported library withour hacks
+      let partialCoverImg: HTMLImageElement
+      try {
+        partialCoverImg = await toImgPromiseIgnoreCORS(imgPart)
+      }
+      catch (err) {
+        if (!isFinished) {
+          throw new PromiseIteratorContinueError(err.toString())
+        }
+        throw err
+      }
+      if (partialCoverImg.naturalWidth === 0 || partialCoverImg.naturalHeight === 0) {
+        if (!isFinished) {
+          throw new PromiseIteratorContinueError('Cover Image width/height cannot be 0')
+        }
+        else {
+          throw new Error('Cover Image width/height cannot be 0')
+        }
+      }
+      // FIXME: Ensure full size metadata was recieved? is it possible to parse while missing bytes for dimension?
+      if (isComparableAspectRatio(partialCoverImg.naturalWidth ,partialCoverImg.naturalHeight
+        ,previewNaturalWidth ,previewNaturalHeight)) {
+        if (isFinished) {
+          return imgPart
+        }
+        return getImgIncrementaly(url ,previewPromise ,imgPart ,true)
+      }
+      // Specialized library. Use?
+      /* const coverSizeInfo = sizeOf(toBuffer(response.arraybuffer))
+      if (!coverSizeInfo && parseInt(stop) >= parseInt(size) - 1) {
+        throw Error('Failed to parse cover size. No more data to download')
+      }
+      if (!coverSizeInfo) {
+      // FIXME loop
+        return ret(imgBuffer + LoopSelfSomehow(stop))
+      }
+      if (coverSizeInfo
+      && coverSizeInfo.width
+      && coverSizeInfo.height
+      && isComparableAspectRatio(coverSizeInfo.width ,coverSizeInfo.height ,previewNaturalWidth ,previewNaturalHeight)) {
+      // FIXME Fetch rest
+        return ret(response.response)
+      }
+      */
+      throw Error('Fetched invalid image aspect ratio!')
+    })
+    .then((b: Blob | {img:Promise<HTMLImageElement> ,blob: Blob}) => {
+      if (b instanceof Blob) {
+        return {
+          img: toImgPromiseIgnoreCORS(b) ,blob: b
+        }
+      }
+      return b
+    })
+    .catch((err) => {
+      if (err instanceof PromiseIteratorContinueError) {
+        return getImgIncrementaly(url ,previewPromise ,imgPart)
+      }
+      throw err
+    })
+}
+async function getCoverFromRid(rid: number ,previewPromise: Promise<HTMLImageElement>): Promise<{img: Promise<HTMLImageElement> ,blob?: Blob}> {
   const url = getCoverUrlFromRID(rid)
-  return getImageBlobIgnoreCORS(url)
+  // NOTE: onprogress/onreadystatechange do not set response unless readyState=4 (aka, loaded state)...
+  // Using partial/range request as a workaround
+  return getImgIncrementaly(url ,previewPromise)
+  /* return getImageBlobIgnoreCORS(url)
     .then(b => ({
       img: toImgPromiseIgnoreCORS(b) ,blob: b
-    }))
+    })) */
 }
+
 
 function getRidFromId(id: string): number {
   return parseInt(id.toString().split('').reverse().join(''))
@@ -542,10 +747,17 @@ function fetchCoverImageFromSerialData(serialDataOrig: SerialData): Promise<Seri
     serialData.triesLeft--
     serialData.rid--
     setStatusMessage(`Testing BookWalker Cover: ${serialData.rid}`)
-    return getCoverFromRid(serialData.rid)
+    return getCoverFromRid(serialData.rid ,serialData.preview)
       .then(async ({ img ,blob }) => {
         serialData.cover = img
-        if (!await isComparableAspectRatio(serialData.cover ,serialData.preview)) {
+        const preview = await serialData.preview
+        const previewNaturalWidth = preview.naturalWidth
+        const previewNaturalHeight = preview.naturalHeight
+        const cover = await serialData.cover
+        const coverNaturalWidth = cover.naturalWidth
+        const coverNaturalHeight = cover.naturalHeight
+        if (!isComparableAspectRatio(coverNaturalWidth ,coverNaturalHeight
+          ,previewNaturalWidth ,previewNaturalHeight)) {
           return Promise.reject(Error('Invalid Aspect Ratio'))
           // return Promise.reject(Error('Invalid Aspect Ratio'))
         }
@@ -831,7 +1043,6 @@ function getBW_CoversFromMD() {
           return imagePixelsAreComparable(serialData1.previewBlob ,serialData2.previewBlob ,0.98)
             .then((b: boolean) => {
               if (!b) {
-                console.log('REMOVED DUPLICATE')
                 throw new PromiseIteratorBreakError('Duplicate Found')
               }
               return resSerial
@@ -943,8 +1154,6 @@ function blobPost(mangadexId: number ,volume: string ,blob: Blob ,filename: stri
   formData.append('volume' ,volume)
   formData.append('old_file' ,filename)
   formData.append('file' ,blob ,filename)
-  console.log('FETCH BASE')
-  console.log(formData)
   // unsafeWindow.formData = formData
   // return undefined
   fetch(`https://mangadex.org/ajax/actions.ajax.php?function=manga_cover_upload&id=${mangadexId}` ,{
@@ -1047,7 +1256,8 @@ function toVolumeLevel(serialData:SerialData ,allSerialData: SerialData[]) {
 
 function createSingleInterface(serialData: SerialData ,allSerialData?: SerialData[]): HTMLDivElement {
   const cont = document.createElement('div')
-  const info = document.createElement('div')
+  const titleInfoContainer = document.createElement('div')
+  const imageInfoContainer = document.createElement('div')
   const title = document.createElement('h4')
   const sizeInfo = document.createElement('small')
   const coverCont = document.createElement('div')
@@ -1068,9 +1278,12 @@ function createSingleInterface(serialData: SerialData ,allSerialData?: SerialDat
   next.type = 'button'
   next.classList.add('btn' ,'btn-secondary')
   coverCont.style.position = 'relative'
+  // title.style.wordWrap = 'anywhere'
+  // FIXME: Hacky way to format MD and BW. Should just set fontsize em
+  title.classList.add('h6')
 
-  info.appendChild(title)
-  info.appendChild(sizeInfo)
+  titleInfoContainer.appendChild(title)
+  imageInfoContainer.appendChild(sizeInfo)
   const coverDisplayWidth = 200
   controls.style.width = `${coverDisplayWidth}px`
   coverCont.style.width = `${coverDisplayWidth}px`
@@ -1099,13 +1312,16 @@ function createSingleInterface(serialData: SerialData ,allSerialData?: SerialDat
   cover.style.outlineWidth = '5px'
   cover.style.outlineStyle = 'none'
   cover.style.width = '100%'
-  info.style.display = 'flex'
-  info.style.minHeight = '3em'
-  info.style.alignItems = 'center'
-  info.style.flexDirection = 'column'
+  titleInfoContainer.style.marginBottom = 'auto'
+  // titleInfo.style.minHeight = '3em'
+  ;[titleInfoContainer ,imageInfoContainer].forEach((info) => {
+    info.style.display = 'flex'
+    info.style.alignItems = 'center'
+    info.style.flexDirection = 'column'
+    cont.appendChild(info)
+  })
 
   cont.style.marginLeft = '5px'
-  cont.appendChild(info)
   cont.appendChild(coverCont)
   cont.appendChild(controls)
   cont.style.display = 'flex'
@@ -1219,15 +1435,16 @@ function createSingleInterface(serialData: SerialData ,allSerialData?: SerialDat
             sizeInfo.classList.add('text-danger')
             sizeInfo.title = `Smaller than Chapter Cover: ${mdChapterCover.naturalWidth}×${mdChapterCover.naturalHeight}`
           }
-          // TODO aspect raio check
+          // TODO aspect ratio check
           else {
-            isComparableAspectRatio(serialDataCover.cover ,Promise.resolve(mdChapterCover) ,10)
-              .then((isComparable) => {
-                if (!isComparable) {
-                  sizeInfo.classList.add('text-warning')
-                  sizeInfo.title = `Chapter Cover Aspect Ratio Missmatch: ${mdChapterCover.naturalWidth}×${mdChapterCover.naturalHeight}`
-                }
-              })
+            // const coverImg = await serialData.cover
+            const coverNaturalWidth = coverImg.naturalWidth
+            const coverNaturalHeight = coverImg.naturalHeight
+            if (!isComparableAspectRatio(coverNaturalWidth ,coverNaturalHeight
+              ,mdChapterCover.naturalWidth ,mdChapterCover.naturalHeight ,10)) {
+              sizeInfo.classList.add('text-warning')
+              sizeInfo.title = `Chapter Cover Aspect Ratio Missmatch: ${mdChapterCover.naturalWidth}×${mdChapterCover.naturalHeight}`
+            }
           }
           //  sizeInfo.title = `MD Aspect Ratio Missmatch: ${mdChapterCover.naturalWidth}×${mdChapterCover.naturalHeight}`
           // }
