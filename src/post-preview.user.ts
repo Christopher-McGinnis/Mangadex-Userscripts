@@ -5,21 +5,42 @@
 // @author      Brandon Beck
 // @license     MIT
 // @icon        https://mangadex.org/favicon-96x96.png
-// @version  0.3.1
-// @grant    GM.getValue
-// @grant    GM.setValue
-// @grant    GM_getValue
-// @grant    GM_setValue
+// @version  0.3.3
 // @grant    GM_xmlhttpRequest
-// @require  https://gitcdn.xyz/repo/Brandon-Beck/Mangadex-Userscripts/a480c30b64fba63fad4e161cdae01e093bce1e4c/common.js
-// @require  https://gitcdn.xyz/repo/Brandon-Beck/Mangadex-Userscripts/21ec54406809722c425c39a0f5b6aad59fb3d88d/uncommon.js
-// @require  https://gitcdn.xyz/repo/Brandon-Beck/Mangadex-Userscripts/0d46bb0b3fa43f11ea904945e7baef7c6e2a6a5b/settings-ui.js
 // @require  https://gitcdn.xyz/cdn/pegjs/pegjs/30f32600084d8da6a50b801edad49619e53e2a05/website/vendor/pegjs/peg.js
 // @match    https://mangadex.org/*
 // ==/UserScript==
 
 'use strict'
 
+function isUserscript(): boolean {
+  return window.GM_xmlhttpRequest !== undefined
+}
+// This is used when run in Browser Console / Bookmarklet mode
+// Loads the same scripts used in UserScript.
+// Does not run at all in userscript mode.
+function loadScript(url): Promise<unknown> {
+  // Adding the script tag to the head as suggested before
+  const { head } = document
+  const script = document.createElement('script')
+  script.type = 'text/javascript'
+  script.src = url
+
+  // Then bind the event to the callback function.
+  // There are several events for cross browser compatibility.
+  return new Promise((resolve ,reject) => {
+    // script.onreadystatechange = resolve
+    script.onload = resolve
+    script.onerror = reject
+    // Fire the loading
+    head.appendChild(script)
+  })
+}
+// Ensure Console/Bookmarklet is not run on other sites.
+if (!isUserscript && !window.location.href.startsWith('https://mangadex.org')) {
+  alert('Mangadex Post Preview script only works on https://mangadex.org')
+  throw Error('Mangadex Post Preview script only works on https://mangadex.org')
+}
 // @ts-ignore
 const ERROR_IMG = 'https://i.pinimg.com/originals/e3/04/73/e3047319a8ae7192cb462141c30953a8.gif'
 // @ts-ignore
@@ -59,6 +80,133 @@ function getImageBlob(url: string): Promise<Blob> {
 
 function getImageObjectURL(url: string): Promise<string> {
   return getImageBlob(url).then(b => URL.createObjectURL(b))
+}
+type ImageCacheEntry = {element: HTMLImageElement ,loadPromise: Promise<HTMLImageElement>}
+const imgCache: {[index: string]: ImageCacheEntry} = {}
+// Clones are made because the same image may be used more than once in a post.
+function cloneImageCacheEntry(source: ImageCacheEntry): ImageCacheEntry {
+  const element = source.element.cloneNode() as HTMLImageElement
+  // Take for granted that we are loaded if our source was loaded.
+  // Not necessarily true, but things should already be set as if it were
+  // since we cloned the values.
+  const { loadPromise } = source
+  return {
+    element ,loadPromise
+  }
+}
+// Firefox Speed Test: Fastest to Slowest
+// getImgForURLViaFetch: Caches blobs
+// -- No noticable lag or problems with several small images on page.
+// -- Very usable with Hell's test, though there is a small bit of lag
+// -- (Rebuilds hell in under 1 second.
+// -- Does better than getImgForURL does with a normal post with small images)
+// getImgForURLViaImg: Caches imgs, clones on reuse
+// -- Holding down a key causes noticable shakyness. No real script lag,
+// -- but the images width/height seem to start off at 0 and then
+// -- suddenly grow. Verry offsetting to look at
+// -- Survives Hell's test almost just as well. Very minor additional lag.
+// -- As such, I believe this is quite scalable.
+// getImgForURLNoCache: Creates new img and sets src like normal
+// -- Noticable lag. Preview will not update while a key is being spammed.
+// -- Slightly jumpy like above, but not as noticable since the lag
+// -- spreads it out.
+// -- Survives Hell's test just as well as getImgForURLViaImg.
+// -- Whatever benifit we get from cloning may not apply here.
+// -- Perhaps due to the fact we are looking up only 1 image several hundrad times.
+// BROKEN getImgForURLViaFetchClone: Caches Img of blobs.
+// -- Does not work when image is used multiple times, for some reason.
+// -- Should be comparable to getImgForURLViaFetch, if it worked.
+// -- Failed to render any images for hell's test.
+function getImgForURL(url: string) {
+  if (isUserscript()) {
+    return getImgForURLViaFetch(url)
+  }
+  return getImgForURLViaImg(url)
+}
+function getImgForURLViaImg(url: string): ImageCacheEntry {
+  if (imgCache[url] !== undefined) {
+    return cloneImageCacheEntry(imgCache[url])
+  }
+  // TODO add images loaded in thread to cache.
+
+  const element: HTMLImageElement = document.createElement('img')
+  // element.element.src=LOADING_IMG
+
+  const loadPromise: Promise<HTMLImageElement> = new Promise((ret ,err) => {
+    element.onload = () => ret(element)
+    element.onerror = e => err(new Error(e.toString()))
+    element.src = url
+  })
+  imgCache[url] = {
+    element ,loadPromise
+  }
+  // First use. Clone not needed since gaurenteed to be unused
+  return imgCache[url]
+}
+function getImgForURLNoCache(url: string): ImageCacheEntry {
+  // TODO add images loaded in thread to cache.
+
+  const element: HTMLImageElement = document.createElement('img')
+  // element.element.src=LOADING_IMG
+
+  const loadPromise: Promise<HTMLImageElement> = new Promise((ret ,err) => {
+    element.onload = () => ret(element)
+    element.onerror = e => err(new Error(e.toString()))
+    element.src = url
+  })
+  // First use. Clone not needed since gaurenteed to be unused
+  return {
+    element ,loadPromise
+  }
+}
+function getImgForURLViaFetch(url: string): ImageCacheEntry {
+  // TODO add images loaded in thread to cache.
+  const promise: Promise<string> = getImageObjectURL(url)
+
+  const element: HTMLImageElement = document.createElement('img')
+  // element.element.src=LOADING_IMG
+  const loadPromise: Promise<HTMLImageElement> = promise.then(e => new Promise((resolve ,reject) => {
+    element.onload = () => {
+      URL.revokeObjectURL(e)
+      resolve(element)
+    }
+    element.onerror = (err) => {
+      URL.revokeObjectURL(e)
+      reject(new Error(err.toString()))
+    }
+    element.src = e
+  }))
+
+  // Clone not needed since a new img is generated every time.
+  return {
+    element ,loadPromise
+  }
+}
+function getImgForURLViaFetchClone(url: string) {
+  if (imgCache[url] !== undefined) {
+    return cloneImageCacheEntry(imgCache[url])
+  }
+  // TODO add images loaded in thread to cache.
+  const promise: Promise<string> = getImageObjectURL(url)
+
+  const element: HTMLImageElement = document.createElement('img')
+  // element.element.src=LOADING_IMG
+  // NOTE: Must not revoke object url if cloning is to be done
+  const loadPromise: Promise<HTMLImageElement> = promise.then(e => new Promise((resolve ,reject) => {
+    element.onload = () => {
+      // URL.revokeObjectURL(e)
+      resolve(element)
+    }
+    element.onerror = (err) => {
+      // URL.revokeObjectURL(e)
+      reject(new Error(err.toString()))
+    }
+    element.src = e
+  }))
+  imgCache[url] = {
+    element ,loadPromise
+  }
+  return imgCache[url]
 }
 
 
@@ -110,7 +258,10 @@ type BBCodeAst = BBCodeTagAst | BBCodeImageAst | BBCodeDataAst | BBCodeLineBreak
 // Partial rebuilds! only update what changed
 // Autoscrolling Edit Preview! Ensure the line you are editing is visible as you change it.
 // FIXME Img is text only. not recursive
-const bbcodePegParser_v2 = peg.generate<BBCodeAst[]>(String.raw`
+let generatedBBCodePegParser: import('pegjs').Parser<BBCodeAst[]>
+function bbcodePegParser(): import('pegjs').Parser<BBCodeAst[]> {
+  if (generatedBBCodePegParser) return generatedBBCodePegParser
+  generatedBBCodePegParser = peg.generate<BBCodeAst[]>(String.raw`
 start = res:Expressions? {return res}
 Expressions = reses:Expression+ {
   let astroot = [{type:"root",content:[],location:[0,0]}]
@@ -279,6 +430,8 @@ ErrorCatcher
 _ "whitespace"
   = [ \t\n\r]*
 `)
+  return generatedBBCodePegParser
+}
 
 
 /* main code */
@@ -448,40 +601,25 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
       })
     }
     else if (e.tag === 'img') {
-      // accum += `<img src="${pegAstToHtml(e.content)}"/>`
-      let promise: Promise<string> = Promise.reject()
       // FIXME should Only pass url via image when parsing
-      let url: string
+      let url: string = ''
       if (e.content) {
         // @ts-ignore
         const urltest = (e.content as BBCodeAst[])[0]
         if (urltest && urltest.type === 'text') {
           url = urltest.content
-          promise = getImageObjectURL(url)
         }
       }
+      const imageCacheEntry = getImgForURL(url)
       const element: AST_HTML_ELEMENT = {
-        element: document.createElement(e.tag)
+        element: imageCacheEntry.element
         ,location: e.location
         ,type: 'image'
-        ,imagePromise: promise
+        ,imagePromise: imageCacheEntry.loadPromise.then(() => url)
       }
       element.element.style.maxWidth = '100%'
       element.element.classList.add('align-bottom')
       // element.element.src=LOADING_IMG
-      promise.then((e) => {
-        element.element.onload = () => {
-          URL.revokeObjectURL(e)
-        }
-        element.element.onerror = () => {
-          URL.revokeObjectURL(e)
-        }
-        element.element.src = e
-      }).catch((b) => {
-        console.log(`Url '${url}' failed to load with error!`)
-        console.log(b)
-        // element.element.src = ERROR_IMG
-      })
       accum.push(element)
     }
     else if (e.tag === 'quote') {
@@ -587,30 +725,37 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
 
 
 function makePreview(txt: string): [HTMLDivElement ,AST_HTML_ELEMENT[]] {
-  const astHtml = pegAstToHtml_v2(bbcodePegParser_v2.parse(txt))
+  const astHtml = pegAstToHtml_v2(bbcodePegParser().parse(txt))
   const previewDiv = document.createElement('div')
   previewDiv.style.flexGrow = '1'
   astHtml.forEach(e => previewDiv.appendChild(e.element))
+  // Conform to MD style
+  previewDiv.classList.add('postbody' ,'mb-3' ,'mt-4')
+
+  // FIXME: Ensure this is equivilent
+  // Threads get wordWrap from tr.post
+  // Profile gets it from card
+  // Not sure why word break is needed, since I don't see it in md's css
+  previewDiv.style.wordWrap = 'break-word'
+  // previewDiv.style.overflowWrap = 'break-word'
+  previewDiv.style.wordBreak = 'break-word'
   return [previewDiv ,astHtml]
 }
 
-function createPreviewInterface(forum: HTMLElement) {
-  const container = forum.parentElement!
-  const previewDiv = document.createElement('div')
-  previewDiv.style.flexGrow = '1'
-  container.style.alignItems = 'flex-start'
-  container.classList.add('d-flex')
-  // Conform to MD style
-  previewDiv.classList.add('postbody' ,'mb-3' ,'mt-4')
-  container.classList.remove('p-3')
-  container.classList.add('pb-3')
-  container.insertBefore(previewDiv ,forum)
-}
-
 function createPreviewCallbacks() {
-  const nav = document.querySelector('nav.navbar.fixed-top') as HTMLElement
+  const nav = document.querySelector('nav.navbar.fixed-top') as HTMLElement | undefined
   // @ts-ignore
-  const navHeight = nav ? nav.getBoxQuads()[0].p4.y : 0
+  let navY: number
+  if (!nav) {
+    navY = 0
+  }
+  else if (nav.getBoxQuads !== undefined) {
+    navY = nav.getBoxQuads()[0].p1.y as number
+  }
+  else {
+    navY = nav.getBoundingClientRect().left
+  }
+  const navHeight = navY
   // let image_buffers: Map<string, Blob>
   let forms: HTMLElement[] = Object.values(document.querySelectorAll('.post_edit_form'))
   forms = forms.concat(Object.values(document.querySelectorAll('#post_reply_form')))
@@ -637,8 +782,11 @@ function createPreviewCallbacks() {
     if (!forum.parentElement) {
       return undefined
     }
+
+    // Setup our custom styles
     forum.parentElement.style.alignItems = 'flex-start'
     forum.parentElement.classList.add('d-flex')
+
     forum.parentElement.style.flexDirection = 'row-reverse'
 
     forum.style.position = 'sticky'
@@ -662,8 +810,16 @@ function createPreviewCallbacks() {
     const tableLeft = forum.parentElement.parentElement!.firstElementChild!
     if (tableLeft !== forum.parentElement) {
       if (tableLeft.firstChild!.nodeName.toLowerCase() === 'img') {
-            tableLeft.firstChild!.remove()
-            tableLeft.appendChild(forum)
+        // We are a thread post! Lets integrate into the thread
+        tableLeft.firstChild!.remove()
+        tableLeft.appendChild(forum)
+        // Conform to MD thread post style
+        forum.parentElement.classList.remove('p-3')
+        forum.parentElement.classList.add('pb-3')
+        forum.parentElement.parentElement!.classList.add('post')
+        // FIXME: Profile page also needs formating.
+        // md's wordWrap is break-word, but it seems to
+        // be acting like wordwrap: anywhere for some reason.
       }
     }
 
@@ -702,15 +858,23 @@ function createPreviewCallbacks() {
       const elm = searchAst(astHtml ,pos)
       if (elm) {
         // FIXME Scroll pos is a bit hard to find.
-        // getBoxQuads, getClientRect, getClientBoundingRect all give the offset from the viewport
+        // getBoxQuads, getClientRect, getBoundingClientRect all give the offset from the viewport
         // Height of child elements not calculated in...
         // SAFE for (text)nodes?, not safe for elements with nested content
         if (elm.nodeType === 3) {
           // @ts-ignore
-          const { y } = (elm as Text).getBoxQuads()[0].p1
-                    // FIXME. Must be a better way to scroll (especialy in case of nested scroll frames)
-                    // Scroll to top
-                    document.scrollingElement!.scrollBy(0 ,y)
+          let y: number
+          if (elm.getBoxQuads !== undefined) {
+            y = (elm as Text).getBoxQuads()[0].p1.y as number
+          }
+          else {
+            // if we do not have getBoxQuads, we will have to test from the
+            // container element instead of the text node;
+            y = elm.parentElement!.getBoundingClientRect().left
+          }
+          // FIXME. Must be a better way to scroll (especialy in case of nested scroll frames)
+          // Scroll to top
+          document.scrollingElement!.scrollBy(0 ,y)
         }
         else {
           // FIXME. Must be a better way to scroll (especialy in case of nested scroll frames)
@@ -812,4 +976,12 @@ function createPreviewCallbacks() {
   })
 }
 
-createPreviewCallbacks()
+if (isUserscript()) createPreviewCallbacks()
+else {
+  // Import and wait for PegJS
+  // then createPreviewCallbacks()
+  loadScript('https://gitcdn.xyz/cdn/pegjs/pegjs/30f32600084d8da6a50b801edad49619e53e2a05/website/vendor/pegjs/peg.js')
+    .then(() => {
+      createPreviewCallbacks()
+    })
+}
