@@ -1,9 +1,10 @@
 # MangaDex Post Preview
 Write your post right the first time!
 ___
-[![Install with GreasyFork](https://img.shields.io/static/v1.svg?style=popout-square&label=Install%20with&message=GreasyFork&color=red)](https://greasyfork.org/en/scripts/381831-mangadex-preview-post) [![View On Github](https://img.shields.io/static/v1.svg?style=for-the-badge&logo=GitHub&label=&message=View%20Code&color=grey)](https://github.com/Christopher-McGinnis/Mangadex-Userscripts)
+[![Install with GreasyFork](https://img.shields.io/static/v1.svg?style=popout-square&label=Install%20with&message=GreasyFork&color=red)](https://greasyfork.org/en/scripts/381831-mangadex-preview-post) [![Bookmarklet Version](https://img.shields.io/static/v1.svg?style=flat-square&logo=GitHub&label=&message=Bookmarklet&color=grey)](https://github.com/Christopher-McGinnis/Mangadex-Userscripts/blob/master/out/post-preview.bookmarklet.js) [![View On Github](https://img.shields.io/static/v1.svg?style=flat-square&logo=GitHub&label=&message=View%20Code&color=grey)](https://github.com/Christopher-McGinnis/Mangadex-Userscripts)
 
 As one of the more complex bbcode users, I am rather confident this supports everything you normal people want.
+This can also be run in the browser console if you do not have a userscript manager.
 
 Preview
 ---
