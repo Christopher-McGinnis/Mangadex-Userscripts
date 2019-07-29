@@ -5,17 +5,14 @@
 // @author      Brandon Beck
 // @license     MIT
 // @icon        https://mangadex.org/favicon-96x96.png
-// @version  0.3.4
-// @grant    GM_xmlhttpRequest
-// @require  https://gitcdn.xyz/cdn/pegjs/pegjs/30f32600084d8da6a50b801edad49619e53e2a05/website/vendor/pegjs/peg.js
-// @match    https://mangadex.org/*
+// @version     0.3.5
+// @require     https://gitcdn.xyz/cdn/pegjs/pegjs/30f32600084d8da6a50b801edad49619e53e2a05/website/vendor/pegjs/peg.js
+// @match       https://mangadex.org/*
 // ==/UserScript==
 
 'use strict'
 
-function isUserscript() {
-  return window.GM_xmlhttpRequest !== undefined
-}
+const isUserscript = window.GM_xmlhttpRequest !== undefined
 // This is used when run in Browser Console / Bookmarklet mode
 // Loads the same scripts used in UserScript.
 // Does not run at all in userscript mode.
@@ -40,39 +37,20 @@ if (!isUserscript && !window.location.href.startsWith('https://mangadex.org')) {
   alert('Mangadex Post Preview script only works on https://mangadex.org')
   throw Error('Mangadex Post Preview script only works on https://mangadex.org')
 }
-// @ts-ignore
 const ERROR_IMG = 'https://i.pinimg.com/originals/e3/04/73/e3047319a8ae7192cb462141c30953a8.gif'
-// @ts-ignore
 const LOADING_IMG = 'https://i.redd.it/ounq1mw5kdxy.gif'
 const imageBlobs = {}
-// @ts-ignore
 function getImageBlob(url) {
   if (!imageBlobs[url]) {
-    imageBlobs[url] = new Promise((ret ,err) => {
-      GM_xmlhttpRequest({
-        method: 'GET'
-        ,url
-        ,responseType: 'blob'
-        ,onerror: err
-        ,ontimeout: err
-        ,onload: (response) => {
-          if ((response.status === 200 || response.status === 304) && response.response) {
-            imageBlobs[url] = Promise.resolve(response.response)
-            return ret(imageBlobs[url])
-          }
-          return err(response)
+    imageBlobs[url] = fetch(url)
+      .then((response) => {
+        if (response.ok) {
+          return response.blob()
         }
+        throw Error(`Fetching image failed with: ${response.status}(${response.statusText})`)
       })
-    })
   }
   return imageBlobs[url]
-  /* return fetch(url).then(d=>{
-      if (d.ok) {
-        imageBlobs[url] = d.blob()
-        return imageBlobs[url]
-      }
-      return Promise.reject(d.statusText)
-    }) */
 }
 function getImageObjectURL(url) {
   return getImageBlob(url).then(b => URL.createObjectURL(b))
@@ -113,10 +91,7 @@ function cloneImageCacheEntry(source) {
 // -- Should be comparable to getImgForURLViaFetch, if it worked.
 // -- Failed to render any images for hell's test.
 function getImgForURL(url) {
-  if (isUserscript()) {
-    return getImgForURLViaFetch(url)
-  }
-  return getImgForURLViaImg(url)
+  return getImgForURLViaFetch(url)
 }
 function getImgForURLViaImg(url) {
   if (imgCache[url] !== undefined) {
@@ -877,7 +852,7 @@ function createPreviewCallbacks() {
     textarea.oninput = UpdatePreviewProxy
   })
 }
-if (isUserscript()) createPreviewCallbacks()
+if (isUserscript) createPreviewCallbacks()
 else {
   // Import and wait for PegJS
   // then createPreviewCallbacks()

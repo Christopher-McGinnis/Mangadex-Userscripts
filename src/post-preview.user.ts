@@ -5,21 +5,18 @@
 // @author      Brandon Beck
 // @license     MIT
 // @icon        https://mangadex.org/favicon-96x96.png
-// @version  0.3.4
-// @grant    GM_xmlhttpRequest
-// @require  https://gitcdn.xyz/cdn/pegjs/pegjs/30f32600084d8da6a50b801edad49619e53e2a05/website/vendor/pegjs/peg.js
-// @match    https://mangadex.org/*
+// @version     0.3.5
+// @require     https://gitcdn.xyz/cdn/pegjs/pegjs/30f32600084d8da6a50b801edad49619e53e2a05/website/vendor/pegjs/peg.js
+// @match       https://mangadex.org/*
 // ==/UserScript==
 
 'use strict'
 
-function isUserscript(): boolean {
-  return window.GM_xmlhttpRequest !== undefined
-}
+const isUserscript: boolean = window.GM_xmlhttpRequest !== undefined
 // This is used when run in Browser Console / Bookmarklet mode
 // Loads the same scripts used in UserScript.
 // Does not run at all in userscript mode.
-function loadScript(url): Promise<unknown> {
+function loadScript(url: string): Promise<unknown> {
   // Adding the script tag to the head as suggested before
   const { head } = document
   const script = document.createElement('script')
@@ -41,41 +38,24 @@ if (!isUserscript && !window.location.href.startsWith('https://mangadex.org')) {
   alert('Mangadex Post Preview script only works on https://mangadex.org')
   throw Error('Mangadex Post Preview script only works on https://mangadex.org')
 }
-// @ts-ignore
+
 const ERROR_IMG = 'https://i.pinimg.com/originals/e3/04/73/e3047319a8ae7192cb462141c30953a8.gif'
-// @ts-ignore
 const LOADING_IMG = 'https://i.redd.it/ounq1mw5kdxy.gif'
 declare const peg: { generate: typeof import('pegjs').generate }
 
 const imageBlobs: {[index: string]: Promise<Blob>} = {}
-// @ts-ignore
+
 function getImageBlob(url: string): Promise<Blob> {
   if (!imageBlobs[url]) {
-    imageBlobs[url] = new Promise((ret ,err) => {
-      GM_xmlhttpRequest({
-        method: 'GET'
-        ,url
-        ,responseType: 'blob'
-        ,onerror: err
-        ,ontimeout: err
-        ,onload: (response: { status: number; response: Blob | PromiseLike<Blob> | undefined }) => {
-          if ((response.status === 200 || response.status === 304) && response.response) {
-            imageBlobs[url] = Promise.resolve(response.response)
-            return ret(imageBlobs[url])
-          }
-          return err(response)
+    imageBlobs[url] = fetch(url)
+      .then((response) => {
+        if (response.ok) {
+          return response.blob()
         }
+        throw Error(`Fetching image failed with: ${response.status}(${response.statusText})`)
       })
-    })
   }
   return imageBlobs[url]
-  /* return fetch(url).then(d=>{
-    if (d.ok) {
-      imageBlobs[url] = d.blob()
-      return imageBlobs[url]
-    }
-    return Promise.reject(d.statusText)
-  }) */
 }
 
 function getImageObjectURL(url: string): Promise<string> {
@@ -118,10 +98,7 @@ function cloneImageCacheEntry(source: ImageCacheEntry): ImageCacheEntry {
 // -- Should be comparable to getImgForURLViaFetch, if it worked.
 // -- Failed to render any images for hell's test.
 function getImgForURL(url: string) {
-  if (isUserscript()) {
-    return getImgForURLViaFetch(url)
-  }
-  return getImgForURLViaImg(url)
+  return getImgForURLViaFetch(url)
 }
 function getImgForURLViaImg(url: string): ImageCacheEntry {
   if (imgCache[url] !== undefined) {
@@ -976,7 +953,7 @@ function createPreviewCallbacks() {
   })
 }
 
-if (isUserscript()) createPreviewCallbacks()
+if (isUserscript) createPreviewCallbacks()
 else {
   // Import and wait for PegJS
   // then createPreviewCallbacks()
