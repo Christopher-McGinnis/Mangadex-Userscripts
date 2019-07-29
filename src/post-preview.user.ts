@@ -5,7 +5,7 @@
 // @author      Christopher McGinnis
 // @license     MIT
 // @icon        https://mangadex.org/favicon-96x96.png
-// @version  0.3.3
+// @version  0.3.4
 // @grant    GM_xmlhttpRequest
 // @require  https://gitcdn.xyz/cdn/pegjs/pegjs/30f32600084d8da6a50b801edad49619e53e2a05/website/vendor/pegjs/peg.js
 // @match    https://mangadex.org/*
@@ -746,14 +746,14 @@ function createPreviewCallbacks() {
   const nav = document.querySelector('nav.navbar.fixed-top') as HTMLElement | undefined
   // @ts-ignore
   let navY: number
-  if (!nav) {
+  if (nav === undefined) {
     navY = 0
   }
   else if (nav.getBoxQuads !== undefined) {
-    navY = nav.getBoxQuads()[0].p1.y as number
+    navY = nav.getBoxQuads()[0].p3.y as number
   }
   else {
-    navY = nav.getBoundingClientRect().left
+    navY = nav.getBoundingClientRect().height
   }
   const navHeight = navY
   // let image_buffers: Map<string, Blob>
@@ -870,7 +870,7 @@ function createPreviewCallbacks() {
           else {
             // if we do not have getBoxQuads, we will have to test from the
             // container element instead of the text node;
-            y = elm.parentElement!.getBoundingClientRect().left
+            y = elm.parentElement!.getBoundingClientRect().top
           }
           // FIXME. Must be a better way to scroll (especialy in case of nested scroll frames)
           // Scroll to top
