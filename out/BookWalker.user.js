@@ -5,7 +5,7 @@
 // @author      Brandon Beck
 // @license     MIT
 // @icon        https://mangadex.org/favicon-96x96.png
-// @version     0.1.42
+// @version     0.1.44
 // @include     /^(?:https?:\/\/)?bookwalker\.jp\/de[a-zA-Z0-9]+-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]+(\/.*)?/
 // @include     /^(?:https?:\/\/)?bookwalker\.jp\/series\/\d+(\/.*)?/
 // @include     /^(?:https?:\/\/)?mangadex\.org\/title\/\d+(\/.*)?/
@@ -461,7 +461,7 @@ async function getImgIncrementaly(url ,previewPromise ,imgPart = new Blob() ,dow
       const [,start ,stop ,size] = rangeMatch
       const isFinished = parseInt(stop) >= parseInt(size) - 1
       // FIXME Check for overlaps
-      imgPart = new Blob([imgPart ,response.response])
+      imgPart = new Blob([imgPart ,response.response] ,{ type: response.response.type })
       // FIXME Faster method? But... cannot find GM supported library withour hacks
       let partialCoverImg
       try {
