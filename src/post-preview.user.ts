@@ -218,47 +218,93 @@ function getImgForURLViaFetchClone(url: string) {
  * BBCode Tokenizing and AST generation
  ************************************************** */
 
-interface BBCodeAstBase {
-    location: [number ,number];
+interface BBCodeTokenBase {
+  type: 'root' | 'open' | 'close' | 'prefix'
+        | 'linebreak' | 'opendata' | 'text'
+        | 'error'
+  location: [number ,number];
 }
-interface BBCodeTagAst extends BBCodeAstBase {
-    tag:
-    'ol' | 'ul' | 'list'
-    | 'spoiler'
-    | 'quote' | 'code'
-    | 'left' | 'right' | 'center'
-    | 'i' | 's' | 'u' | 'b' | 'h'
-    | 'sub' | 'sup'
-    | 'hr'
-    | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' ;
-    type: 'open' | 'root';
+interface BBCodeTokenTag extends BBCodeTokenBase {
+  type: 'open'
+  tag: BBCodeTagNamesNormal
+}
+interface BBCodeTokenMediaTag extends BBCodeTokenBase {
+  type: 'open'
+  tag: BBCodeTagNamesMedia
+}
+interface BBCodeTokenPrefixTag extends BBCodeTokenBase {
+  type: 'prefix'
+  tag: BBCodeTagNamesPrefix
+}
+interface BBCodeTokenCloseTag extends BBCodeTokenBase {
+  type: 'close'
+  tag: BBCodeTagNamesData | BBCodeTagNamesMedia
+  | BBCodeTagNamesNormal | BBCodeTagNamesPrefix
+}
+
+interface BBCodeTokenDataTag extends BBCodeTokenBase {
+  type: 'opendata'
+  attr?: string
+  tag: BBCodeTagNamesData
+}
+interface BBCodeTokenText extends BBCodeTokenBase {
+  type: 'text'
+  content: string
+}
+interface BBCodeTokenError extends BBCodeTokenBase {
+  type: 'error'
+  content: string
+}
+interface BBCodeTokenLinebreak extends BBCodeTokenBase {
+  type: 'linebreak'
+}
+type BBCodeToken = BBCodeTokenTag|BBCodeTokenDataTag
+  |BBCodeTokenLinebreak|BBCodeTokenText|BBCodeTokenError
+  |BBCodeTokenPrefixTag
+
+// AST
+interface BBCodeAstRoot extends BBCodeTokenBase {
+    type: 'root';
     content: BBCodeAst[];
 }
-interface BBCodeImageAst extends BBCodeAstBase {
-    tag: 'img';
+type BBCodeTagNamesNormal = 'ol' | 'ul' | 'list'
+| 'spoiler'
+| 'quote' | 'code'
+| 'left' | 'right' | 'center'
+| 'i' | 's' | 'u' | 'b' | 'h'
+| 'sub' | 'sup'
+| 'hr'
+| 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6'
+interface BBCodeTagAst extends BBCodeTokenTag {
+    tag: BBCodeTagNamesNormal
+    type: 'open'
+    content: BBCodeAst[];
+}
+type BBCodeTagNamesMedia = 'img'
+interface BBCodeMediaAst extends BBCodeTokenMediaTag {
+    tag: BBCodeTagNamesMedia
     type: 'open';
     content: string;
 }
-interface BBCodePrefixAst extends BBCodeAstBase {
-    tag: '*';
+type BBCodeTagNamesPrefix = '*'
+interface BBCodePrefixAst extends BBCodeTokenPrefixTag {
+    tag: BBCodeTagNamesPrefix
     type: 'prefix';
     content: BBCodeAst[];
 }
-interface BBCodeLineBreakAst extends BBCodeAstBase {
-    type: 'linebreak';
-}
-interface BBCodeDataAst extends BBCodeAstBase {
-    tag: 'url';
+type BBCodeTagNamesData = 'url'
+interface BBCodeDataAst extends BBCodeTokenDataTag {
+    tag: BBCodeTagNamesData
     type: 'opendata';
     data?: string;
     content: BBCodeAst[];
 }
 
-interface BBCodeTextAst extends BBCodeAstBase {
-    type: 'text' | 'error';
-    content: string;
-}
-type BBCodeAst = BBCodeTagAst | BBCodeImageAst | BBCodeDataAst | BBCodeLineBreakAst | BBCodeTextAst | BBCodePrefixAst
+type BBCodeLineBreakAst = BBCodeTokenLinebreak
+type BBCodeTextAst = BBCodeTokenText
+type BBCodeErrorAst = BBCodeTokenError
+// NOTE BBCodeAstRoot does NOT need to be in here
+type BBCodeAst = BBCodeTagAst | BBCodeMediaAst | BBCodeDataAst | BBCodeLineBreakAst | BBCodeTextAst | BBCodePrefixAst
 
 /* PEG grammer */
 
@@ -267,103 +313,128 @@ type BBCodeAst = BBCodeTagAst | BBCodeImageAst | BBCodeDataAst | BBCodeLineBreak
 // URL links. At least these are valid. (http|ftp)s?://[a-zA-Z0-9./\-%"':@+]+
 // FIXME:
 // Img is text only. not recursive
-let generatedBBCodePegParser: import('pegjs').Parser<BBCodeAst[]>
-function bbcodePegParser(): import('pegjs').Parser<BBCodeAst[]> {
-  if (generatedBBCodePegParser) return generatedBBCodePegParser
-  generatedBBCodePegParser = peg.generate<BBCodeAst[]>(String.raw`
-start = res:Expressions? {return res}
-Expressions = reses:Expression+ {
-  let astroot = [{type:"root",content:[],location:[0,0]}]
-  let stack = [astroot[0]]
-  let astcur = astroot[0]
-  reses.forEach((res) => {
-    let thisast = {}
-    if (res.type == "open") {
-      thisast.type = res.type
-      thisast.tag = res.content
-      thisast.content = []
-      // Must update end location when tag closes
-      thisast.location = res.location
-      astcur.content.push(thisast)
-      astcur.location[1] = res.location[1]
-      astcur=thisast
-      stack.push(thisast)
+let generatedBBCodePegParser: import('pegjs').Parser<BBCodeToken[]>
+
+function tokensToSimpleAST(tokens: BBCodeToken[]|null|undefined): BBCodeAst[] {
+  // FIXME Figure out Why pegjs returns null. is it an error, does empty
+  // do an early escape? does having none of a token:expresion+
+  // return null instead of [] (tested return token? token: [], didn't help)
+  if (tokens == null) {
+    return []
+  }
+  // Why did I make a root again?
+  const astroot: BBCodeAstRoot[] = [
+    {
+      type: 'root'
+      ,content: []
+      ,location: [0 ,0]
     }
-    else if (res.type == "prefix") {
-      // cannot directly nest bullet in bullet (must have a non-prexix container class)
-      if (astcur.type == "*") {
-        // FIXME are we supposed to subtract 1 here?
-        astcur.location = res.location[0] // - 1
-        stack.pop()
-        astcur=stack[stack.length -1]
+  ]
+  const stack:(BBCodeAst|BBCodeAstRoot)[] = [astroot[0]]
+  let astcur: BBCodeAst|BBCodeAstRoot = astroot[0]
+  tokens.forEach((token) => {
+    if (token.type === 'open') {
+      const thisast: BBCodeTagAst | BBCodeMediaAst = {
+        type: token.type
+        ,tag: token.tag
+        ,content: []
+        ,location: token.location
       }
-      thisast.type = res.type
-      thisast.tag = res.content
-      thisast.content = []
-      thisast.location = res.location
+      // Must update end location when tag closes
       astcur.content.push(thisast)
-      astcur.location[1] = res.location[1]
-      astcur=thisast
+      astcur.location[1] = token.location[1]
+      astcur = thisast
       stack.push(thisast)
     }
-    else if (res.type == "opendata") {
-      thisast.type = res.type
-      thisast.tag = res.content
-      thisast.data = res.attr
-      thisast.content = []
-      thisast.location = res.location
+    else if (token.type === 'prefix') {
+      const thisast: BBCodePrefixAst = {
+        type: token.type
+        ,tag: token.tag
+        ,content: []
+        ,location: token.location
+      }
+      // cannot directly nest bullet in bullet (must have a non-prexix container class)
+      if (astcur.type === 'prefix') {
+        // FIXME are we supposed to subtract 1 here?
+        astcur.location[1] = token.location[0] // - 1
+        stack.pop()
+        astcur = stack[stack.length - 1]
+      }
       astcur.content.push(thisast)
-      astcur.location[1] = res.location[1]
-      astcur=thisast
+      astcur.location[1] = token.location[1]
+      astcur = thisast
       stack.push(thisast)
     }
-    else if (res.type == "close") {
-      let idx = Object.values(stack).reverse().findIndex((e)=>e.tag == res.content)
-      if (idx != -1 ) {
-        idx=idx+1
+    else if (token.type === 'opendata') {
+      const thisast: BBCodeDataAst = {
+        type: token.type
+        ,tag: token.tag
+        ,content: []
+        ,location: token.location
+      }
+      thisast.data = token.attr
+      astcur.content.push(thisast)
+      astcur.location[1] = token.location[1]
+      astcur = thisast
+      stack.push(thisast)
+    }
+    else if (token.type === 'close') {
+      let idx = Object.values(stack).reverse().findIndex(e => e.tag === token.tag)
+      if (idx !== -1) {
+        idx += 1
         // NOTE should we set ast location end? Yes!
-        for (let i = stack.length -idx; i < stack.length; i++) {
-          stack[i].location[1] = res.location[1]
+        for (let i = stack.length - idx; i < stack.length; i++) {
+          stack[i].location[1] = token.location[1]
         }
-        stack.splice(-idx,idx)
-        astcur.location[1] = res.location[1]
-        astcur=stack[stack.length -1]
+        stack.splice(-idx ,idx)
+        astcur.location[1] = token.location[1]
+        astcur = stack[stack.length - 1]
       }
       else {
-        thisast.type="error"
-        thisast.content="[/" + res.content + "]"
-        thisast.location = res.location
-        astcur.location[1] = res.location[1]
+        const thisast: BBCodeErrorAst = {
+          type: 'error'
+          ,content: `[/${token.tag}]`
+          ,location: token.location
+        }
+        astcur.location[1] = token.location[1]
         astcur.content.push(thisast)
       }
     }
-    else if (res.type == "linebreak" ) {
+    else if (token.type === 'linebreak') {
       // TODO should check if prefix instead if prefix is to be expanded appon
-      if (astcur.tag == "*") {
+      if (astcur.tag === '*') {
         // FIXME are we supposed to subtract 1 here?
-        astcur.location[1] = res.location[0] // - 1
+        astcur.location[1] = token.location[0] // - 1
         // Are Linebreaks added when we are exiting a prefix? Seems like it!
         // Not sure why though...
-        astcur.content.push(res)
+        astcur.content.push(token)
         stack.pop()
-        astcur=stack[stack.length -1]
+        astcur = stack[stack.length - 1]
       }
       else {
-        astcur.location[1] = res.location[1]
-        astcur.content.push(res)
+        astcur.location[1] = token.location[1]
+        astcur.content.push(token)
       }
     }
     else {
-      astcur.location[1] = res.location[1]
-      astcur.content.push(res)
+      astcur.location[1] = token.location[1]
+      astcur.content.push(token)
     }
   })
   // Close all tags (location). Remember we start at 1 bc root is just a container
   for (let i = 1; i < stack.length; i++) {
     stack[i].location[1] = astcur.location[1]
   }
-  //stack.splice(start, end) not needed
+  // stack.splice(start, end) not needed
   return astroot[0].content
+}
+
+function bbcodeTokenizer(): import('pegjs').Parser<BBCodeToken[]> {
+  if (generatedBBCodePegParser) return generatedBBCodePegParser
+  generatedBBCodePegParser = peg.generate<BBCodeToken[]>(String.raw`
+start = tokens:Expressions? {return tokens}
+Expressions = tokens:Expression+ {
+  return tokens
 }
 Expression = res:(OpenTag / OpenDataTag / CloseTag / PrefixTag / LineBreak / Text )
 /*head:Term tail:(_ ("+" / "-") _ Term)* {
@@ -386,7 +457,7 @@ OpenCloseTag = open:(OpenTag / OpenDataTag) content:Expression? close:CloseTag?
 } {
     return {type:open.tag, data:open.attr, content}
 }
-PrefixTag = "[" tag:PrefixTagList "]" { return {type:"prefix", content:tag, location:[location().start.offset,location().end.offset]} }
+PrefixTag = "[" tag:PrefixTagList "]" { return {type:"prefix", tag:tag, location:[location().start.offset,location().end.offset]} }
 
 // PrefixTag = "[" tag:PrefixTagList "]" content:(!("[/" ListTags "]" / LineBreak ) .)* { return {type:tag,unparsed:content.join('')} }
 
@@ -408,11 +479,11 @@ Data
   }
   return text[1]
 }
-OpenTag = "[" tag:NormalTagList "]" { return {type:"open", content:tag, location:[location().start.offset,location().end.offset] } }
+OpenTag = "[" tag:NormalTagList "]" { return {type:"open", tag:tag, location:[location().start.offset,location().end.offset] } }
 AttrTagProxy = "=" attr:Data? {return attr}
-OpenDataTag = "[" tag:DataTagList attr:AttrTagProxy?  "]" { return {type:"opendata", content:tag,attr:attr, location:[location().start.offset,location().end.offset]} }
+OpenDataTag = "[" tag:DataTagList attr:AttrTagProxy?  "]" { return {type:"opendata", tag:tag,attr:attr, location:[location().start.offset,location().end.offset]} }
 
-CloseTag = "[/" tag:(DataTagList / NormalTagList / PrefixTagList ) "]" { return {type:"close", content:tag, location:[location().start.offset,location().end.offset]} }
+CloseTag = "[/" tag:(DataTagList / NormalTagList / PrefixTagList ) "]" { return {type:"close", tag:tag, location:[location().start.offset,location().end.offset]} }
 
 
 Text
@@ -670,6 +741,12 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
       accum.push(element)
       element.element.classList.add('spoiler' ,'display-none')
       element.contains = pegAstToHtml_v2(e.content)
+      // FIXME: [spoiler] and [/spoiler] should scroll to button. set inner location.
+      // didnt work though... as if btn location wasnt set exits
+      // if (element.contains[0]) {
+      //  element.location[0] = element.contains[0].location[0]
+      //  element.location[1] = element.contains[element.contains.length - 1].location[1]
+      // }
       element.contains.forEach((child_ast_element) => {
         element.element.appendChild(child_ast_element.element)
       })
@@ -710,8 +787,8 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
     }
     else if (e.content != null) {
       // FIXME? Is this possible? Root?
-      pegAstToHtml_v2(e.content).forEach((e) => {
-        accum.push(e)
+      pegAstToHtml_v2(e.content).forEach((nested_ast_element) => {
+        accum.push(nested_ast_element)
       })
     }
     else {
@@ -737,7 +814,7 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
 
 
 function makePreview(txt: string): [HTMLDivElement ,AST_HTML_ELEMENT[]] {
-  const astHtml = pegAstToHtml_v2(bbcodePegParser().parse(txt))
+  const astHtml = pegAstToHtml_v2(tokensToSimpleAST(bbcodeTokenizer().parse(txt)))
   const previewDiv = document.createElement('div')
   previewDiv.style.flexGrow = '1'
   astHtml.forEach(e => previewDiv.appendChild(e.element))
