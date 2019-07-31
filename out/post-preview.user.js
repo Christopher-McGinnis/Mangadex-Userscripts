@@ -5,7 +5,7 @@
 // @author      Brandon Beck
 // @license     MIT
 // @icon        https://mangadex.org/favicon-96x96.png
-// @version     0.3.6
+// @version     0.3.7
 // @grant       GM_xmlhttpRequest
 // @require     https://gitcdn.xyz/cdn/pegjs/pegjs/30f32600084d8da6a50b801edad49619e53e2a05/website/vendor/pegjs/peg.js
 // @match       https://mangadex.org/*
@@ -78,29 +78,6 @@ function cloneImageCacheEntry(source) {
     element ,loadPromise
   }
 }
-// Firefox Speed Test: Fastest to Slowest
-// getImgForURLViaFetch: Caches blobs
-// -- No noticable lag or problems with several small images on page.
-// -- Very usable with Hell's test, though there is a small bit of lag
-// -- (Rebuilds hell in under 1 second.
-// -- Does better than getImgForURL does with a normal post with small images)
-// getImgForURLViaImg: Caches imgs, clones on reuse
-// -- Holding down a key causes noticable shakyness. No real script lag,
-// -- but the images width/height seem to start off at 0 and then
-// -- suddenly grow. Verry offsetting to look at
-// -- Survives Hell's test almost just as well. Very minor additional lag.
-// -- As such, I believe this is quite scalable.
-// getImgForURLNoCache: Creates new img and sets src like normal
-// -- Noticable lag. Preview will not update while a key is being spammed.
-// -- Slightly jumpy like above, but not as noticable since the lag
-// -- spreads it out.
-// -- Survives Hell's test just as well as getImgForURLViaImg.
-// -- Whatever benifit we get from cloning may not apply here.
-// -- Perhaps due to the fact we are looking up only 1 image several hundrad times.
-// BROKEN getImgForURLViaFetchClone: Caches Img of blobs.
-// -- Does not work when image is used multiple times, for some reason.
-// -- Should be comparable to getImgForURLViaFetch, if it worked.
-// -- Failed to render any images for hell's test.
 function getImgForURL(url) {
   if (isUserscript) {
     return getImgForURLViaFetch(url)
@@ -126,7 +103,6 @@ function getImgForURLViaImg(url) {
   return imgCache[url]
 }
 function getImgForURLNoCache(url) {
-  // TODO add images loaded in thread to cache.
   const element = document.createElement('img')
   // element.element.src=LOADING_IMG
   const loadPromise = new Promise((ret ,err) => {
@@ -140,7 +116,6 @@ function getImgForURLNoCache(url) {
   }
 }
 function getImgForURLViaFetch(url) {
-  // TODO add images loaded in thread to cache.
   const promise = getImageObjectURL(url)
   const element = document.createElement('img')
   // element.element.src=LOADING_IMG
@@ -164,7 +139,6 @@ function getImgForURLViaFetchClone(url) {
   if (imgCache[url] !== undefined) {
     return cloneImageCacheEntry(imgCache[url])
   }
-  // TODO add images loaded in thread to cache.
   const promise = getImageObjectURL(url)
   const element = document.createElement('img')
   // element.element.src=LOADING_IMG
@@ -620,7 +594,7 @@ function pegAstToHtml_v2(ast) {
     }
     return accum
   } ,[])
-  /* TODO: Implement
+  /* TODO: Implement bi-directional scrolling. scroll textarea to current visible content
     res.filter(e => e.element.nodeName.toLowerCase() !== 'button')
       .forEach((e) => {
         e.element.addEventListener('click' ,() => {
@@ -718,6 +692,11 @@ function createPreviewCallbacks() {
         // FIXME: Profile page also needs formating.
         // md's wordWrap is break-word, but it seems to
         // be acting like wordwrap: anywhere for some reason.
+      }
+      else {
+        // Add padding to new posts and profile, so the preview doesn't touch
+        // textarea the border
+        forum.parentElement.classList.add('pr-3')
       }
     }
     let currentSpoiler
