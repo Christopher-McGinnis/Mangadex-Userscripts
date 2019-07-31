@@ -5,7 +5,7 @@
 // @author      Christopher McGinnis
 // @license     MIT
 // @icon        https://mangadex.org/favicon-96x96.png
-// @version     0.3.6
+// @version     0.3.7
 // @grant       GM_xmlhttpRequest
 // @require     https://gitcdn.xyz/cdn/pegjs/pegjs/30f32600084d8da6a50b801edad49619e53e2a05/website/vendor/pegjs/peg.js
 // @match       https://mangadex.org/*
@@ -107,6 +107,18 @@ function cloneImageCacheEntry(source: ImageCacheEntry): ImageCacheEntry {
 // -- Does not work when image is used multiple times, for some reason.
 // -- Should be comparable to getImgForURLViaFetch, if it worked.
 // -- Failed to render any images for hell's test.
+
+// TODO New cache method
+// 1) Img reuse (avoids re-creating/loading dom)
+// 2.a) Blob Reuse (avoids re-fetching)
+// 2.b) Img Clone (marginally faster than recreating img. May be avoiding a refetch/304)
+// 3.a) Fetch Blob Img
+// 3.b) Fetch Img
+
+interface ImageCacheEntry_v2 {
+  elements: HTMLImageElement[]
+  ,loadPromise: Promise<HTMLImageElement>
+}
 function getImgForURL(url: string) {
   if (isUserscript) {
     return getImgForURLViaFetch(url)
@@ -134,8 +146,6 @@ function getImgForURLViaImg(url: string): ImageCacheEntry {
   return imgCache[url]
 }
 function getImgForURLNoCache(url: string): ImageCacheEntry {
-  // TODO add images loaded in thread to cache.
-
   const element: HTMLImageElement = document.createElement('img')
   // element.element.src=LOADING_IMG
 
@@ -150,7 +160,6 @@ function getImgForURLNoCache(url: string): ImageCacheEntry {
   }
 }
 function getImgForURLViaFetch(url: string): ImageCacheEntry {
-  // TODO add images loaded in thread to cache.
   const promise: Promise<string> = getImageObjectURL(url)
 
   const element: HTMLImageElement = document.createElement('img')
@@ -176,7 +185,6 @@ function getImgForURLViaFetchClone(url: string) {
   if (imgCache[url] !== undefined) {
     return cloneImageCacheEntry(imgCache[url])
   }
-  // TODO add images loaded in thread to cache.
   const promise: Promise<string> = getImageObjectURL(url)
 
   const element: HTMLImageElement = document.createElement('img')
@@ -703,7 +711,7 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
     }
     return accum
   } ,[])
-  /* TODO: Implement
+  /* TODO: Implement bi-directional scrolling. scroll textarea to current visible content
   res.filter(e => e.element.nodeName.toLowerCase() !== 'button')
     .forEach((e) => {
       e.element.addEventListener('click' ,() => {
@@ -810,6 +818,11 @@ function createPreviewCallbacks() {
         // FIXME: Profile page also needs formating.
         // md's wordWrap is break-word, but it seems to
         // be acting like wordwrap: anywhere for some reason.
+      }
+      else {
+        // Add padding to new posts and profile, so the preview doesn't touch
+        // textarea the border
+        forum.parentElement.classList.add('pr-3')
       }
     }
 
