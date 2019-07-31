@@ -5,7 +5,7 @@
 // @author      Brandon Beck
 // @license     MIT
 // @icon        https://mangadex.org/favicon-96x96.png
-// @version     0.3.9
+// @version     0.3.10
 // @grant       GM_xmlhttpRequest
 // @require     https://gitcdn.xyz/cdn/pegjs/pegjs/30f32600084d8da6a50b801edad49619e53e2a05/website/vendor/pegjs/peg.js
 // @match       https://mangadex.org/*
@@ -14,6 +14,13 @@
 'use strict'
 
 const isUserscript: boolean = window.GM_xmlhttpRequest !== undefined
+
+// Ensure Console/Bookmarklet is not run on other sites.
+if (!isUserscript && !window.location.href.startsWith('https://mangadex.org')) {
+  alert('Mangadex Post Preview script only works on https://mangadex.org')
+  throw Error('Mangadex Post Preview script only works on https://mangadex.org')
+}
+
 // This is used when run in Browser Console / Bookmarklet mode
 // Loads the same scripts used in UserScript.
 // Does not run at all in userscript mode.
@@ -34,11 +41,10 @@ function loadScript(url: string): Promise<unknown> {
     head.appendChild(script)
   })
 }
-// Ensure Console/Bookmarklet is not run on other sites.
-if (!isUserscript && !window.location.href.startsWith('https://mangadex.org')) {
-  alert('Mangadex Post Preview script only works on https://mangadex.org')
-  throw Error('Mangadex Post Preview script only works on https://mangadex.org')
-}
+
+/* **************************************************
+ * Image Utilities
+ ************************************************** */
 
 const ERROR_IMG = 'https://i.pinimg.com/originals/e3/04/73/e3047319a8ae7192cb462141c30953a8.gif'
 const LOADING_IMG = 'https://i.redd.it/ounq1mw5kdxy.gif'
@@ -208,6 +214,10 @@ function getImgForURLViaFetchClone(url: string) {
 }
 
 
+/* **************************************************
+ * BBCode Tokenizing and AST generation
+ ************************************************** */
+
 interface BBCodeAstBase {
     location: [number ,number];
 }
@@ -252,10 +262,11 @@ type BBCodeAst = BBCodeTagAst | BBCodeImageAst | BBCodeDataAst | BBCodeLineBreak
 
 /* PEG grammer */
 
-// New version will enable:
+// TODO:
 // Partial rebuilds! only update what changed
-// Autoscrolling Edit Preview! Ensure the line you are editing is visible as you change it.
-// FIXME Img is text only. not recursive
+// URL links. At least these are valid. (http|ftp)s?://[a-zA-Z0-9./\-%"':@+]+
+// FIXME:
+// Img is text only. not recursive
 let generatedBBCodePegParser: import('pegjs').Parser<BBCodeAst[]>
 function bbcodePegParser(): import('pegjs').Parser<BBCodeAst[]> {
   if (generatedBBCodePegParser) return generatedBBCodePegParser
@@ -432,15 +443,17 @@ _ "whitespace"
 }
 
 
-/* main code */
+/* **************************************************
+ * AST HTML Generation
+ ************************************************** */
 
 interface AST_HTML_ELEMENT_BASE {
     location: [number ,number];
 }
-interface AST_HTML_ELEMENT_CONTAINER extends AST_HTML_ELEMENT_BASE {
-    type: 'container';
-    element: HTMLElement | Text;
-    contains: AST_HTML_ELEMENT[];
+interface AST_HTML_ELEMENT_CONTAINER<ElementType = HTMLElement> extends AST_HTML_ELEMENT_BASE {
+    type: 'container'
+    element: ElementType
+    contains: AST_HTML_ELEMENT[]
 }
 interface AST_HTML_ELEMENT_IMAGE extends AST_HTML_ELEMENT_BASE {
     type: 'image';
@@ -451,7 +464,7 @@ interface AST_HTML_ELEMENT_TEXT extends AST_HTML_ELEMENT_BASE {
     type: 'text';
     element: Text;
 }
-type AST_HTML_ELEMENT = AST_HTML_ELEMENT_CONTAINER | AST_HTML_ELEMENT_IMAGE | AST_HTML_ELEMENT_TEXT
+type AST_HTML_ELEMENT<ElementType = HTMLElement> = AST_HTML_ELEMENT_CONTAINER<ElementType> | AST_HTML_ELEMENT_IMAGE | AST_HTML_ELEMENT_TEXT
 
 // New steps:
 // PegSimpleAST -> AST_WithHTML
@@ -503,7 +516,7 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
       || e.tag === 'h1' || e.tag === 'h2' || e.tag === 'h3'
       || e.tag === 'h4' || e.tag === 'h5' || e.tag === 'h6'
     ) {
-      const element: AST_HTML_ELEMENT = {
+      const element: AST_HTML_ELEMENT_CONTAINER = {
         element: document.createElement(e.tag)
         ,location: e.location
         ,type: 'container'
@@ -516,7 +529,7 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
       })
     }
     else if (e.tag === 'list' || e.tag === 'ul') {
-      const element: AST_HTML_ELEMENT = {
+      const element: AST_HTML_ELEMENT_CONTAINER<HTMLUListElement> = {
         element: document.createElement('ul')
         ,location: e.location
         ,type: 'container'
@@ -529,7 +542,7 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
       })
     }
     else if (e.tag === 'hr') {
-      const element: AST_HTML_ELEMENT = {
+      const element: AST_HTML_ELEMENT_CONTAINER<HTMLHRElement> = {
         element: document.createElement(e.tag)
         ,location: e.location
         ,type: 'container'
@@ -538,12 +551,12 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
       accum.push(element)
       // FIXME Contain children, in a non nested fashion
       // element.contains=pegAstToHtml_v2(e.content)
-      pegAstToHtml_v2(e.content).forEach((e) => {
-        accum.push(e)
+      pegAstToHtml_v2(e.content).forEach((nested_ast) => {
+        accum.push(nested_ast)
       })
     }
     else if (e.tag === 'b') {
-      const element: AST_HTML_ELEMENT = {
+      const element: AST_HTML_ELEMENT_CONTAINER = {
         element: document.createElement('strong')
         ,location: e.location
         ,type: 'container'
@@ -556,7 +569,7 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
       })
     }
     else if (e.tag === 'i') {
-      const element: AST_HTML_ELEMENT = {
+      const element: AST_HTML_ELEMENT_CONTAINER = {
         element: document.createElement('em')
         ,location: e.location
         ,type: 'container'
@@ -569,7 +582,7 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
       })
     }
     else if (e.tag === 'h') {
-      const element: AST_HTML_ELEMENT = {
+      const element: AST_HTML_ELEMENT_CONTAINER = {
         element: document.createElement('mark')
         ,location: e.location
         ,type: 'container'
@@ -583,15 +596,16 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
     }
     else if (e.tag === 'url') {
       // accum += `<a href="${e.data}" target="_blank">${pegAstToHtml(e.content)}</a>`
-      const element: AST_HTML_ELEMENT = {
+      const element: AST_HTML_ELEMENT_CONTAINER<HTMLAnchorElement> = {
         element: document.createElement('a')
         ,location: e.location
         ,type: 'container'
         ,contains: []
       }
       accum.push(element)
+      element.element.target = '_blank'
       if (e.data) {
-        (element.element as HTMLAnchorElement).href = e.data
+        element.element.href = e.data
       }
       element.contains = pegAstToHtml_v2(e.content)
       element.contains.forEach((child_ast_element) => {
@@ -609,7 +623,7 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
         }
       }
       const imageCacheEntry = getImgForURL(url)
-      const element: AST_HTML_ELEMENT = {
+      const element: AST_HTML_ELEMENT_IMAGE = {
         element: imageCacheEntry.element
         ,location: e.location
         ,type: 'image'
@@ -621,40 +635,40 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
       accum.push(element)
     }
     else if (e.tag === 'quote') {
-      const element: AST_HTML_ELEMENT = {
+      const element: AST_HTML_ELEMENT_CONTAINER<HTMLDivElement> = {
         element: document.createElement('div')
         ,location: e.location
         ,type: 'container'
         ,contains: []
       }
       accum.push(element)
-      ;(element.element as HTMLDivElement).style.width = '100%'
-      ;(element.element as HTMLDivElement).style.display = 'inline-block'
-      ;(element.element as HTMLDivElement).style.margin = '1em 0'
-      ;(element.element as HTMLDivElement).classList.add('well' ,'well-sm')
+      element.element.style.width = '100%'
+      element.element.style.display = 'inline-block'
+      element.element.style.margin = '1em 0'
+      element.element.classList.add('well' ,'well-sm')
       element.contains = pegAstToHtml_v2(e.content)
       element.contains.forEach((child_ast_element) => {
         element.element.appendChild(child_ast_element.element)
       })
     }
     else if (e.tag === 'spoiler') {
-      const button: AST_HTML_ELEMENT = {
+      const button: AST_HTML_ELEMENT_CONTAINER<HTMLButtonElement> = {
         element: document.createElement('button')
         ,location: e.location
         ,type: 'container'
         ,contains: []
       }
       button.element.textContent = 'Spoiler'
-      ;(button.element as HTMLButtonElement).classList.add('btn' ,'btn-sm' ,'btn-warning' ,'btn-spoiler')
+      button.element.classList.add('btn' ,'btn-sm' ,'btn-warning' ,'btn-spoiler')
       accum.push(button)
-      const element: AST_HTML_ELEMENT = {
+      const element: AST_HTML_ELEMENT_CONTAINER<HTMLDivElement> = {
         element: document.createElement('div')
         ,location: e.location
         ,type: 'container'
         ,contains: []
       }
       accum.push(element)
-      ;(element.element as HTMLDivElement).classList.add('spoiler' ,'display-none')
+      element.element.classList.add('spoiler' ,'display-none')
       element.contains = pegAstToHtml_v2(e.content)
       element.contains.forEach((child_ast_element) => {
         element.element.appendChild(child_ast_element.element)
@@ -668,21 +682,21 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
     }
     else if (e.tag === 'center' || e.tag === 'left' || e.tag === 'right') {
       // accum += `<p class="text-center">${pegAstToHtml(e.content)}</p>`
-      const element: AST_HTML_ELEMENT = {
+      const element: AST_HTML_ELEMENT_CONTAINER<HTMLDivElement> = {
         element: document.createElement('div')
         ,location: e.location
         ,type: 'container'
         ,contains: []
       }
       accum.push(element)
-      ;(element.element as HTMLDivElement).classList.add(`text-${e.tag}`)
+      element.element.classList.add(`text-${e.tag}`)
       element.contains = pegAstToHtml_v2(e.content)
       element.contains.forEach((child_ast_element) => {
         element.element.appendChild(child_ast_element.element)
       })
     }
     else if (e.tag === '*') {
-      const element: AST_HTML_ELEMENT = {
+      const element: AST_HTML_ELEMENT_CONTAINER<HTMLLIElement> = {
         element: document.createElement('li')
         ,location: e.location
         ,type: 'container'
@@ -758,7 +772,6 @@ function createPreviewCallbacks() {
   let forms: HTMLElement[] = Object.values(document.querySelectorAll('.post_edit_form'))
   forms = forms.concat(Object.values(document.querySelectorAll('#post_reply_form')))
   forms = forms.concat(Object.values(document.querySelectorAll('#change_profile_form, #start_thread_form')))
-  // FIXME Format change_profile_form better
   forms.forEach((forum) => {
     // Try to make it side by side
     // e.parentElement.parentElement.insertBefore(previewDiv,e.parentElement)
@@ -795,7 +808,6 @@ function createPreviewCallbacks() {
     forum.style.paddingTop = `${navHeight}px`
     forum.style.marginTop = `-${navHeight}px`
     textarea.style.resize = 'both'
-    // FIXME put textArea in avatar slot
     // FIXME set textarea maxheight. form should be 100vh max.
     textarea.style.minWidth = '120px'
     textarea.style.width = '25vw'
@@ -823,11 +835,15 @@ function createPreviewCallbacks() {
         // Add padding to new posts and profile, so the preview doesn't touch
         // textarea the border
         forum.classList.add('pr-3')
-        // Fix profile interface overlap problem
+        // Fixes profile interface overlap problem
         if (forum.id === 'change_profile_form') {
           textarea.parentElement!.style.flexBasis = '100%'
           textarea.parentElement!.style.maxWidth = '100%'
         }
+        // FIXME: d-flex is causing preview to affect settings tabs
+        // other than the profile tab. Making the entire preview
+        // an invisible block that fills the page
+        // invisible links can be accidently clicked on as well
       }
     }
 
