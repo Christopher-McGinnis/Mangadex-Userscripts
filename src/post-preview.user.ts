@@ -5,7 +5,7 @@
 // @author      Brandon Beck
 // @license     MIT
 // @icon        https://mangadex.org/favicon-96x96.png
-// @version     0.3.7
+// @version     0.3.8
 // @grant       GM_xmlhttpRequest
 // @require     https://gitcdn.xyz/cdn/pegjs/pegjs/30f32600084d8da6a50b801edad49619e53e2a05/website/vendor/pegjs/peg.js
 // @match       https://mangadex.org/*
@@ -822,7 +822,7 @@ function createPreviewCallbacks() {
       else {
         // Add padding to new posts and profile, so the preview doesn't touch
         // textarea the border
-        forum.parentElement.classList.add('pr-3')
+        forum.classList.add('pr-3')
       }
     }
 
