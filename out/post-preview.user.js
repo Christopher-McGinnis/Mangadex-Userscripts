@@ -5,7 +5,7 @@
 // @author      Christopher McGinnis
 // @license     MIT
 // @icon        https://mangadex.org/favicon-96x96.png
-// @version     0.3.8
+// @version     0.3.9
 // @grant       GM_xmlhttpRequest
 // @require     https://gitcdn.xyz/cdn/pegjs/pegjs/30f32600084d8da6a50b801edad49619e53e2a05/website/vendor/pegjs/peg.js
 // @match       https://mangadex.org/*
@@ -697,6 +697,11 @@ function createPreviewCallbacks() {
         // Add padding to new posts and profile, so the preview doesn't touch
         // textarea the border
         forum.classList.add('pr-3')
+        // Fix profile interface overlap problem
+        if (forum.id === 'change_profile_form') {
+          textarea.parentElement.style.flexBasis = '100%'
+          textarea.parentElement.style.maxWidth = '100%'
+        }
       }
     }
     let currentSpoiler
