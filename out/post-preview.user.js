@@ -5,7 +5,7 @@
 // @author      Christopher McGinnis
 // @license     MIT
 // @icon        https://mangadex.org/favicon-96x96.png
-// @version     0.3.9
+// @version     0.3.10
 // @grant       GM_xmlhttpRequest
 // @require     https://gitcdn.xyz/cdn/pegjs/pegjs/30f32600084d8da6a50b801edad49619e53e2a05/website/vendor/pegjs/peg.js
 // @match       https://mangadex.org/*
@@ -14,6 +14,11 @@
 'use strict'
 
 const isUserscript = window.GM_xmlhttpRequest !== undefined
+// Ensure Console/Bookmarklet is not run on other sites.
+if (!isUserscript && !window.location.href.startsWith('https://mangadex.org')) {
+  alert('Mangadex Post Preview script only works on https://mangadex.org')
+  throw Error('Mangadex Post Preview script only works on https://mangadex.org')
+}
 // This is used when run in Browser Console / Bookmarklet mode
 // Loads the same scripts used in UserScript.
 // Does not run at all in userscript mode.
@@ -33,11 +38,9 @@ function loadScript(url) {
     head.appendChild(script)
   })
 }
-// Ensure Console/Bookmarklet is not run on other sites.
-if (!isUserscript && !window.location.href.startsWith('https://mangadex.org')) {
-  alert('Mangadex Post Preview script only works on https://mangadex.org')
-  throw Error('Mangadex Post Preview script only works on https://mangadex.org')
-}
+/* **************************************************
+ * Image Utilities
+ ************************************************** */
 const ERROR_IMG = 'https://i.pinimg.com/originals/e3/04/73/e3047319a8ae7192cb462141c30953a8.gif'
 const LOADING_IMG = 'https://i.redd.it/ounq1mw5kdxy.gif'
 const imageBlobs = {}
@@ -160,107 +163,131 @@ function getImgForURLViaFetchClone(url) {
   return imgCache[url]
 }
 /* PEG grammer */
-// New version will enable:
+// TODO:
 // Partial rebuilds! only update what changed
-// Autoscrolling Edit Preview! Ensure the line you are editing is visible as you change it.
-// FIXME Img is text only. not recursive
+// URL links. At least these are valid. (http|ftp)s?://[a-zA-Z0-9./\-%"':@+]+
+// FIXME:
+// Img is text only. not recursive
 let generatedBBCodePegParser
-function bbcodePegParser() {
-  if (generatedBBCodePegParser) return generatedBBCodePegParser
-  generatedBBCodePegParser = peg.generate(String.raw`
-start = res:Expressions? {return res}
-Expressions = reses:Expression+ {
-  let astroot = [{type:"root",content:[],location:[0,0]}]
-  let stack = [astroot[0]]
+function tokensToSimpleAST(tokens) {
+  // FIXME Figure out Why pegjs returns null. is it an error, does empty
+  // do an early escape? does having none of a token:expresion+
+  // return null instead of [] (tested return token? token: [], didn't help)
+  if (tokens == null) {
+    return []
+  }
+  // Why did I make a root again?
+  const astroot = [
+    {
+      type: 'root'
+      ,content: []
+      ,location: [0 ,0]
+    }
+  ]
+  const stack = [astroot[0]]
   let astcur = astroot[0]
-  reses.forEach((res) => {
-    let thisast = {}
-    if (res.type == "open") {
-      thisast.type = res.type
-      thisast.tag = res.content
-      thisast.content = []
-      // Must update end location when tag closes
-      thisast.location = res.location
-      astcur.content.push(thisast)
-      astcur.location[1] = res.location[1]
-      astcur=thisast
-      stack.push(thisast)
-    }
-    else if (res.type == "prefix") {
-      // cannot directly nest bullet in bullet (must have a non-prexix container class)
-      if (astcur.type == "*") {
-        // FIXME are we supposed to subtract 1 here?
-        astcur.location = res.location[0] // - 1
-        stack.pop()
-        astcur=stack[stack.length -1]
+  tokens.forEach((token) => {
+    if (token.type === 'open') {
+      const thisast = {
+        type: token.type
+        ,tag: token.tag
+        ,content: []
+        ,location: token.location
       }
-      thisast.type = res.type
-      thisast.tag = res.content
-      thisast.content = []
-      thisast.location = res.location
+      // Must update end location when tag closes
       astcur.content.push(thisast)
-      astcur.location[1] = res.location[1]
-      astcur=thisast
+      astcur.location[1] = token.location[1]
+      astcur = thisast
       stack.push(thisast)
     }
-    else if (res.type == "opendata") {
-      thisast.type = res.type
-      thisast.tag = res.content
-      thisast.data = res.attr
-      thisast.content = []
-      thisast.location = res.location
+    else if (token.type === 'prefix') {
+      const thisast = {
+        type: token.type
+        ,tag: token.tag
+        ,content: []
+        ,location: token.location
+      }
+      // cannot directly nest bullet in bullet (must have a non-prexix container class)
+      if (astcur.type === 'prefix') {
+        // FIXME are we supposed to subtract 1 here?
+        astcur.location[1] = token.location[0] // - 1
+        stack.pop()
+        astcur = stack[stack.length - 1]
+      }
       astcur.content.push(thisast)
-      astcur.location[1] = res.location[1]
-      astcur=thisast
+      astcur.location[1] = token.location[1]
+      astcur = thisast
       stack.push(thisast)
     }
-    else if (res.type == "close") {
-      let idx = Object.values(stack).reverse().findIndex((e)=>e.tag == res.content)
-      if (idx != -1 ) {
-        idx=idx+1
+    else if (token.type === 'opendata') {
+      const thisast = {
+        type: token.type
+        ,tag: token.tag
+        ,content: []
+        ,location: token.location
+      }
+      thisast.data = token.attr
+      astcur.content.push(thisast)
+      astcur.location[1] = token.location[1]
+      astcur = thisast
+      stack.push(thisast)
+    }
+    else if (token.type === 'close') {
+      let idx = Object.values(stack).reverse().findIndex(e => e.tag === token.tag)
+      if (idx !== -1) {
+        idx += 1
         // NOTE should we set ast location end? Yes!
-        for (let i = stack.length -idx; i < stack.length; i++) {
-          stack[i].location[1] = res.location[1]
+        for (let i = stack.length - idx; i < stack.length; i++) {
+          stack[i].location[1] = token.location[1]
         }
-        stack.splice(-idx,idx)
-        astcur.location[1] = res.location[1]
-        astcur=stack[stack.length -1]
+        stack.splice(-idx ,idx)
+        astcur.location[1] = token.location[1]
+        astcur = stack[stack.length - 1]
       }
       else {
-        thisast.type="error"
-        thisast.content="[/" + res.content + "]"
-        thisast.location = res.location
-        astcur.location[1] = res.location[1]
+        const thisast = {
+          type: 'error'
+          ,content: `[/${token.tag}]`
+          ,location: token.location
+        }
+        astcur.location[1] = token.location[1]
         astcur.content.push(thisast)
       }
     }
-    else if (res.type == "linebreak" ) {
+    else if (token.type === 'linebreak') {
       // TODO should check if prefix instead if prefix is to be expanded appon
-      if (astcur.tag == "*") {
+      if (astcur.tag === '*') {
         // FIXME are we supposed to subtract 1 here?
-        astcur.location[1] = res.location[0] // - 1
+        astcur.location[1] = token.location[0] // - 1
         // Are Linebreaks added when we are exiting a prefix? Seems like it!
         // Not sure why though...
-        astcur.content.push(res)
+        astcur.content.push(token)
         stack.pop()
-        astcur=stack[stack.length -1]
+        astcur = stack[stack.length - 1]
       }
       else {
-        astcur.location[1] = res.location[1]
-        astcur.content.push(res)
+        astcur.location[1] = token.location[1]
+        astcur.content.push(token)
       }
     }
     else {
-      astcur.location[1] = res.location[1]
-      astcur.content.push(res)
+      astcur.location[1] = token.location[1]
+      astcur.content.push(token)
     }
   })
   // Close all tags (location). Remember we start at 1 bc root is just a container
   for (let i = 1; i < stack.length; i++) {
     stack[i].location[1] = astcur.location[1]
   }
-  //stack.splice(start, end) not needed
+  // stack.splice(start, end) not needed
   return astroot[0].content
+}
+function bbcodeTokenizer() {
+  if (generatedBBCodePegParser) return generatedBBCodePegParser
+  generatedBBCodePegParser = peg.generate(String.raw`
+start = tokens:Expressions? {return tokens}
+Expressions = tokens:Expression+ {
+  return tokens
 }
 Expression = res:(OpenTag / OpenDataTag / CloseTag / PrefixTag / LineBreak / Text )
 /*head:Term tail:(_ ("+" / "-") _ Term)* {
@@ -283,7 +310,7 @@ OpenCloseTag = open:(OpenTag / OpenDataTag) content:Expression? close:CloseTag?
 } {
     return {type:open.tag, data:open.attr, content}
 }
-PrefixTag = "[" tag:PrefixTagList "]" { return {type:"prefix", content:tag, location:[location().start.offset,location().end.offset]} }
+PrefixTag = "[" tag:PrefixTagList "]" { return {type:"prefix", tag:tag, location:[location().start.offset,location().end.offset]} }
 
 // PrefixTag = "[" tag:PrefixTagList "]" content:(!("[/" ListTags "]" / LineBreak ) .)* { return {type:tag,unparsed:content.join('')} }
 
@@ -305,11 +332,11 @@ Data
   }
   return text[1]
 }
-OpenTag = "[" tag:NormalTagList "]" { return {type:"open", content:tag, location:[location().start.offset,location().end.offset] } }
+OpenTag = "[" tag:NormalTagList "]" { return {type:"open", tag:tag, location:[location().start.offset,location().end.offset] } }
 AttrTagProxy = "=" attr:Data? {return attr}
-OpenDataTag = "[" tag:DataTagList attr:AttrTagProxy?  "]" { return {type:"opendata", content:tag,attr:attr, location:[location().start.offset,location().end.offset]} }
+OpenDataTag = "[" tag:DataTagList attr:AttrTagProxy?  "]" { return {type:"opendata", tag:tag,attr:attr, location:[location().start.offset,location().end.offset]} }
 
-CloseTag = "[/" tag:(DataTagList / NormalTagList / PrefixTagList ) "]" { return {type:"close", content:tag, location:[location().start.offset,location().end.offset]} }
+CloseTag = "[/" tag:(DataTagList / NormalTagList / PrefixTagList ) "]" { return {type:"close", tag:tag, location:[location().start.offset,location().end.offset]} }
 
 
 Text
@@ -421,8 +448,8 @@ function pegAstToHtml_v2(ast) {
       accum.push(element)
       // FIXME Contain children, in a non nested fashion
       // element.contains=pegAstToHtml_v2(e.content)
-      pegAstToHtml_v2(e.content).forEach((e) => {
-        accum.push(e)
+      pegAstToHtml_v2(e.content).forEach((nested_ast) => {
+        accum.push(nested_ast)
       })
     }
     else if (e.tag === 'b') {
@@ -473,6 +500,7 @@ function pegAstToHtml_v2(ast) {
         ,contains: []
       }
       accum.push(element)
+      element.element.target = '_blank'
       if (e.data) {
         element.element.href = e.data
       }
@@ -539,6 +567,12 @@ function pegAstToHtml_v2(ast) {
       accum.push(element)
       element.element.classList.add('spoiler' ,'display-none')
       element.contains = pegAstToHtml_v2(e.content)
+      // FIXME: [spoiler] and [/spoiler] should scroll to button. set inner location.
+      // didnt work though... as if btn location wasnt set exits
+      // if (element.contains[0]) {
+      //  element.location[0] = element.contains[0].location[0]
+      //  element.location[1] = element.contains[element.contains.length - 1].location[1]
+      // }
       element.contains.forEach((child_ast_element) => {
         element.element.appendChild(child_ast_element.element)
       })
@@ -579,8 +613,8 @@ function pegAstToHtml_v2(ast) {
     }
     else if (e.content != null) {
       // FIXME? Is this possible? Root?
-      pegAstToHtml_v2(e.content).forEach((e) => {
-        accum.push(e)
+      pegAstToHtml_v2(e.content).forEach((nested_ast_element) => {
+        accum.push(nested_ast_element)
       })
     }
     else {
@@ -604,7 +638,7 @@ function pegAstToHtml_v2(ast) {
   return res
 }
 function makePreview(txt) {
-  const astHtml = pegAstToHtml_v2(bbcodePegParser().parse(txt))
+  const astHtml = pegAstToHtml_v2(tokensToSimpleAST(bbcodeTokenizer().parse(txt)))
   const previewDiv = document.createElement('div')
   previewDiv.style.flexGrow = '1'
   astHtml.forEach(e => previewDiv.appendChild(e.element))
@@ -637,7 +671,6 @@ function createPreviewCallbacks() {
   let forms = Object.values(document.querySelectorAll('.post_edit_form'))
   forms = forms.concat(Object.values(document.querySelectorAll('#post_reply_form')))
   forms = forms.concat(Object.values(document.querySelectorAll('#change_profile_form, #start_thread_form')))
-  // FIXME Format change_profile_form better
   forms.forEach((forum) => {
     // Try to make it side by side
     // e.parentElement.parentElement.insertBefore(previewDiv,e.parentElement)
@@ -670,7 +703,6 @@ function createPreviewCallbacks() {
     forum.style.paddingTop = `${navHeight}px`
     forum.style.marginTop = `-${navHeight}px`
     textarea.style.resize = 'both'
-    // FIXME put textArea in avatar slot
     // FIXME set textarea maxheight. form should be 100vh max.
     textarea.style.minWidth = '120px'
     textarea.style.width = '25vw'
@@ -697,11 +729,15 @@ function createPreviewCallbacks() {
         // Add padding to new posts and profile, so the preview doesn't touch
         // textarea the border
         forum.classList.add('pr-3')
-        // Fix profile interface overlap problem
+        // Fixes profile interface overlap problem
         if (forum.id === 'change_profile_form') {
           textarea.parentElement.style.flexBasis = '100%'
           textarea.parentElement.style.maxWidth = '100%'
         }
+        // FIXME: d-flex is causing preview to affect settings tabs
+        // other than the profile tab. Making the entire preview
+        // an invisible block that fills the page
+        // invisible links can be accidently clicked on as well
       }
     }
     let currentSpoiler
