@@ -7,7 +7,7 @@
 // @icon        https://mangadex.org/favicon-96x96.png
 // @version     0.3.12
 // @grant       GM_xmlhttpRequest
-// @require     https://gitcdn.xyz/cdn/pegjs/pegjs/30f32600084d8da6a50b801edad49619e53e2a05/website/vendor/pegjs/peg.js
+// @require     https://gitcdn.xyz/cdn/pegjs/pegjs/0b102d29a86254a50275b900706098aeca349740/website/vendor/pegjs/peg.js
 // @match       https://mangadex.org/*
 // ==/UserScript==
 
@@ -837,7 +837,7 @@ function createPreviewCallbacks() {
     // Setup variables
     let curDisplayedVersion = 0
     let nextVersion = 1
-    let updateTimeout: number
+    let updateTimeout: NodeJS.Timeout
     let updateTimeoutDelay = 50
 
     const maxAcceptableDelay = 10000
@@ -1044,7 +1044,6 @@ function createPreviewCallbacks() {
     function UpdatePreviewProxy() {
       // dbg(`Reseting timeout with delay ${updateTimeoutDelay} `)
       clearTimeout(updateTimeout)
-      // @ts-ignore
       updateTimeout = setTimeout(UpdatePreview ,updateTimeoutDelay)
     }
 
@@ -1061,7 +1060,7 @@ if (isUserscript) createPreviewCallbacks()
 else {
   // Import and wait for PegJS
   // then createPreviewCallbacks()
-  loadScript('https://gitcdn.xyz/cdn/pegjs/pegjs/30f32600084d8da6a50b801edad49619e53e2a05/website/vendor/pegjs/peg.js')
+  loadScript('https://gitcdn.xyz/cdn/pegjs/pegjs/0b102d29a86254a50275b900706098aeca349740/website/vendor/pegjs/peg.js')
     .then(() => {
       createPreviewCallbacks()
     })
