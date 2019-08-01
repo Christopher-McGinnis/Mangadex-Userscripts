@@ -10,12 +10,14 @@
 // @require     https://gitcdn.xyz/cdn/pegjs/pegjs/30f32600084d8da6a50b801edad49619e53e2a05/website/vendor/pegjs/peg.js
 // @match       https://mangadex.org/*
 // ==/UserScript==
+/* global $ */
 
 'use strict'
 
 const isUserscript = window.GM_xmlhttpRequest !== undefined
 // Ensure Console/Bookmarklet is not run on other sites.
 if (!isUserscript && !window.location.href.startsWith('https://mangadex.org')) {
+  /* eslint-disable-next-line no-alert */
   alert('Mangadex Post Preview script only works on https://mangadex.org')
   throw Error('Mangadex Post Preview script only works on https://mangadex.org')
 }
@@ -76,12 +78,29 @@ function cloneImageCacheEntry(source) {
     element ,loadPromise
   }
 }
-function getImgForURL(url) {
-  if (isUserscript) {
-    return getImgForURLViaFetch(url)
-  }
-  return getImgForURLViaImg(url)
-}
+// Firefox Speed Test: Fastest to Slowest
+// getImgForURLViaFetch: Caches blobs
+// -- No noticable lag or problems with several small images on page.
+// -- Very usable with Hell's test, though there is a small bit of lag
+// -- (Rebuilds hell in under 1 second.
+// -- Does better than getImgForURL does with a normal post with small images)
+// getImgForURLViaImg: Caches imgs, clones on reuse
+// -- Holding down a key causes noticable shakyness. No real script lag,
+// -- but the images width/height seem to start off at 0 and then
+// -- suddenly grow. Verry offsetting to look at
+// -- Survives Hell's test almost just as well. Very minor additional lag.
+// -- As such, I believe this is quite scalable.
+// getImgForURLNoCache: Creates new img and sets src like normal
+// -- Noticable lag. Preview will not update while a key is being spammed.
+// -- Slightly jumpy like above, but not as noticable since the lag
+// -- spreads it out.
+// -- Survives Hell's test just as well as getImgForURLViaImg.
+// -- Whatever benifit we get from cloning may not apply here.
+// -- Perhaps due to the fact we are looking up only 1 image several hundrad times.
+// BROKEN getImgForURLViaFetchClone: Caches Img of blobs.
+// -- Does not work when image is used multiple times, for some reason.
+// -- Should be comparable to getImgForURLViaFetch, if it worked.
+// -- Failed to render any images for hell's test.
 function getImgForURLViaImg(url) {
   if (imgCache[url] !== undefined) {
     return cloneImageCacheEntry(imgCache[url])
@@ -99,19 +118,6 @@ function getImgForURLViaImg(url) {
   }
   // First use. Clone not needed since gaurenteed to be unused
   return imgCache[url]
-}
-function getImgForURLNoCache(url) {
-  const element = document.createElement('img')
-  // element.element.src=LOADING_IMG
-  const loadPromise = new Promise((ret ,err) => {
-    element.onload = () => ret(element)
-    element.onerror = e => err(new Error(e.toString()))
-    element.src = url
-  })
-  // First use. Clone not needed since gaurenteed to be unused
-  return {
-    element ,loadPromise
-  }
 }
 function getImgForURLViaFetch(url) {
   const promise = getImageObjectURL(url)
@@ -133,29 +139,11 @@ function getImgForURLViaFetch(url) {
     element ,loadPromise
   }
 }
-function getImgForURLViaFetchClone(url) {
-  if (imgCache[url] !== undefined) {
-    return cloneImageCacheEntry(imgCache[url])
+function getImgForURL(url) {
+  if (isUserscript) {
+    return getImgForURLViaFetch(url)
   }
-  const promise = getImageObjectURL(url)
-  const element = document.createElement('img')
-  // element.element.src=LOADING_IMG
-  // NOTE: Must not revoke object url if cloning is to be done
-  const loadPromise = promise.then(e => new Promise((resolve ,reject) => {
-    element.onload = () => {
-      // URL.revokeObjectURL(e)
-      resolve(element)
-    }
-    element.onerror = (err) => {
-      // URL.revokeObjectURL(e)
-      reject(new Error(err.toString()))
-    }
-    element.src = e
-  }))
-  imgCache[url] = {
-    element ,loadPromise
-  }
-  return imgCache[url]
+  return getImgForURLViaImg(url)
 }
 /* PEG grammer */
 // TODO:
@@ -230,7 +218,7 @@ function tokensToSimpleAST(tokens) {
       stack.push(thisast)
     }
     else if (token.type === 'close') {
-      let idx = Object.values(stack).reverse().findIndex(e => e.tag === token.tag)
+      let idx = Object.values(stack).reverse().findIndex(e => (e.type === 'open' || e.type === 'opendata' || e.type === 'prefix') && e.tag === token.tag)
       if (idx !== -1) {
         idx += 1
         // NOTE should we set ast location end? Yes!
@@ -404,7 +392,7 @@ function astToHtmlAst(ast) {
     else if (!(e.type === 'open' || e.type === 'prefix' || e.type === 'opendata')) {
       // @ts-ignore: Not a string, but doesn't need to be. Make or edit type
       throw new Error({
-        msg: `Unknown AST type "${e.type}" recieved!` ,child_ast: e ,container_ast: ast
+        message: 'Unknown AST recieved!' ,child_ast: e ,container_ast: ast
       })
     }
     else if (e.tag === 'u' || e.tag === 's' || e.tag === 'sub'
