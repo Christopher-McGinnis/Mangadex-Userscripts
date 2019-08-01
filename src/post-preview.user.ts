@@ -5,7 +5,7 @@
 // @author      Christopher McGinnis
 // @license     MIT
 // @icon        https://mangadex.org/favicon-96x96.png
-// @version     0.3.11
+// @version     0.3.12
 // @grant       GM_xmlhttpRequest
 // @require     https://gitcdn.xyz/cdn/pegjs/pegjs/30f32600084d8da6a50b801edad49619e53e2a05/website/vendor/pegjs/peg.js
 // @match       https://mangadex.org/*
@@ -538,13 +538,15 @@ interface AST_HTML_ELEMENT_TEXT extends AST_HTML_ELEMENT_BASE {
     type: 'text';
     element: Text;
 }
-type AST_HTML_ELEMENT<ElementType = HTMLElement> = AST_HTML_ELEMENT_CONTAINER<ElementType> | AST_HTML_ELEMENT_IMAGE | AST_HTML_ELEMENT_TEXT
+type AST_HTML_ELEMENT<ElementType = HTMLElement> = AST_HTML_ELEMENT_IMAGE
+| AST_HTML_ELEMENT_TEXT
+| AST_HTML_ELEMENT_CONTAINER<ElementType> | AST_HTML_ELEMENT_TEXT
 
 // New steps:
 // PegSimpleAST -> AST_WithHTML
 // AST_WithHTML + cursor_location -> HtmlElement
 // AST_WithHTML + text_change_location_and_range + all_text -> LocalAST_WithHTML_OfChange + local_ast_text_range -> LocalAST_WithHTML -> HtmlElement
-function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[] {
+function astToHtmlAst(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[] {
   if (ast == null) {
     return []
   }
@@ -552,11 +554,11 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
     // This should never happen
     return []
   }
-  function pushIt(a: AST_HTML_ELEMENT[] ,ast: BBCodeAst ,element: Text) {
+  function pushIt(a: AST_HTML_ELEMENT[] ,pushast: BBCodeAst ,element: Text) {
     a.push({
       type: 'text'
       ,element
-      ,location: ast.location
+      ,location: pushast.location
     })
   }
 
@@ -597,7 +599,7 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
         ,contains: []
       }
       accum.push(element)
-      element.contains = pegAstToHtml_v2(e.content)
+      element.contains = astToHtmlAst(e.content)
       element.contains.forEach((childAstElement) => {
         element.element.appendChild(childAstElement.element)
       })
@@ -610,7 +612,7 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
         ,contains: []
       }
       accum.push(element)
-      element.contains = pegAstToHtml_v2(e.content)
+      element.contains = astToHtmlAst(e.content)
       element.contains.forEach((childAstElement) => {
         element.element.appendChild(childAstElement.element)
       })
@@ -624,8 +626,8 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
       }
       accum.push(element)
       // FIXME Contain children, in a non nested fashion
-      // element.contains=pegAstToHtml_v2(e.content)
-      pegAstToHtml_v2(e.content).forEach((childAstElement) => {
+      // element.contains=astToHtmlAst(e.content)
+      astToHtmlAst(e.content).forEach((childAstElement) => {
         accum.push(childAstElement)
       })
     }
@@ -637,7 +639,7 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
         ,contains: []
       }
       accum.push(element)
-      element.contains = pegAstToHtml_v2(e.content)
+      element.contains = astToHtmlAst(e.content)
       element.contains.forEach((childAstElement) => {
         element.element.appendChild(childAstElement.element)
       })
@@ -650,7 +652,7 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
         ,contains: []
       }
       accum.push(element)
-      element.contains = pegAstToHtml_v2(e.content)
+      element.contains = astToHtmlAst(e.content)
       element.contains.forEach((childAstElement) => {
         element.element.appendChild(childAstElement.element)
       })
@@ -663,7 +665,7 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
         ,contains: []
       }
       accum.push(element)
-      element.contains = pegAstToHtml_v2(e.content)
+      element.contains = astToHtmlAst(e.content)
       element.contains.forEach((childAstElement) => {
         element.element.appendChild(childAstElement.element)
       })
@@ -681,7 +683,7 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
       if (e.data) {
         element.element.href = e.data
       }
-      element.contains = pegAstToHtml_v2(e.content)
+      element.contains = astToHtmlAst(e.content)
       element.contains.forEach((childAstElement) => {
         element.element.appendChild(childAstElement.element)
       })
@@ -720,7 +722,7 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
       element.element.style.display = 'inline-block'
       element.element.style.margin = '1em 0'
       element.element.classList.add('well' ,'well-sm')
-      element.contains = pegAstToHtml_v2(e.content)
+      element.contains = astToHtmlAst(e.content)
       element.contains.forEach((childAstElement) => {
         element.element.appendChild(childAstElement.element)
       })
@@ -743,7 +745,7 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
       }
       accum.push(element)
       element.element.classList.add('spoiler' ,'display-none')
-      element.contains = pegAstToHtml_v2(e.content)
+      element.contains = astToHtmlAst(e.content)
       // FIXME: [spoiler] and [/spoiler] should scroll to button. set inner location.
       // didnt work though... as if btn location wasnt set exits
       // if (element.contains[0]) {
@@ -770,7 +772,7 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
       }
       accum.push(element)
       element.element.classList.add(`text-${e.tag}`)
-      element.contains = pegAstToHtml_v2(e.content)
+      element.contains = astToHtmlAst(e.content)
       element.contains.forEach((childAstElement) => {
         element.element.appendChild(childAstElement.element)
       })
@@ -783,14 +785,14 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
         ,contains: []
       }
       accum.push(element)
-      element.contains = pegAstToHtml_v2(e.content)
+      element.contains = astToHtmlAst(e.content)
       element.contains.forEach((childAstElement) => {
         element.element.appendChild(childAstElement.element)
       })
     }
     else if (e.content != null) {
       // FIXME? Is this possible? Root?
-      pegAstToHtml_v2(e.content).forEach((childAstElement) => {
+      astToHtmlAst(e.content).forEach((childAstElement) => {
         accum.push(childAstElement)
       })
     }
@@ -817,7 +819,10 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
 
 
 function makePreview(txt: string): [HTMLDivElement ,AST_HTML_ELEMENT[]] {
-  const astHtml = pegAstToHtml_v2(tokensToSimpleAST(bbcodeTokenizer().parse(txt)))
+  // TODO compare bbcode to old BBCode
+  // generate tokens and only for changed region
+  // replace changed region html
+  const astHtml = astToHtmlAst(tokensToSimpleAST(bbcodeTokenizer().parse(txt)))
   const previewDiv = document.createElement('div')
   previewDiv.style.flexGrow = '1'
   astHtml.forEach(e => previewDiv.appendChild(e.element))
@@ -1020,7 +1025,7 @@ function createPreviewCallbacks() {
       const [newPreview ,newAstHtml] = makePreview(textarea!.value)
 
       // Setup spoilers the same way md does
-      $(newPreview).find('.btn-spoiler').click(function () {
+      $(newPreview).find('.btn-spoiler').click(() => {
         // @ts-ignore
         $(this as HTMLButtonElement).next('.spoiler').toggle()
       })
@@ -1081,6 +1086,7 @@ function createPreviewCallbacks() {
       btn.addEventListener('click' ,UpdatePreviewProxy)
     })
     textarea.oninput = UpdatePreviewProxy
+    return undefined
   })
 }
 
