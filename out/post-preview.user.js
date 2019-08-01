@@ -5,7 +5,7 @@
 // @author      Brandon Beck
 // @license     MIT
 // @icon        https://mangadex.org/favicon-96x96.png
-// @version     0.3.10
+// @version     0.3.12
 // @grant       GM_xmlhttpRequest
 // @require     https://gitcdn.xyz/cdn/pegjs/pegjs/30f32600084d8da6a50b801edad49619e53e2a05/website/vendor/pegjs/peg.js
 // @match       https://mangadex.org/*
@@ -38,11 +38,6 @@ function loadScript(url) {
     head.appendChild(script)
   })
 }
-/* **************************************************
- * Image Utilities
- ************************************************** */
-const ERROR_IMG = 'https://i.pinimg.com/originals/e3/04/73/e3047319a8ae7192cb462141c30953a8.gif'
-const LOADING_IMG = 'https://i.redd.it/ounq1mw5kdxy.gif'
 const imageBlobs = {}
 function getImageBlob(url) {
   if (!imageBlobs[url]) {
@@ -186,6 +181,7 @@ function tokensToSimpleAST(tokens) {
   ]
   const stack = [astroot[0]]
   let astcur = astroot[0]
+  /* eslint-disable prefer-destructuring */
   tokens.forEach((token) => {
     if (token.type === 'open') {
       const thisast = {
@@ -197,6 +193,7 @@ function tokensToSimpleAST(tokens) {
       // Must update end location when tag closes
       astcur.content.push(thisast)
       astcur.location[1] = token.location[1]
+      // ;({ location: [,astcur.location[1]] } = token)
       astcur = thisast
       stack.push(thisast)
     }
@@ -256,7 +253,7 @@ function tokensToSimpleAST(tokens) {
     }
     else if (token.type === 'linebreak') {
       // TODO should check if prefix instead if prefix is to be expanded appon
-      if (astcur.tag === '*') {
+      if (astcur.type === 'prefix') {
         // FIXME are we supposed to subtract 1 here?
         astcur.location[1] = token.location[0] // - 1
         // Are Linebreaks added when we are exiting a prefix? Seems like it!
@@ -266,7 +263,7 @@ function tokensToSimpleAST(tokens) {
         astcur = stack[stack.length - 1]
       }
       else {
-        astcur.location[1] = token.location[1]
+        ({ location: [,astcur.location[1]] } = token)
         astcur.content.push(token)
       }
     }
@@ -281,6 +278,7 @@ function tokensToSimpleAST(tokens) {
   }
   // stack.splice(start, end) not needed
   return astroot[0].content
+  /* eslint-enable prefer-destructuring */
 }
 function bbcodeTokenizer() {
   if (generatedBBCodePegParser) return generatedBBCodePegParser
@@ -369,7 +367,7 @@ _ "whitespace"
 // PegSimpleAST -> AST_WithHTML
 // AST_WithHTML + cursor_location -> HtmlElement
 // AST_WithHTML + text_change_location_and_range + all_text -> LocalAST_WithHTML_OfChange + local_ast_text_range -> LocalAST_WithHTML -> HtmlElement
-function pegAstToHtml_v2(ast) {
+function astToHtmlAst(ast) {
   if (ast == null) {
     return []
   }
@@ -377,11 +375,11 @@ function pegAstToHtml_v2(ast) {
     // This should never happen
     return []
   }
-  function pushIt(a ,ast ,element) {
+  function pushIt(a ,pushast ,element) {
     a.push({
       type: 'text'
       ,element
-      ,location: ast.location
+      ,location: pushast.location
     })
   }
   const res = ast.reduce((accum ,e) => {
@@ -420,9 +418,9 @@ function pegAstToHtml_v2(ast) {
         ,contains: []
       }
       accum.push(element)
-      element.contains = pegAstToHtml_v2(e.content)
-      element.contains.forEach((child_ast_element) => {
-        element.element.appendChild(child_ast_element.element)
+      element.contains = astToHtmlAst(e.content)
+      element.contains.forEach((childAstElement) => {
+        element.element.appendChild(childAstElement.element)
       })
     }
     else if (e.tag === 'list' || e.tag === 'ul') {
@@ -433,9 +431,9 @@ function pegAstToHtml_v2(ast) {
         ,contains: []
       }
       accum.push(element)
-      element.contains = pegAstToHtml_v2(e.content)
-      element.contains.forEach((child_ast_element) => {
-        element.element.appendChild(child_ast_element.element)
+      element.contains = astToHtmlAst(e.content)
+      element.contains.forEach((childAstElement) => {
+        element.element.appendChild(childAstElement.element)
       })
     }
     else if (e.tag === 'hr') {
@@ -447,9 +445,9 @@ function pegAstToHtml_v2(ast) {
       }
       accum.push(element)
       // FIXME Contain children, in a non nested fashion
-      // element.contains=pegAstToHtml_v2(e.content)
-      pegAstToHtml_v2(e.content).forEach((nested_ast) => {
-        accum.push(nested_ast)
+      // element.contains=astToHtmlAst(e.content)
+      astToHtmlAst(e.content).forEach((childAstElement) => {
+        accum.push(childAstElement)
       })
     }
     else if (e.tag === 'b') {
@@ -460,9 +458,9 @@ function pegAstToHtml_v2(ast) {
         ,contains: []
       }
       accum.push(element)
-      element.contains = pegAstToHtml_v2(e.content)
-      element.contains.forEach((child_ast_element) => {
-        element.element.appendChild(child_ast_element.element)
+      element.contains = astToHtmlAst(e.content)
+      element.contains.forEach((childAstElement) => {
+        element.element.appendChild(childAstElement.element)
       })
     }
     else if (e.tag === 'i') {
@@ -473,9 +471,9 @@ function pegAstToHtml_v2(ast) {
         ,contains: []
       }
       accum.push(element)
-      element.contains = pegAstToHtml_v2(e.content)
-      element.contains.forEach((child_ast_element) => {
-        element.element.appendChild(child_ast_element.element)
+      element.contains = astToHtmlAst(e.content)
+      element.contains.forEach((childAstElement) => {
+        element.element.appendChild(childAstElement.element)
       })
     }
     else if (e.tag === 'h') {
@@ -486,9 +484,9 @@ function pegAstToHtml_v2(ast) {
         ,contains: []
       }
       accum.push(element)
-      element.contains = pegAstToHtml_v2(e.content)
-      element.contains.forEach((child_ast_element) => {
-        element.element.appendChild(child_ast_element.element)
+      element.contains = astToHtmlAst(e.content)
+      element.contains.forEach((childAstElement) => {
+        element.element.appendChild(childAstElement.element)
       })
     }
     else if (e.tag === 'url') {
@@ -504,9 +502,9 @@ function pegAstToHtml_v2(ast) {
       if (e.data) {
         element.element.href = e.data
       }
-      element.contains = pegAstToHtml_v2(e.content)
-      element.contains.forEach((child_ast_element) => {
-        element.element.appendChild(child_ast_element.element)
+      element.contains = astToHtmlAst(e.content)
+      element.contains.forEach((childAstElement) => {
+        element.element.appendChild(childAstElement.element)
       })
     }
     else if (e.tag === 'img') {
@@ -543,9 +541,9 @@ function pegAstToHtml_v2(ast) {
       element.element.style.display = 'inline-block'
       element.element.style.margin = '1em 0'
       element.element.classList.add('well' ,'well-sm')
-      element.contains = pegAstToHtml_v2(e.content)
-      element.contains.forEach((child_ast_element) => {
-        element.element.appendChild(child_ast_element.element)
+      element.contains = astToHtmlAst(e.content)
+      element.contains.forEach((childAstElement) => {
+        element.element.appendChild(childAstElement.element)
       })
     }
     else if (e.tag === 'spoiler') {
@@ -566,15 +564,15 @@ function pegAstToHtml_v2(ast) {
       }
       accum.push(element)
       element.element.classList.add('spoiler' ,'display-none')
-      element.contains = pegAstToHtml_v2(e.content)
+      element.contains = astToHtmlAst(e.content)
       // FIXME: [spoiler] and [/spoiler] should scroll to button. set inner location.
       // didnt work though... as if btn location wasnt set exits
       // if (element.contains[0]) {
       //  element.location[0] = element.contains[0].location[0]
       //  element.location[1] = element.contains[element.contains.length - 1].location[1]
       // }
-      element.contains.forEach((child_ast_element) => {
-        element.element.appendChild(child_ast_element.element)
+      element.contains.forEach((childAstElement) => {
+        element.element.appendChild(childAstElement.element)
       })
       // NOTE: The world was fixed and mended together! This might be equivilent now
       /* In a perfect world. it would work like this... but md is a bit broken
@@ -593,9 +591,9 @@ function pegAstToHtml_v2(ast) {
       }
       accum.push(element)
       element.element.classList.add(`text-${e.tag}`)
-      element.contains = pegAstToHtml_v2(e.content)
-      element.contains.forEach((child_ast_element) => {
-        element.element.appendChild(child_ast_element.element)
+      element.contains = astToHtmlAst(e.content)
+      element.contains.forEach((childAstElement) => {
+        element.element.appendChild(childAstElement.element)
       })
     }
     else if (e.tag === '*') {
@@ -606,15 +604,15 @@ function pegAstToHtml_v2(ast) {
         ,contains: []
       }
       accum.push(element)
-      element.contains = pegAstToHtml_v2(e.content)
-      element.contains.forEach((child_ast_element) => {
-        element.element.appendChild(child_ast_element.element)
+      element.contains = astToHtmlAst(e.content)
+      element.contains.forEach((childAstElement) => {
+        element.element.appendChild(childAstElement.element)
       })
     }
     else if (e.content != null) {
       // FIXME? Is this possible? Root?
-      pegAstToHtml_v2(e.content).forEach((nested_ast_element) => {
-        accum.push(nested_ast_element)
+      astToHtmlAst(e.content).forEach((childAstElement) => {
+        accum.push(childAstElement)
       })
     }
     else {
@@ -638,7 +636,10 @@ function pegAstToHtml_v2(ast) {
   return res
 }
 function makePreview(txt) {
-  const astHtml = pegAstToHtml_v2(tokensToSimpleAST(bbcodeTokenizer().parse(txt)))
+  // TODO compare bbcode to old BBCode
+  // generate tokens and only for changed region
+  // replace changed region html
+  const astHtml = astToHtmlAst(tokensToSimpleAST(bbcodeTokenizer().parse(txt)))
   const previewDiv = document.createElement('div')
   previewDiv.style.flexGrow = '1'
   astHtml.forEach(e => previewDiv.appendChild(e.element))
@@ -692,6 +693,7 @@ function createPreviewCallbacks() {
       return undefined
     }
     // Setup our custom styles
+    /* eslint-disable no-param-reassign */
     forum.parentElement.style.alignItems = 'flex-start'
     forum.parentElement.classList.add('d-flex')
     forum.parentElement.style.flexDirection = 'row-reverse'
@@ -702,6 +704,7 @@ function createPreviewCallbacks() {
     // Padding keeps us from hitting the navbar. Margin lines us back up with the preview
     forum.style.paddingTop = `${navHeight}px`
     forum.style.marginTop = `-${navHeight}px`
+    /* eslint-enable no-param-reassign */
     textarea.style.resize = 'both'
     // FIXME set textarea maxheight. form should be 100vh max.
     textarea.style.minWidth = '120px'
@@ -825,7 +828,7 @@ function createPreviewCallbacks() {
       const thisVersion = nextVersion++
       const [newPreview ,newAstHtml] = makePreview(textarea.value)
       // Setup spoilers the same way md does
-      $(newPreview).find('.btn-spoiler').click(function () {
+      $(newPreview).find('.btn-spoiler').click(() => {
         // @ts-ignore
         $(this).next('.spoiler').toggle()
       })
@@ -884,6 +887,7 @@ function createPreviewCallbacks() {
       btn.addEventListener('click' ,UpdatePreviewProxy)
     })
     textarea.oninput = UpdatePreviewProxy
+    return undefined
   })
 }
 if (isUserscript) createPreviewCallbacks()
