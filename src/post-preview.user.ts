@@ -5,7 +5,7 @@
 // @author      Brandon Beck
 // @license     MIT
 // @icon        https://mangadex.org/favicon-96x96.png
-// @version     0.3.10
+// @version     0.3.11
 // @grant       GM_xmlhttpRequest
 // @require     https://gitcdn.xyz/cdn/pegjs/pegjs/30f32600084d8da6a50b801edad49619e53e2a05/website/vendor/pegjs/peg.js
 // @match       https://mangadex.org/*
@@ -46,8 +46,8 @@ function loadScript(url: string): Promise<unknown> {
  * Image Utilities
  ************************************************** */
 
-const ERROR_IMG = 'https://i.pinimg.com/originals/e3/04/73/e3047319a8ae7192cb462141c30953a8.gif'
-const LOADING_IMG = 'https://i.redd.it/ounq1mw5kdxy.gif'
+// const ERROR_IMG = 'https://i.pinimg.com/originals/e3/04/73/e3047319a8ae7192cb462141c30953a8.gif'
+// const LOADING_IMG = 'https://i.redd.it/ounq1mw5kdxy.gif'
 declare const peg: { generate: typeof import('pegjs').generate }
 
 const imageBlobs: {[index: string]: Promise<Blob>} = {}
@@ -260,7 +260,7 @@ interface BBCodeTokenLinebreak extends BBCodeTokenBase {
 }
 type BBCodeToken = BBCodeTokenTag|BBCodeTokenDataTag
   |BBCodeTokenLinebreak|BBCodeTokenText|BBCodeTokenError
-  |BBCodeTokenPrefixTag
+  |BBCodeTokenPrefixTag | BBCodeTokenCloseTag
 
 // AST
 interface BBCodeAstRoot extends BBCodeTokenBase {
@@ -303,8 +303,8 @@ interface BBCodeDataAst extends BBCodeTokenDataTag {
 type BBCodeLineBreakAst = BBCodeTokenLinebreak
 type BBCodeTextAst = BBCodeTokenText
 type BBCodeErrorAst = BBCodeTokenError
-// NOTE BBCodeAstRoot does NOT need to be in here
-type BBCodeAst = BBCodeTagAst | BBCodeMediaAst | BBCodeDataAst | BBCodeLineBreakAst | BBCodeTextAst | BBCodePrefixAst
+type BBCodeAst = BBCodeTagAst | BBCodeMediaAst | BBCodeDataAst
+| BBCodeLineBreakAst | BBCodeTextAst | BBCodePrefixAst | BBCodeErrorAst
 
 /* PEG grammer */
 
@@ -330,8 +330,8 @@ function tokensToSimpleAST(tokens: BBCodeToken[]|null|undefined): BBCodeAst[] {
       ,location: [0 ,0]
     }
   ]
-  const stack:(BBCodeAst|BBCodeAstRoot)[] = [astroot[0]]
-  let astcur: BBCodeAst|BBCodeAstRoot = astroot[0]
+  const stack:(BBCodeTagAst|BBCodeDataAst|BBCodePrefixAst |BBCodeAstRoot)[] = [astroot[0]]
+  let astcur: BBCodeTagAst|BBCodeDataAst|BBCodePrefixAst |BBCodeAstRoot = astroot[0]
   tokens.forEach((token) => {
     if (token.type === 'open') {
       const thisast: BBCodeTagAst | BBCodeMediaAst = {
@@ -343,6 +343,7 @@ function tokensToSimpleAST(tokens: BBCodeToken[]|null|undefined): BBCodeAst[] {
       // Must update end location when tag closes
       astcur.content.push(thisast)
       astcur.location[1] = token.location[1]
+      // ;({ location: [,astcur.location[1]] } = token)
       astcur = thisast
       stack.push(thisast)
     }
@@ -402,7 +403,7 @@ function tokensToSimpleAST(tokens: BBCodeToken[]|null|undefined): BBCodeAst[] {
     }
     else if (token.type === 'linebreak') {
       // TODO should check if prefix instead if prefix is to be expanded appon
-      if (astcur.tag === '*') {
+      if (astcur.type === 'prefix') {
         // FIXME are we supposed to subtract 1 here?
         astcur.location[1] = token.location[0] // - 1
         // Are Linebreaks added when we are exiting a prefix? Seems like it!
@@ -412,7 +413,7 @@ function tokensToSimpleAST(tokens: BBCodeToken[]|null|undefined): BBCodeAst[] {
         astcur = stack[stack.length - 1]
       }
       else {
-        astcur.location[1] = token.location[1]
+        ({ location: [,astcur.location[1]] } = token)
         astcur.content.push(token)
       }
     }
@@ -849,6 +850,7 @@ function createPreviewCallbacks() {
   let forms: HTMLElement[] = Object.values(document.querySelectorAll('.post_edit_form'))
   forms = forms.concat(Object.values(document.querySelectorAll('#post_reply_form')))
   forms = forms.concat(Object.values(document.querySelectorAll('#change_profile_form, #start_thread_form')))
+
   forms.forEach((forum) => {
     // Try to make it side by side
     // e.parentElement.parentElement.insertBefore(previewDiv,e.parentElement)
