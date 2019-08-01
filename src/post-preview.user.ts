@@ -11,12 +11,15 @@
 // @match       https://mangadex.org/*
 // ==/UserScript==
 
+/* global $ */
+
 'use strict'
 
 const isUserscript: boolean = window.GM_xmlhttpRequest !== undefined
 
 // Ensure Console/Bookmarklet is not run on other sites.
 if (!isUserscript && !window.location.href.startsWith('https://mangadex.org')) {
+  /* eslint-disable-next-line no-alert */
   alert('Mangadex Post Preview script only works on https://mangadex.org')
   throw Error('Mangadex Post Preview script only works on https://mangadex.org')
 }
@@ -114,23 +117,6 @@ function cloneImageCacheEntry(source: ImageCacheEntry): ImageCacheEntry {
 // -- Should be comparable to getImgForURLViaFetch, if it worked.
 // -- Failed to render any images for hell's test.
 
-// TODO New cache method
-// 1) Img reuse (avoids re-creating/loading dom)
-// 2.a) Blob Reuse (avoids re-fetching)
-// 2.b) Img Clone (marginally faster than recreating img. May be avoiding a refetch/304)
-// 3.a) Fetch Blob Img
-// 3.b) Fetch Img
-
-interface ImageCacheEntry_v2 {
-  elements: HTMLImageElement[]
-  ,loadPromise: Promise<HTMLImageElement>
-}
-function getImgForURL(url: string) {
-  if (isUserscript) {
-    return getImgForURLViaFetch(url)
-  }
-  return getImgForURLViaImg(url)
-}
 function getImgForURLViaImg(url: string): ImageCacheEntry {
   if (imgCache[url] !== undefined) {
     return cloneImageCacheEntry(imgCache[url])
@@ -151,20 +137,7 @@ function getImgForURLViaImg(url: string): ImageCacheEntry {
   // First use. Clone not needed since gaurenteed to be unused
   return imgCache[url]
 }
-function getImgForURLNoCache(url: string): ImageCacheEntry {
-  const element: HTMLImageElement = document.createElement('img')
-  // element.element.src=LOADING_IMG
 
-  const loadPromise: Promise<HTMLImageElement> = new Promise((ret ,err) => {
-    element.onload = () => ret(element)
-    element.onerror = e => err(new Error(e.toString()))
-    element.src = url
-  })
-  // First use. Clone not needed since gaurenteed to be unused
-  return {
-    element ,loadPromise
-  }
-}
 function getImgForURLViaFetch(url: string): ImageCacheEntry {
   const promise: Promise<string> = getImageObjectURL(url)
 
@@ -187,32 +160,24 @@ function getImgForURLViaFetch(url: string): ImageCacheEntry {
     element ,loadPromise
   }
 }
-function getImgForURLViaFetchClone(url: string) {
-  if (imgCache[url] !== undefined) {
-    return cloneImageCacheEntry(imgCache[url])
-  }
-  const promise: Promise<string> = getImageObjectURL(url)
 
-  const element: HTMLImageElement = document.createElement('img')
-  // element.element.src=LOADING_IMG
-  // NOTE: Must not revoke object url if cloning is to be done
-  const loadPromise: Promise<HTMLImageElement> = promise.then(e => new Promise((resolve ,reject) => {
-    element.onload = () => {
-      // URL.revokeObjectURL(e)
-      resolve(element)
-    }
-    element.onerror = (err) => {
-      // URL.revokeObjectURL(e)
-      reject(new Error(err.toString()))
-    }
-    element.src = e
-  }))
-  imgCache[url] = {
-    element ,loadPromise
-  }
-  return imgCache[url]
+// TODO New cache method
+// 1) Img reuse (avoids re-creating/loading dom)
+// 2.a) Blob Reuse (avoids re-fetching)
+// 2.b) Img Clone (marginally faster than recreating img. May be avoiding a refetch/304)
+// 3.a) Fetch Blob Img
+// 3.b) Fetch Img
+
+interface ImageCacheEntryV2 {
+  elements: HTMLImageElement[]
+  ,loadPromise: Promise<HTMLImageElement>
 }
-
+function getImgForURL(url: string) {
+  if (isUserscript) {
+    return getImgForURLViaFetch(url)
+  }
+  return getImgForURLViaImg(url)
+}
 
 /* **************************************************
  * BBCode Tokenizing and AST generation
@@ -381,7 +346,9 @@ function tokensToSimpleAST(tokens: BBCodeToken[]|null|undefined): BBCodeAst[] {
       stack.push(thisast)
     }
     else if (token.type === 'close') {
-      let idx = Object.values(stack).reverse().findIndex(e => e.tag === token.tag)
+      let idx = Object.values(stack).reverse().findIndex(e => (
+        e.type === 'open' || e.type === 'opendata' || e.type === 'prefix'
+      ) && e.tag === token.tag)
       if (idx !== -1) {
         idx += 1
         // NOTE should we set ast location end? Yes!
@@ -584,7 +551,7 @@ function astToHtmlAst(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[] {
     else if (!(e.type === 'open' || e.type === 'prefix' || e.type === 'opendata')) {
       // @ts-ignore: Not a string, but doesn't need to be. Make or edit type
       throw new Error({
-        msg: `Unknown AST type "${e.type}" recieved!` ,child_ast: e ,container_ast: ast
+        message: 'Unknown AST recieved!' ,child_ast: e ,container_ast: ast
       })
     }
     else if (e.tag === 'u' || e.tag === 's' || e.tag === 'sub'
@@ -978,7 +945,7 @@ function createPreviewCallbacks() {
           // @ts-ignore
           let y: number
           if (elm.getBoxQuads !== undefined) {
-            y = (elm as Text).getBoxQuads()[0].p1.y as number
+            y = elm.getBoxQuads()[0].p1.y as number
           }
           else {
             // if we do not have getBoxQuads, we will have to test from the
