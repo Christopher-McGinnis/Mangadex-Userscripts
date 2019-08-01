@@ -332,6 +332,7 @@ function tokensToSimpleAST(tokens: BBCodeToken[]|null|undefined): BBCodeAst[] {
   ]
   const stack:(BBCodeTagAst|BBCodeDataAst|BBCodePrefixAst |BBCodeAstRoot)[] = [astroot[0]]
   let astcur: BBCodeTagAst|BBCodeDataAst|BBCodePrefixAst |BBCodeAstRoot = astroot[0]
+  /* eslint-disable prefer-destructuring */
   tokens.forEach((token) => {
     if (token.type === 'open') {
       const thisast: BBCodeTagAst | BBCodeMediaAst = {
@@ -428,6 +429,7 @@ function tokensToSimpleAST(tokens: BBCodeToken[]|null|undefined): BBCodeAst[] {
   }
   // stack.splice(start, end) not needed
   return astroot[0].content
+  /* eslint-enable prefer-destructuring */
 }
 
 function bbcodeTokenizer(): import('pegjs').Parser<BBCodeToken[]> {
@@ -596,8 +598,8 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
       }
       accum.push(element)
       element.contains = pegAstToHtml_v2(e.content)
-      element.contains.forEach((child_ast_element) => {
-        element.element.appendChild(child_ast_element.element)
+      element.contains.forEach((childAstElement) => {
+        element.element.appendChild(childAstElement.element)
       })
     }
     else if (e.tag === 'list' || e.tag === 'ul') {
@@ -609,8 +611,8 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
       }
       accum.push(element)
       element.contains = pegAstToHtml_v2(e.content)
-      element.contains.forEach((child_ast_element) => {
-        element.element.appendChild(child_ast_element.element)
+      element.contains.forEach((childAstElement) => {
+        element.element.appendChild(childAstElement.element)
       })
     }
     else if (e.tag === 'hr') {
@@ -623,8 +625,8 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
       accum.push(element)
       // FIXME Contain children, in a non nested fashion
       // element.contains=pegAstToHtml_v2(e.content)
-      pegAstToHtml_v2(e.content).forEach((nested_ast) => {
-        accum.push(nested_ast)
+      pegAstToHtml_v2(e.content).forEach((childAstElement) => {
+        accum.push(childAstElement)
       })
     }
     else if (e.tag === 'b') {
@@ -636,8 +638,8 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
       }
       accum.push(element)
       element.contains = pegAstToHtml_v2(e.content)
-      element.contains.forEach((child_ast_element) => {
-        element.element.appendChild(child_ast_element.element)
+      element.contains.forEach((childAstElement) => {
+        element.element.appendChild(childAstElement.element)
       })
     }
     else if (e.tag === 'i') {
@@ -649,8 +651,8 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
       }
       accum.push(element)
       element.contains = pegAstToHtml_v2(e.content)
-      element.contains.forEach((child_ast_element) => {
-        element.element.appendChild(child_ast_element.element)
+      element.contains.forEach((childAstElement) => {
+        element.element.appendChild(childAstElement.element)
       })
     }
     else if (e.tag === 'h') {
@@ -662,8 +664,8 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
       }
       accum.push(element)
       element.contains = pegAstToHtml_v2(e.content)
-      element.contains.forEach((child_ast_element) => {
-        element.element.appendChild(child_ast_element.element)
+      element.contains.forEach((childAstElement) => {
+        element.element.appendChild(childAstElement.element)
       })
     }
     else if (e.tag === 'url') {
@@ -680,8 +682,8 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
         element.element.href = e.data
       }
       element.contains = pegAstToHtml_v2(e.content)
-      element.contains.forEach((child_ast_element) => {
-        element.element.appendChild(child_ast_element.element)
+      element.contains.forEach((childAstElement) => {
+        element.element.appendChild(childAstElement.element)
       })
     }
     else if (e.tag === 'img') {
@@ -719,8 +721,8 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
       element.element.style.margin = '1em 0'
       element.element.classList.add('well' ,'well-sm')
       element.contains = pegAstToHtml_v2(e.content)
-      element.contains.forEach((child_ast_element) => {
-        element.element.appendChild(child_ast_element.element)
+      element.contains.forEach((childAstElement) => {
+        element.element.appendChild(childAstElement.element)
       })
     }
     else if (e.tag === 'spoiler') {
@@ -748,8 +750,8 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
       //  element.location[0] = element.contains[0].location[0]
       //  element.location[1] = element.contains[element.contains.length - 1].location[1]
       // }
-      element.contains.forEach((child_ast_element) => {
-        element.element.appendChild(child_ast_element.element)
+      element.contains.forEach((childAstElement) => {
+        element.element.appendChild(childAstElement.element)
       })
       // NOTE: The world was fixed and mended together! This might be equivilent now
       /* In a perfect world. it would work like this... but md is a bit broken
@@ -769,8 +771,8 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
       accum.push(element)
       element.element.classList.add(`text-${e.tag}`)
       element.contains = pegAstToHtml_v2(e.content)
-      element.contains.forEach((child_ast_element) => {
-        element.element.appendChild(child_ast_element.element)
+      element.contains.forEach((childAstElement) => {
+        element.element.appendChild(childAstElement.element)
       })
     }
     else if (e.tag === '*') {
@@ -782,14 +784,14 @@ function pegAstToHtml_v2(ast: BBCodeAst[] | null | undefined): AST_HTML_ELEMENT[
       }
       accum.push(element)
       element.contains = pegAstToHtml_v2(e.content)
-      element.contains.forEach((child_ast_element) => {
-        element.element.appendChild(child_ast_element.element)
+      element.contains.forEach((childAstElement) => {
+        element.element.appendChild(childAstElement.element)
       })
     }
     else if (e.content != null) {
       // FIXME? Is this possible? Root?
-      pegAstToHtml_v2(e.content).forEach((nested_ast_element) => {
-        accum.push(nested_ast_element)
+      pegAstToHtml_v2(e.content).forEach((childAstElement) => {
+        accum.push(childAstElement)
       })
     }
     else {
@@ -874,6 +876,7 @@ function createPreviewCallbacks() {
     }
 
     // Setup our custom styles
+    /* eslint-disable no-param-reassign */
     forum.parentElement.style.alignItems = 'flex-start'
     forum.parentElement.classList.add('d-flex')
 
@@ -886,6 +889,8 @@ function createPreviewCallbacks() {
     // Padding keeps us from hitting the navbar. Margin lines us back up with the preview
     forum.style.paddingTop = `${navHeight}px`
     forum.style.marginTop = `-${navHeight}px`
+    /* eslint-enable no-param-reassign */
+
     textarea.style.resize = 'both'
     // FIXME set textarea maxheight. form should be 100vh max.
     textarea.style.minWidth = '120px'
