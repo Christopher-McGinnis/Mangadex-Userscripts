@@ -11,8 +11,14 @@ Preview
 
 ![Preview Gif](https://i.imgur.com/4yyhG8h.gif)
 
-Main bug atm is the interface for the profile page. Still trying to think of a good way to fix that.
-Main missing feature atm is URL link generation without url tags. IDK why I didn't add that in yet....
+Notes:
+  * URL link generation is still WIP. It should work fine for valid urls.
+  But may treat more or less URLs as valid than MD does.
+  * Image URLs also may receive incorrect validity values
+  * I am now validating my results by comparing them to what MD generated.
+  So far it is good, though any post with an img incorrectly fails validation in userscript mode (because we use a blob src instead of the actual url)
+Bugs:
+  * Implicit closing of img tags is a bit messed up on MD. I have yet to try to mimic it.
 
 Not planned:
   * @mention link generation. We do not know the user's id so we cannot generate a link, cannot be sure the user exists, so a dummy link could be misleading. And running a MD search for the user would be a waste of resources because lets face it, you do not want to visit their profile page anyways.
