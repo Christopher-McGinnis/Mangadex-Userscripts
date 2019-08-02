@@ -1,11 +1,11 @@
 // ==UserScript==
 // @name        Mangadex Preview Post
-// @description Preview new forum/comment posts and edits on MangaDex. Shows a formatted preview of your post/comment beside the edit box.
+// @description WhatYouSeeIsWhatYouGet preview generator for MangaDex comments/posts/profile. Shows a formatted preview next to the edit box.
 // @namespace   https://github.com/Brandon-Beck
 // @author      Brandon Beck
 // @license     MIT
 // @icon        https://mangadex.org/favicon-96x96.png
-// @version     0.3.12
+// @version     0.3.14
 // @grant       GM_xmlhttpRequest
 // @require     https://gitcdn.xyz/cdn/pegjs/pegjs/0b102d29a86254a50275b900706098aeca349740/website/vendor/pegjs/peg.js
 // @match       https://mangadex.org/*
@@ -14,6 +14,7 @@
 
 'use strict'
 
+// FIXME: The entire MediaTag code is an ugly mess
 const isUserscript = window.GM_xmlhttpRequest !== undefined
 // Ensure Console/Bookmarklet is not run on other sites.
 if (!isUserscript && !window.location.href.startsWith('https://mangadex.org')) {
@@ -148,7 +149,6 @@ function getImgForURL(url) {
 /* PEG grammer */
 // TODO:
 // Partial rebuilds! only update what changed
-// URL links. At least these are valid. (http|ftp)s?://[a-zA-Z0-9./\-%"':@+]+
 // FIXME:
 // Img is text only. not recursive
 let generatedBBCodePegParser
@@ -170,8 +170,115 @@ function tokensToSimpleAST(tokens) {
   const stack = [astroot[0]]
   let astcur = astroot[0]
   /* eslint-disable prefer-destructuring */
+  let mediaStateOpened
+  let mediaErrorState = false
   tokens.forEach((token) => {
-    if (token.type === 'open') {
+    if (mediaStateOpened && token.type !== 'linebreak') {
+      const openMedia = astcur.content[astcur.content.length - 1]
+      if (token.type === 'close' && token.tag === 'img') {
+        if (!mediaErrorState) {
+          mediaStateOpened.explicitlyClosed = true
+          mediaStateOpened.location[1] = token.location[1]
+        }
+        else {
+          if (openMedia.type === 'openmedia') {
+            const errorAst = {
+              type: 'error'
+              ,content: `[${mediaStateOpened.tag}]${mediaStateOpened.content}`
+              ,location: mediaStateOpened.location
+            }
+            astcur.content.pop()
+            astcur.content.push(errorAst)
+          }
+          const errorAst = {
+            type: 'error'
+            ,content: `[/${token.tag}]`
+            ,location: openMedia.location
+          }
+          astcur.content.push(errorAst)
+        }
+        mediaErrorState = false
+        mediaStateOpened = undefined
+        astcur.location[1] = token.location[1]
+        return undefined
+      }
+      if (openMedia.type === 'openmedia') {
+        if (openMedia.content === ''
+                    && (token.type === 'link' || token.type === 'text')
+                    && token.content.match(/^[^ \t\n\r:[\]]+:\/\/[^ \t\n\r[\]]+$/)) {
+          openMedia.content = token.content
+          astcur.location[1] = token.location[1]
+          mediaErrorState = false
+          return undefined
+        }
+        const errorAst = {
+          type: 'error'
+          ,content: `[${openMedia.tag}]${openMedia.content}`
+          ,location: openMedia.location
+        }
+        astcur.content.pop()
+        astcur.content.push(errorAst)
+      }
+      mediaErrorState = true
+      if (token.type === 'open' || token.type === 'prefix'
+                || token.type === 'opendata' || token.type === 'openmedia') {
+        const errorAst = {
+          type: 'error'
+          ,content: `[${token.tag}]`
+          ,location: token.location
+        }
+        astcur.content.push(errorAst)
+      }
+      else if (token.type === 'close') {
+        const errorAst = {
+          type: 'error'
+          ,content: `[/${token.tag}]`
+          ,location: token.location
+        }
+        astcur.content.push(errorAst)
+      }
+      else if (token.type === 'link') {
+        const errorAst = {
+          type: 'error'
+          ,content: `${token.content}`
+          ,location: token.location
+        }
+        astcur.content.push(errorAst)
+      }
+      else if (token.type === 'error' || token.type === 'text') {
+        const errorAst = {
+          type: 'error'
+          ,content: `${token.content}`
+          ,location: token.location
+        }
+        astcur.content.push(errorAst)
+      }
+      astcur.location[1] = token.location[1]
+      return undefined
+    }
+    if (token.type === 'close') {
+      let idx = Object.values(stack).reverse().findIndex(e => (e.type === 'open' || e.type === 'opendata' || e.type === 'prefix') && e.tag === token.tag)
+      if (idx !== -1) {
+        idx += 1
+        // NOTE should we set ast location end? Yes!
+        for (let i = stack.length - idx; i < stack.length; i++) {
+          stack[i].location[1] = token.location[1]
+        }
+        stack.splice(-idx ,idx)
+        astcur.location[1] = token.location[1]
+        astcur = stack[stack.length - 1]
+      }
+      else {
+        const thisast = {
+          type: 'error'
+          ,content: `[/${token.tag}]`
+          ,location: token.location
+        }
+        astcur.location[1] = token.location[1]
+        astcur.content.push(thisast)
+      }
+    }
+    else if (token.type === 'open') {
       const thisast = {
         type: token.type
         ,tag: token.tag
@@ -217,56 +324,98 @@ function tokensToSimpleAST(tokens) {
       astcur = thisast
       stack.push(thisast)
     }
-    else if (token.type === 'close') {
-      let idx = Object.values(stack).reverse().findIndex(e => (e.type === 'open' || e.type === 'opendata' || e.type === 'prefix') && e.tag === token.tag)
-      if (idx !== -1) {
-        idx += 1
-        // NOTE should we set ast location end? Yes!
-        for (let i = stack.length - idx; i < stack.length; i++) {
-          stack[i].location[1] = token.location[1]
-        }
-        stack.splice(-idx ,idx)
-        astcur.location[1] = token.location[1]
-        astcur = stack[stack.length - 1]
+    else if (token.type === 'openmedia') {
+      const thisast = {
+        type: token.type
+        ,tag: token.tag
+        ,content: ''
+        ,location: token.location
+        ,explicitlyClosed: false
       }
-      else {
-        const thisast = {
-          type: 'error'
-          ,content: `[/${token.tag}]`
-          ,location: token.location
-        }
-        astcur.location[1] = token.location[1]
-        astcur.content.push(thisast)
-      }
+      astcur.content.push(thisast)
+      astcur.location[1] = token.location[1]
+      mediaStateOpened = thisast
+      mediaErrorState = true
+      // astcur = thisast
+      // stack.push(thisast)
     }
     else if (token.type === 'linebreak') {
       // TODO should check if prefix instead if prefix is to be expanded appon
-      if (astcur.type === 'prefix') {
-        // FIXME are we supposed to subtract 1 here?
-        astcur.location[1] = token.location[0] // - 1
-        // Are Linebreaks added when we are exiting a prefix? Seems like it!
-        // Not sure why though...
+      // if (astcur.type === 'prefix') {
+      // FIXME are we supposed to subtract 1 here?
+      //  astcur.location[1] = token.location[0] // - 1
+      // Are Linebreaks added when we are exiting a prefix? Seems like it!
+      // Not sure why though...
+      //  astcur.content.push(token)
+      //  stack.pop()
+      //  astcur = stack[stack.length - 1]
+      // }
+      // else {
+      ({ location: [,astcur.location[1]] } = token)
+      astcur.content.push(token)
+      // }
+    }
+    else if (token.type === 'link') {
+      astcur.location[1] = token.location[1]
+      const previousSiblingAst = astcur.content[astcur.content.length - 1]
+      if ((astcur.type === 'root' && !previousSiblingAst)
+                || (previousSiblingAst && (previousSiblingAst.type === 'linebreak'
+                    || (previousSiblingAst.type === 'text' && previousSiblingAst.content.endsWith(' '))))) {
         astcur.content.push(token)
-        stack.pop()
-        astcur = stack[stack.length - 1]
       }
       else {
-        ({ location: [,astcur.location[1]] } = token)
-        astcur.content.push(token)
+        astcur.content.push({
+          type: 'error'
+          ,location: token.location
+          ,content: token.content
+        })
       }
     }
     else {
       astcur.location[1] = token.location[1]
       astcur.content.push(token)
     }
+    return undefined
   })
   // Close all tags (location). Remember we start at 1 bc root is just a container
   for (let i = 1; i < stack.length; i++) {
     stack[i].location[1] = astcur.location[1]
   }
+  if (mediaStateOpened) {
+    // FIXME make sure this makes sense
+    const openMedia = astcur.content[astcur.content.length - 1]
+    if (openMedia.type === 'openmedia') {
+      const errorAst = {
+        type: 'error'
+        ,content: `[${mediaStateOpened.tag}]${mediaStateOpened.content}`
+        ,location: mediaStateOpened.location
+      }
+      astcur.content.pop()
+      astcur.content.push(errorAst)
+    }
+    const errorMediaCloseAst = {
+      type: 'error'
+      ,content: `[/${mediaStateOpened.tag}]` // FIXME should I use token or doErrornousMediaClose location>
+
+      ,location: mediaStateOpened.location
+    }
+    // astcur.location[1] = token.location[1]
+    astcur.content.push(errorMediaCloseAst)
+    mediaStateOpened = undefined
+  }
   // stack.splice(start, end) not needed
   return astroot[0].content
   /* eslint-enable prefer-destructuring */
+}
+function simpleAstTrim(ast) {
+  let contentStartIndex = ast.findIndex(e => !(e.type === 'linebreak'
+        || ((e.type === 'text' || e.type === 'error') && e.content.match(/^ +$/))))
+  if (contentStartIndex === -1) contentStartIndex = 0
+  let contentEndIndex = ast.slice().reverse().findIndex(e => !(e.type === 'linebreak'
+        || ((e.type === 'text' || e.type === 'error') && e.content.match(/^ +$/))))
+  if (contentEndIndex === -1) contentEndIndex = 0
+  else contentEndIndex = ast.length - contentEndIndex
+  return ast.slice(contentStartIndex ,contentEndIndex)
 }
 function bbcodeTokenizer() {
   if (generatedBBCodePegParser) return generatedBBCodePegParser
@@ -275,7 +424,7 @@ start = tokens:Expressions? {return tokens}
 Expressions = tokens:Expression+ {
   return tokens
 }
-Expression = res:(OpenTag / OpenDataTag / CloseTag / PrefixTag / LineBreak / Text )
+Expression = res:(OpenTag / OpenMediaTag / OpenDataTag / CloseTag / PrefixTag / LineBreak / ImplicitLinkLoose / Text )
 /*head:Term tail:(_ ("+" / "-") _ Term)* {
       return tail.reduce(function(result, element) {
         if (element[1] === "+") { return result + element[3]; }
@@ -284,7 +433,22 @@ Expression = res:(OpenTag / OpenDataTag / CloseTag / PrefixTag / LineBreak / Tex
     }
 */
 Tag = tag:(OpenCloseTag / PrefixTag) {return tag}
-OpenCloseTag = open:(OpenTag / OpenDataTag) content:Expression? close:CloseTag?
+OpenCloseTag = open:(OpenCloseNormalTag / OpenCloseMediaTag) {
+    return {type:open.tag, data:open.attr, content}
+}
+OpenCloseMediaTag = open:OpenMediaTag content:Expression? close:CloseTag?
+  &{
+    let hasClose = close != null
+    if (false && hasClose && open.tag != close.tag) {
+      throw new Error(
+          "Expected [/" + open.tag + "] but [/" + close.tag + "] found."
+      );
+    }
+    return true
+} {
+    return {type:open.tag, content: open.content}
+}
+OpenCloseNormalTag = open:(OpenTag / OpenDataTag) content:Expression? close:CloseTag?
   &{
     let hasClose = close != null
     if (false && hasClose && open.tag != close.tag) {
@@ -302,7 +466,8 @@ PrefixTag = "[" tag:PrefixTagList "]" { return {type:"prefix", tag:tag, location
 
 ListTags = "list" / "ul" / "ol" / "li"
 
-NormalTagList = "list" / "spoiler" / "center" / "code" / "quote" / "img" /  "sub" / "sup" / "left" / "right" / "ol" / "ul" / "h1" / "h2" / "h3" / "h4" / "hr" / "h" / "b" / "s" / "i" / "u"
+NormalTagList = "list" / "spoiler" / "center" / "code" / "quote" /  "sub" / "sup" / "left" / "right" / "ol" / "ul" / "h1" / "h2" / "h3" / "h4" / "hr" / "h" / "b" / "s" / "i" / "u"
+MediaTagList = "img"
 DataTagList = "url"
 PrefixTagList = "*"
 
@@ -319,18 +484,87 @@ Data
   return text[1]
 }
 OpenTag = "[" tag:NormalTagList "]" { return {type:"open", tag:tag, location:[location().start.offset,location().end.offset] } }
-AttrTagProxy = "=" attr:Data? {return attr}
-OpenDataTag = "[" tag:DataTagList attr:AttrTagProxy?  "]" { return {type:"opendata", tag:tag,attr:attr, location:[location().start.offset,location().end.offset]} }
+// content:ExplicitLinkLoose
+OpenMediaTag = "[" tag:MediaTagList "]" { return {type:"openmedia", tag:tag, location:[location().start.offset,location().end.offset] } }
+AttrTagProxy = "=" attr:ExplicitLinkLoose {return attr.content}
+OpenDataTag = "[" tag:DataTagList attr:AttrTagProxy  "]" { return {type:"opendata", tag:tag,attr:attr, location:[location().start.offset,location().end.offset]} }
 
-CloseTag = "[/" tag:(DataTagList / NormalTagList / PrefixTagList ) "]" { return {type:"close", tag:tag, location:[location().start.offset,location().end.offset]} }
+CloseTag = "[/" tag:(DataTagList / MediaTagList / NormalTagList / PrefixTagList ) "]" { return {type:"close", tag:tag, location:[location().start.offset,location().end.offset]} }
 
-
+// FIXME find actual values
+// Explicit URL Links. Regex is something like [a-zA-Z0-9<LOTS OF SPECIAL CHARS>]://[a-zA-Z0-9]
+ExplicitLinkAddressStrict
+  = text:(!([ \t\n\r\[\]]). ExplicitLinkAddressStrict?)
+   {
+    return text.join('')
+  }
+ExplicitLinkProtoStrict
+  = text:([a-zA-Z0-9]+)
+   {
+    return text.join('')
+  }
+ExplicitLinkStrict
+  = text:(ExplicitLinkProtoStrict "://" ExplicitLinkAddressStrict) !([ \t\n\r])
+   {
+    return {type: "link", content:text.join(''), location:[location().start.offset,location().end.offset] }
+  }
+ExplicitLinkAddressLoose
+  = text:(!([ \t\n\r\[\]]). ExplicitLinkAddressLoose?)
+   {
+    return text.join('')
+  }
+ExplicitLinkProtoLoose
+  = text:(!([ \t\n\r\[\]\:\/]). ExplicitLinkProtoLoose?)
+   {
+    return text.join('')
+  }
+ExplicitLinkLoose
+  = text:(ExplicitLinkProtoLoose "://" ExplicitLinkAddressLoose) !([ \t\n\r])
+   {
+    return {type: "link", content:text.join(''), location:[location().start.offset,location().end.offset] }
+  }
+// Implicit URL links. At least these are valid. (http|ftp)s?://[a-zA-Z0-9./\-%"':@+]+
+ImplicitLinkAddressStrict
+  = text:[a-zA-Z0-9./\-%"':@+]+
+   {
+    return text.join('')
+  }
+ImplicitLinkStrict
+  = text:(
+    ("http" / "ftp") "s"?
+    "://" ImplicitLinkAddressStrict) !([^ \t\n\r])
+   {
+    return {type: "link", content:text.join(''), location:[location().start.offset,location().end.offset] }
+  }
+ImplicitLinkAddressLoose
+  = text:(!([ \t\n\r\[\]]). ImplicitLinkAddressLoose?)
+   {
+    return text.join('')
+  }
+ImplicitLinkLoose
+  = text:(
+    ("http" / "ftp") "s"?
+    "://" ImplicitLinkAddressLoose) !([^ \t\n\r])
+   {
+    return {type: "link", content:text.join(''), location:[location().start.offset,location().end.offset] }
+  }
 Text
-  = text:(!(Tag / CloseTag / LineBreak). Text?) {
+  = text:(!(Tag / CloseTag / LineBreak / ImplicitLinkLoose). Text?) {
   if(text[2] != null) {
     return {type: "text", content:text[1] + text[2].content, location:[location().start.offset,text[2].location[1]] }
   }
   return {type: "text", content:text[1], location:[location().start.offset,location().end.offset] }
+}
+Word
+  = text:(!(Tag / CloseTag / LineBreak / " "). Word?) {
+  if(text[2] != null) {
+    return {type: "word", content:text[1] + text[2].content, location:[location().start.offset,text[2].location[1]] }
+  }
+  return {type: "word", content:text[1], location:[location().start.offset,location().end.offset] }
+}
+Space
+  = text:(" "+) {
+  return {type: "space", content:text.join(''), location:[location().start.offset,location().end.offset] }
 }
 ContiguousText
   = text:(!(Tag / CloseTag / LineBreak / _ ). ContiguousText?) {
@@ -348,6 +582,9 @@ ErrorCatcher
 
 _ "whitespace"
   = [ \t\n\r]*
+
+
+
 `)
   return generatedBBCodePegParser
 }
@@ -363,29 +600,95 @@ function astToHtmlAst(ast) {
     // This should never happen
     return []
   }
-  function pushIt(a ,pushast ,element) {
-    a.push({
+  function appendText(accum ,htmlAst ,otext) {
+    // MD Single spacing
+    // FIXME do this in parser
+    // let text = otext.replace(/^\n +/ ,'\n')
+    // text = otext.replace(/^ +/ ,'')
+    if (accum[accum.length - 1]
+            && accum[accum.length - 1].element.nodeType === document.TEXT_NODE) {
+      /* eslint-disable-next-line no-param-reassign */
+      let text = accum[accum.length - 1].element.nodeValue + otext
+      text = text.replace(/^\n[ \t]+/ ,'\n')
+      text = text.replace(/[ \t]+/g ,' ')
+      accum[accum.length - 1].element.nodeValue = text
+      return undefined
+    }
+    const text = otext.replace(/[ \t]+/g ,' ')
+    accum.push({
       type: 'text'
-      ,element
-      ,location: pushast.location
+      ,element: document.createTextNode(text)
+      ,location: htmlAst.location
     })
+    return undefined
   }
   const res = ast.reduce((accum ,e) => {
     if (e.type === 'text') {
-      pushIt(accum ,e ,document.createTextNode(e.content))
+      appendText(accum ,e ,e.content)
     }
     else if (e.type === 'linebreak') {
-      // pushIt(accum, e, document.createElement('br'), 'container')
-      const element = {
+      const brAst = {
         element: document.createElement('br')
         ,location: e.location
         ,type: 'container'
         ,contains: []
       }
-      accum.push(element)
+      accum.push(brAst)
+      // NOTE: Why? No clue what the goal was with this, but it is how md does it
+      // FIXME prefer br element for scroll
+      const newlineTextNode = {
+        element: document.createTextNode('\n')
+        ,location: e.location
+        ,type: 'container'
+        ,contains: []
+      }
+      accum.push(newlineTextNode)
     }
     else if (e.type === 'error') {
-      pushIt(accum ,e ,document.createTextNode(e.content))
+      appendText(accum ,e ,e.content)
+    }
+    else if (e.type === 'link') {
+      // accum += `<a href="${e.data}" target="_blank">${pegAstToHtml(e.content)}</a>`
+      const linkAst = {
+        element: document.createElement('a')
+        ,location: e.location
+        ,type: 'container'
+        ,contains: []
+      }
+      const linkTextAst = {
+        element: document.createTextNode(e.content)
+        ,location: e.location
+        ,type: 'container'
+        ,contains: []
+      }
+      accum.push(linkAst)
+      linkAst.element.target = '_blank'
+      linkAst.element.rel = 'nofollow'
+      if (e.content) {
+        linkAst.element.href = e.content
+      }
+      linkAst.contains.push(linkTextAst)
+      linkAst.contains.forEach((childAstElement) => {
+        linkAst.element.appendChild(childAstElement.element)
+      })
+    }
+    else if (e.type === 'openmedia') {
+      // FIXME should Only pass url via image when parsing
+      const imageCacheEntry = getImgForURL(e.content)
+      const element = {
+        element: imageCacheEntry.element
+        ,location: e.location
+        ,type: 'image'
+        ,imagePromise: imageCacheEntry.loadPromise.then(() => e.content)
+      }
+      element.element.classList.add('align-bottom')
+      element.element.style.maxWidth = '100%'
+      // FIXME Do not do this. Move away from isEqualNode which cares about this space instead
+      // Why does .style sometimes add the space on its own? are you screwing with me?
+      const styleAttr = element.element.attributes.getNamedItem('style')
+      if (styleAttr) styleAttr.value = `${styleAttr.value.trim()} `
+      // element.element.src=LOADING_IMG
+      accum.push(element)
     }
     // Everything after this must have a tag attribute!
     // not nesting to avoid right shift
@@ -495,28 +798,6 @@ function astToHtmlAst(ast) {
         element.element.appendChild(childAstElement.element)
       })
     }
-    else if (e.tag === 'img') {
-      // FIXME should Only pass url via image when parsing
-      let url = ''
-      if (e.content) {
-        // @ts-ignore
-        const urltest = e.content[0]
-        if (urltest && urltest.type === 'text') {
-          url = urltest.content
-        }
-      }
-      const imageCacheEntry = getImgForURL(url)
-      const element = {
-        element: imageCacheEntry.element
-        ,location: e.location
-        ,type: 'image'
-        ,imagePromise: imageCacheEntry.loadPromise.then(() => url)
-      }
-      element.element.style.maxWidth = '100%'
-      element.element.classList.add('align-bottom')
-      // element.element.src=LOADING_IMG
-      accum.push(element)
-    }
     else if (e.tag === 'quote') {
       const element = {
         element: document.createElement('div')
@@ -527,7 +808,10 @@ function astToHtmlAst(ast) {
       accum.push(element)
       element.element.style.width = '100%'
       element.element.style.display = 'inline-block'
-      element.element.style.margin = '1em 0'
+      // FIXME dont use isEqualNode. Fix this compare (style uses 0px automaticly on ff)
+      const styleAttr = element.element.attributes.getNamedItem('style')
+      if (styleAttr) styleAttr.value += ' margin: 1em 0;'
+      else element.element.style.margin = '1em 0'
       element.element.classList.add('well' ,'well-sm')
       element.contains = astToHtmlAst(e.content)
       element.contains.forEach((childAstElement) => {
@@ -543,6 +827,7 @@ function astToHtmlAst(ast) {
       }
       button.element.textContent = 'Spoiler'
       button.element.classList.add('btn' ,'btn-sm' ,'btn-warning' ,'btn-spoiler')
+      button.element.type = 'button'
       accum.push(button)
       const element = {
         element: document.createElement('div')
@@ -623,11 +908,40 @@ function astToHtmlAst(ast) {
       }) */
   return res
 }
+/* *********************************************
+ * Validate Result
+ ********************************************* */
+function comparePreviewToPost(previewAst ,post) {
+  // FIXME work with image blob src
+  if (previewAst.length !== post.childNodes.length) {
+    console.warn(`Preview children count ${previewAst.length} does not match Post children count ${post.childNodes.length} for post #${post.parentElement.parentElement.id}`)
+    console.warn(previewAst)
+    return false
+  }
+  const invalidAstKey = previewAst.findIndex((childAst ,key) => {
+    if (!post.childNodes[key].isEqualNode(childAst.element)) {
+      return true
+    }
+    return false
+  })
+  if (invalidAstKey !== -1) {
+    console.warn(`Preview did NOT match post #${post.parentElement.parentElement.id}!`)
+    console.warn('Ast Elm')
+    console.warn(previewAst[invalidAstKey].element)
+    console.warn('Post Elm')
+    console.warn(post.childNodes[invalidAstKey])
+    return false
+  }
+  return true
+}
+/* *********************************************
+ * Build Interface
+ ********************************************* */
 function makePreview(txt) {
   // TODO compare bbcode to old BBCode
   // generate tokens and only for changed region
   // replace changed region html
-  const astHtml = astToHtmlAst(tokensToSimpleAST(bbcodeTokenizer().parse(txt)))
+  const astHtml = astToHtmlAst(simpleAstTrim(tokensToSimpleAST(bbcodeTokenizer().parse(txt))))
   const previewDiv = document.createElement('div')
   previewDiv.style.flexGrow = '1'
   astHtml.forEach(e => previewDiv.appendChild(e.element))
@@ -646,7 +960,7 @@ function createPreviewCallbacks() {
   const nav = document.querySelector('nav.navbar.fixed-top')
   // @ts-ignore
   let navY
-  if (nav === undefined) {
+  if (nav === null) {
     navY = 0
   }
   else if (nav.getBoxQuads !== undefined) {
@@ -664,7 +978,7 @@ function createPreviewCallbacks() {
     // Try to make it side by side
     // e.parentElement.parentElement.insertBefore(previewDiv,e.parentElement)
     // e.parentElement.classList.add("sticky-top", "pt-5", "col-6")
-    const textarea = forum.querySelector('textarea')
+    const textarea = (forum.querySelector('textarea'))
     if (!textarea) {
       // FIXME throw errors. Kind of want to short circit this one though
       return Error('Failed to find text area for forum')
@@ -699,8 +1013,14 @@ function createPreviewCallbacks() {
     textarea.style.width = '25vw'
     textarea.style.paddingLeft = '0'
     textarea.style.paddingRight = '0'
+    // Make Initial Preview
     let [previewDiv ,astHtml] = makePreview(textarea.value)
     forum.parentElement.insertBefore(previewDiv ,forum)
+    // Run sanity check if in console mode
+    if (!isUserscript && forum.classList.contains('post_edit_form')) {
+      const post = document.querySelector(`#post_${forum.id} .postbody`)
+      if (post) comparePreviewToPost(astHtml ,post)
+    }
     // Move editor to left column if in a thread.
     const tableLeft = forum.parentElement.parentElement.firstElementChild
     if (tableLeft !== forum.parentElement) {
@@ -877,6 +1197,9 @@ function createPreviewCallbacks() {
     return undefined
   })
 }
+/* *************************************
+ * Run It!
+ ************************************* */
 if (isUserscript) createPreviewCallbacks()
 else {
   // Import and wait for PegJS
