@@ -5,7 +5,7 @@
 // @author      Christopher McGinnis
 // @license     MIT
 // @icon        https://mangadex.org/favicon-96x96.png
-// @version     0.3.14
+// @version     0.3.15
 // @grant       GM_xmlhttpRequest
 // @require     https://gitcdn.xyz/cdn/pegjs/pegjs/0b102d29a86254a50275b900706098aeca349740/website/vendor/pegjs/peg.js
 // @match       https://mangadex.org/*
@@ -1014,6 +1014,7 @@ function createPreviewCallbacks() {
     textarea.style.paddingLeft = '0'
     textarea.style.paddingRight = '0'
     // Make Initial Preview
+    // FIXME use Update preview for initial preview as well
     let [previewDiv ,astHtml] = makePreview(textarea.value)
     forum.parentElement.insertBefore(previewDiv ,forum)
     // Run sanity check if in console mode
@@ -1136,7 +1137,7 @@ function createPreviewCallbacks() {
       const thisVersion = nextVersion++
       const [newPreview ,newAstHtml] = makePreview(textarea.value)
       // Setup spoilers the same way md does
-      $(newPreview).find('.btn-spoiler').click(() => {
+      $(newPreview).find('.btn-spoiler').click(function spoilerButton() {
         // @ts-ignore
         $(this).next('.spoiler').toggle()
       })
