@@ -1368,7 +1368,7 @@ function createSingleInterface(serialData: SerialData ,allSerialData?: SerialDat
       }
       cover.style.zIndex = '1'
       copyToClipboard(getCoverUrlFromRID(serialData.rid))
-      copy.innerText = 'Coppied!'
+      copy.innerText = 'Copied!'
       clearTimeout(copyTimeout1)
       clearTimeout(copyTimeout2)
       copyTimeout1 = setTimeout(() => {
