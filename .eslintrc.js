@@ -1,16 +1,14 @@
 module.exports = {
   'extends': [
-    'airbnb-base'
-    // Unnecessary and causes headachs by duplicating rules.
-    // ,'plugin:@typescript-eslint/recommended'
+    // Order matters. Later rules override former
+    'plugin:@typescript-eslint/recommended'
+    ,'airbnb-base'
   ]
   ,'parser': '@typescript-eslint/parser'
-  ,'plugins': [
-    '@typescript-eslint'
-  ]
+  ,'plugins': ['@typescript-eslint']
   ,'parserOptions': {
-    "project": "./tsconfig.json"
-    ,"tsconfigRootDir": "./"
+    project: './tsconfig.json'
+    ,tsconfigRootDir: './'
     ,ecmaVersion: 2018
     ,sourceType: 'script'
     ,ecmaFeatures: { impliedStrict: false }
@@ -20,15 +18,34 @@ module.exports = {
     'strict': ['error' ,'global']
     // Var is disabled, and inner functions are fine in es6+
     ,'no-inner-declarations': ['off']
-    // Time to face it. This is JavaScript.
-    // camelCase is builtin. You don't have to like it, but you do have to use it.
-    // reducing to warning until fully adopted
-    ,camelcase: ['warn']
-    , radix: ["error", "as-needed"]
+    ,'radix': ['error' ,'as-needed']
     ,'max-len': [1 ,100 ,2 ,{ comments: 200 }]
     ,'brace-style': ['error' ,'stroustrup']
-    ,'semi': ['error' ,'never']
-    ,'semi-style': [ 'error', 'first']
+    /* FIXME
+      Allow:
+        something(useful)
+        andnot[
+          confusing
+        ]
+        ;[and] = more
+        {
+          ;[
+            indefinitly
+          ] = more
+        }
+      Dissallow:
+        Something
+        (much)
+        more
+        [confusing]
+        {
+          [and] = potentially_error_prone
+        }
+    */
+    // Typescript does this for us
+    ,'semi': 'off'
+    ,'@typescript-eslint/semi': ['error' ,'never']
+    ,'semi-style': ['error' ,'first']
     ,'comma-style': [
       'error'
       ,'first'
@@ -51,7 +68,8 @@ module.exports = {
     ,'comma-spacing': [
       'error'
       ,{
-        before: true ,after: false
+        before: true
+        ,after: false
       }
     ]
     ,'comma-dangle': ['error' ,'never']
@@ -97,8 +115,47 @@ module.exports = {
     /*
      Typescript Override. Disables some rules defined above
     */
-    //,'semi': 'off'
-    //,'@typescript-eslint/semi': ['error']
+    ,'@typescript-eslint/no-non-null-assertion': ['warn']
+    // Time to face it. This is JavaScript.
+    // camelCase is builtin. You don't have to like it, but you do have to use it.
+    ,'camelcase': ['off']
+    ,'@typescript-eslint/camelcase': ['warn']
+    ,"indent": "off"
+    ,'@typescript-eslint/indent': ['error' ,2]
+    ,'@typescript-eslint/explicit-function-return-type': [
+      'warn'
+      ,{
+      // if true, only functions which are part of a declaration will be checked
+      // FIXME: Make better interfaces or something for promise/forEach/etc, and then turn this back on
+      // I shouldn't need to specify the return value of the callback, since it is unused.
+      // forEach(callbackfn: ()=> ThisValueDoesntMatterSoStopMakingMeSpecifyIt)
+        allowExpressions: true
+        // if true, type annotations are also allowed on the variable of a function expression rather than on the function directly
+        ,allowTypedFunctionExpressions: true
+        // if true, functions immediately returning another function expression will not be checked
+        ,allowHigherOrderFunctions: false
+      }
+    ]
+    ,'no-unused-vars': 'off'
+    ,'@typescript-eslint/no-unused-vars': [
+      'error'
+      ,{
+        vars: 'all'
+        ,args: 'all'
+      // "ignoreRestSiblings": false
+      }
+    ]
+    ,'@typescript-eslint/member-delimiter-style': ['error',{
+      "multiline": {
+        "delimiter": "none",
+        "requireLast": false
+      },
+      "singleline": {
+          "delimiter": "comma",
+          "requireLast": false
+      }
+    }]
+    ,'@typescript-eslint/explicit-member-accessibility': ['off']
   }
   ,'env': {
     browser: true
